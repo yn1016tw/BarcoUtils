@@ -120,64 +120,61 @@ class DuvelDevice:
     # ------------------------------------------------------------------
 
     def _find_working_camera(self) -> str | None:
-        """Returns first /dev/videoX that has VIDEO_CAPTURE+STREAMING capability."""
-        result = self._adb_raw(["shell", "ls /dev/video*"], timeout=5)
-        if result.returncode != 0 or not result.stdout.strip():
-            return None
+        """Returns first UVC capture node (/dev/videoX) found via sysfs.
 
-        for line in result.stdout.strip().splitlines():
-            dev = line.strip()
-            if not dev.startswith("/dev/video"):
-                continue
-            if self._camera_can_capture(dev):
-                return dev
-        return None
-
-    def _camera_can_capture(self, dev: str) -> bool:
-        """Check if device reports VIDEO_CAPTURE capability via v4l2-ctl."""
-        result = self._adb_raw(["shell", f"v4l2-ctl --all -d {dev}"], timeout=8)
+        v4l2-ctl is not available on Duvel. sysfs is used instead:
+        - device/driver symlink contains 'uvcvideo' → USB camera bound to UVC driver
+        - index == 0 → video capture node (index 1 is metadata-only)
+        """
+        cmd = (
+            "for node in $(ls /sys/class/video4linux/); do "
+            "  drv=$(readlink /sys/class/video4linux/$node/device/driver 2>/dev/null); "
+            "  idx=$(cat /sys/class/video4linux/$node/index 2>/dev/null); "
+            "  if echo \"$drv\" | grep -q uvcvideo && [ \"$idx\" = '0' ]; then "
+            "    echo /dev/$node; break; "
+            "  fi; "
+            "done"
+        )
+        result = self._adb_raw(["shell", cmd], timeout=10)
         if result.returncode != 0:
-            return False
-        # v4l2-ctl expands capability bits to human-readable names.
-        # The "Capabilities" line includes 0x80000000 (Device Caps flag), so hex matching
-        # against 0x04200001 fails. Checking for the expanded "Video Capture" text is reliable.
-        return "Video Capture" in result.stdout
+            return None
+        dev = result.stdout.strip()
+        return dev if dev.startswith("/dev/video") else None
 
     # ------------------------------------------------------------------
     # Audio helpers
     # ------------------------------------------------------------------
 
     def _find_working_audio(self) -> str | None:
-        """Returns audio card name if tinymix responds, else None."""
+        """Returns audio card short-name from /proc/asound/cards, else None.
+
+        tinymix requires root. /proc/asound/cards is readable without root and
+        confirms the kernel has enumerated the audio device (mic+speaker ready).
+        Prefers USB-Audio cards (external camera) over internal SOC audio.
+        """
         result = self._adb_raw(["shell", "cat /proc/asound/cards"], timeout=5)
         if result.returncode != 0 or not result.stdout.strip():
             return None
-        lines = result.stdout.strip().splitlines()
-        if not lines or "no soundcards" in result.stdout.lower():
+        text = result.stdout
+        if "no soundcards" in text.lower():
             return None
 
-        # Prefer non-zero card index (external USB audio over internal)
-        card_index = None
-        card_name = None
-        for line in lines:
-            parts = line.split()
-            if parts and parts[0].isdigit():
-                idx = int(parts[0])
-                if idx > 0:
-                    card_index = idx
-                    card_name = " ".join(parts[2:]) if len(parts) > 2 else f"card{idx}"
-                    break
-                elif card_index is None:
-                    card_index = idx
-                    card_name = " ".join(parts[2:]) if len(parts) > 2 else f"card{idx}"
+        usb_card = None
+        any_card = None
+        for line in text.splitlines():
+            stripped = line.strip()
+            # Index lines start with a digit: "0 [C920           ]: USB-Audio - ..."
+            if not stripped or not stripped[0].isdigit():
+                continue
+            # Extract short name between [ and ]
+            short = stripped.split("[", 1)[1].split("]")[0].strip() if "[" in stripped else stripped.split()[0]
+            if any_card is None:
+                any_card = short
+            if "USB-Audio" in stripped:
+                usb_card = short
+                break
 
-        if card_index is None:
-            return None
-
-        result = self._adb_raw(["shell", f"tinymix -D {card_index} -a"], timeout=8)
-        if result.returncode == 0 and result.stdout.strip():
-            return card_name
-        return None
+        return usb_card or any_card
 
     # ------------------------------------------------------------------
     # Internal helpers

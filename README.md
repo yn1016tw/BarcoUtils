@@ -171,6 +171,13 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 
 ## Changelog
 
+### v1.1.1
+- `common/duvel_device.py`: fix `connect()`/`disconnect()` — remove erroneous `-s` prefix from `adb connect/disconnect` (device not yet connected when these run)
+- `common/duvel_device.py`: fix `reboot()` — ignore `TimeoutExpired` from `adb reboot` (device drops connection during shutdown, not an error)
+- `common/duvel_device.py`: increase streaming test ADB timeout to 25 s to accommodate warm-up period
+- `tools/v4l2_stream_test.c`: add 5 s AF/AE/AWB warm-up before saving frame — stream is kept running for 5 s (dequeue+requeue loop) so auto-focus and auto-exposure settle before the final frame is captured
+- `test_peripheral.py`: replace non-ASCII box-drawing characters (`─`, `→`, `—`) with ASCII equivalents for Windows cp1252 compatibility
+
 ### v1.1.0
 - `common/duvel_device.py`: add `test_audio_loopback()` — simultaneous speaker playback + mic recording via `tinyplay`/`tinycap`, RMS-based pass/fail
 - `common/duvel_device.py`: add `_get_usb_audio_card()` — returns USB-Audio card number for `tinyplay`/`tinycap` `-D` flag

@@ -171,6 +171,11 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 
 ## Changelog
 
+### v1.2.0
+- `common/duvel_device.py`: add `test_speaker(duration)` — plays 1kHz tone via `tinyplay`, returns True if exit 0
+- `common/duvel_device.py`: add `test_mic(duration, rms_threshold)` — records via `tinycap`, returns `(passed, rms)`; default threshold 100 (ambient noise sufficient)
+- `test_peripheral.py`: add Speaker and Mic functional test steps after audio card enumeration, each with independent timing; `passed` requires all steps including speaker and mic
+
 ### v1.1.1
 - `common/duvel_device.py`: fix `connect()`/`disconnect()` — remove erroneous `-s` prefix from `adb connect/disconnect` (device not yet connected when these run)
 - `common/duvel_device.py`: fix `reboot()` — ignore `TimeoutExpired` from `adb reboot` (device drops connection during shutdown, not an error)

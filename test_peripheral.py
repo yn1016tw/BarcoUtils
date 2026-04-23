@@ -35,7 +35,10 @@ class TestResult:
     reboot_start: float = 0.0
     boot_ready: float | None = None
     camera_ready: float | None = None   # first working camera found
-    audio_ready: float | None = None    # mic+speaker mixer responds
+    audio_ready: float | None = None    # kernel card enumerated
+    speaker_ready: float | None = None  # tinyplay succeeded
+    mic_ready: float | None = None      # tinycap RMS > threshold
+    mic_rms: float | None = None        # recorded RMS value
     camera_device: str | None = None    # e.g. /dev/video7
     camera_name: str | None = None      # e.g. "Rally Camera"
     camera_frame: str | None = None     # local path to captured JPEG
@@ -45,8 +48,9 @@ class TestResult:
     passed: bool = False
 
     def total_seconds(self) -> float | None:
-        if self.audio_ready and self.reboot_start:
-            return self.audio_ready - self.reboot_start
+        last = self.mic_ready or self.speaker_ready or self.audio_ready
+        if last and self.reboot_start:
+            return last - self.reboot_start
         return None
 
     def boot_seconds(self) -> float | None:
@@ -62,6 +66,16 @@ class TestResult:
     def audio_seconds(self) -> float | None:
         if self.audio_ready and self.boot_ready:
             return self.audio_ready - self.boot_ready
+        return None
+
+    def speaker_seconds(self) -> float | None:
+        if self.speaker_ready and self.boot_ready:
+            return self.speaker_ready - self.boot_ready
+        return None
+
+    def mic_seconds(self) -> float | None:
+        if self.mic_ready and self.boot_ready:
+            return self.mic_ready - self.boot_ready
         return None
 
 
@@ -91,15 +105,18 @@ class ResultWriter:
 
         cam_label = f" [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
         aud_label = f" [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
+        mic_label = f"  RMS={r.mic_rms:.0f}" if r.mic_rms is not None else ""
 
         print(f"  Reboot triggered    : {ts(r.reboot_start)}")
         print(f"  Boot ready          : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
         print(f"  Camera working      : {ts(r.camera_ready)}{diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
         if r.camera_frame:
             print(f"  Frame saved         : {r.camera_frame}")
-        print(f"  Audio working       : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
+        print(f"  Audio card ready    : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
+        print(f"  Speaker working     : {ts(r.speaker_ready)}{diff(r.speaker_ready, r.boot_ready, 'from boot')}")
+        print(f"  Mic working         : {ts(r.mic_ready)}{diff(r.mic_ready, r.boot_ready, 'from boot')}{mic_label}")
         total = r.total_seconds()
-        print(f"  Total (reboot->audio): {total:.1f}s" if total else "  Total               : N/A")
+        print(f"  Total (reboot->mic) : {total:.1f}s" if total else "  Total               : N/A")
 
     def print_summary(self, results: list[TestResult]) -> None:
         passed = [r for r in results if r.passed]
@@ -117,7 +134,9 @@ class ResultWriter:
         print(f"  Total time    min/avg/max: {stats([r.total_seconds() for r in passed])}")
         print(f"  Boot time     min/avg/max: {stats([r.boot_seconds() for r in passed])}")
         print(f"  Camera ready  min/avg/max: {stats([r.camera_seconds() for r in passed])}")
-        print(f"  Audio ready   min/avg/max: {stats([r.audio_seconds() for r in passed])}")
+        print(f"  Audio card    min/avg/max: {stats([r.audio_seconds() for r in passed])}")
+        print(f"  Speaker ready min/avg/max: {stats([r.speaker_seconds() for r in passed])}")
+        print(f"  Mic ready     min/avg/max: {stats([r.mic_seconds() for r in passed])}")
         print(f"{'=' * 60}")
 
     def _format_lines(self, results: list[TestResult]) -> list[str]:
@@ -146,15 +165,18 @@ class ResultWriter:
 
             cam_label = f" [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
             aud_label = f" [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
+            mic_label = f"  RMS={r.mic_rms:.0f}" if r.mic_rms is not None else ""
 
             lines.append(f"  Reboot triggered    : {ts(r.reboot_start)}")
             lines.append(f"  Boot ready          : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
             lines.append(f"  Camera working      : {ts(r.camera_ready)}{diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
             if r.camera_frame:
                 lines.append(f"  Frame saved         : {r.camera_frame}")
-            lines.append(f"  Audio working       : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
+            lines.append(f"  Audio card ready    : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
+            lines.append(f"  Speaker working     : {ts(r.speaker_ready)}{diff(r.speaker_ready, r.boot_ready, 'from boot')}")
+            lines.append(f"  Mic working         : {ts(r.mic_ready)}{diff(r.mic_ready, r.boot_ready, 'from boot')}{mic_label}")
             total = r.total_seconds()
-            lines.append(f"  Total (reboot->audio): {total:.1f}s" if total else "  Total               : N/A")
+            lines.append(f"  Total (reboot->mic) : {total:.1f}s" if total else "  Total               : N/A")
             lines.append("")
 
         passed = [r for r in results if r.passed]
@@ -171,7 +193,9 @@ class ResultWriter:
         lines.append(f"  Total time    min/avg/max: {stats([r.total_seconds() for r in passed])}")
         lines.append(f"  Boot time     min/avg/max: {stats([r.boot_seconds() for r in passed])}")
         lines.append(f"  Camera ready  min/avg/max: {stats([r.camera_seconds() for r in passed])}")
-        lines.append(f"  Audio ready   min/avg/max: {stats([r.audio_seconds() for r in passed])}")
+        lines.append(f"  Audio card    min/avg/max: {stats([r.audio_seconds() for r in passed])}")
+        lines.append(f"  Speaker ready min/avg/max: {stats([r.speaker_seconds() for r in passed])}")
+        lines.append(f"  Mic ready     min/avg/max: {stats([r.mic_seconds() for r in passed])}")
         lines.append("")
         return lines
 
@@ -210,10 +234,24 @@ def run_one_round(device: DuvelDevice, round_num: int, total_rounds: int, args) 
         print(f"  Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
         print(f"  Frame saved     : {frame_path}")
 
-        print("  Waiting for audio/mic/speaker (/proc/asound/cards check)...")
+        print("  Waiting for audio card (/proc/asound/cards check)...")
         r.audio_card, r.audio_name = device.wait_for_audio_working(args.device_timeout)
         r.audio_ready = time.time()
-        print(f"  Audio working  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
+        print(f"  Audio card ready  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
+
+        print("  Testing speaker (tinyplay 1kHz tone)...")
+        speaker_ok = device.test_speaker(duration=2)
+        r.speaker_ready = time.time()
+        print(f"  Speaker {'OK' if speaker_ok else 'FAIL'}  (+{r.speaker_seconds():.1f}s from boot)")
+        if not speaker_ok:
+            raise RuntimeError("Speaker playback failed (tinyplay returned non-zero)")
+
+        print("  Testing mic (tinycap RMS check)...")
+        mic_ok, r.mic_rms = device.test_mic(duration=2)
+        r.mic_ready = time.time()
+        print(f"  Mic {'OK' if mic_ok else 'FAIL'}  RMS={r.mic_rms:.0f}  (+{r.mic_seconds():.1f}s from boot)")
+        if not mic_ok:
+            raise RuntimeError(f"Mic recording too quiet (RMS={r.mic_rms:.0f} below threshold)")
 
         r.passed = True
 

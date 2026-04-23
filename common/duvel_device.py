@@ -303,6 +303,61 @@ class DuvelDevice:
 
         return usb_entry or any_entry
 
+    def test_speaker(self, duration: int = 2) -> bool:
+        """Play a 1kHz tone through the speaker.  Returns True if tinyplay exits 0."""
+        card_info = self._get_usb_audio_card()
+        if card_info is None:
+            raise RuntimeError("No audio card found on device")
+        card_num, _, _ = card_info
+        local_tone = tempfile.mktemp(suffix=".wav")
+        try:
+            _generate_tone_wav(local_tone, duration=duration)
+            r = subprocess.run(
+                ["adb", "-s", self._serial, "push", local_tone, _TONE_WAV_REMOTE],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode != 0:
+                raise RuntimeError(f"Failed to push tone WAV: {r.stderr.strip()}")
+            result = self._adb_raw(["shell", f"tinyplay {_TONE_WAV_REMOTE} -D {card_num}"], timeout=duration + 5)
+            return result.returncode == 0
+        finally:
+            self._adb_raw(["shell", f"rm -f {_TONE_WAV_REMOTE}"], timeout=5)
+            Path(local_tone).unlink(missing_ok=True)
+
+    def test_mic(self, duration: int = 2, rms_threshold: float = 100.0) -> tuple[bool, float]:
+        """Record from the mic for duration seconds and measure RMS.
+
+        Returns (passed, rms).
+          passed : True if rms > rms_threshold (ambient noise is sufficient — no tone required)
+          rms    : RMS amplitude (0-32767 scale for 16-bit audio)
+        """
+        card_info = self._get_usb_audio_card()
+        if card_info is None:
+            raise RuntimeError("No audio card found on device")
+        card_num, _, _ = card_info
+        local_rec = tempfile.mktemp(suffix=".pcm")
+        try:
+            shell_cmd = f"tinycap {_REC_PCM_REMOTE} -D {card_num} -d 0 -r 48000 -b 16 -c 2 -T {duration}"
+            self._adb_raw(["shell", shell_cmd], timeout=duration + 5)
+            subprocess.run(
+                ["adb", "-s", self._serial, "pull", _REC_PCM_REMOTE, local_rec],
+                capture_output=True, timeout=15,
+            )
+            try:
+                with open(local_rec, "rb") as f:
+                    raw = f.read()
+                n = len(raw) // 2
+                if n == 0:
+                    return (False, 0.0)
+                samples = struct.unpack(f"<{n}h", raw[:n * 2])
+                rms = math.sqrt(sum(s * s for s in samples) / n)
+            except (OSError, struct.error):
+                return (False, 0.0)
+            return (rms > rms_threshold, rms)
+        finally:
+            self._adb_raw(["shell", f"rm -f {_REC_PCM_REMOTE}"], timeout=5)
+            Path(local_rec).unlink(missing_ok=True)
+
     def test_audio_loopback(self, duration: int = 3, rms_threshold: float = 500.0) -> tuple[bool, float, str]:
         """Play a 1kHz tone through the speaker while recording from the mic simultaneously.
 

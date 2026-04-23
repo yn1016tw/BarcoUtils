@@ -3,13 +3,14 @@
  *
  * Opens a V4L2 device, requests 1 MMAP buffer, starts streaming,
  * waits up to TIMEOUT_SEC for one frame, then exits.
+ * If an output file path is given the raw frame bytes are written there.
  *
  * Exit codes:
  *   0  frame received  → streaming works
  *   1  timeout        → no frame within TIMEOUT_SEC
  *   2  device error   → open/ioctl/mmap failed
  *
- * Usage: v4l2_stream_test /dev/videoX
+ * Usage: v4l2_stream_test /dev/videoX [output_file]
  */
 
 #include <errno.h>
@@ -35,11 +36,12 @@ static int xioctl(int fd, unsigned long req, void *arg)
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: %s /dev/videoX\n", argv[0]);
+        fprintf(stderr, "usage: %s /dev/videoX [output_file]\n", argv[0]);
         return 2;
     }
 
-    const char *dev = argv[1];
+    const char *dev     = argv[1];
+    const char *outfile = argc >= 3 ? argv[2] : NULL;
     int fd = open(dev, O_RDWR | O_NONBLOCK);
     if (fd < 0) {
         fprintf(stderr, "open %s: %s\n", dev, strerror(errno));
@@ -137,6 +139,18 @@ int main(int argc, char *argv[])
         close(fd); return 2;
     }
     printf("frame  : %u bytes — streaming OK\n", buf.bytesused);
+
+    /* write frame to file if requested */
+    if (outfile) {
+        FILE *f = fopen(outfile, "wb");
+        if (f) {
+            fwrite(mem, 1, buf.bytesused, f);
+            fclose(f);
+            printf("saved  : %s\n", outfile);
+        } else {
+            fprintf(stderr, "fopen %s: %s\n", outfile, strerror(errno));
+        }
+    }
 
     xioctl(fd, VIDIOC_STREAMOFF, &type);
     munmap(mem, buf.length);

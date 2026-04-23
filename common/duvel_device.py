@@ -99,14 +99,15 @@ class DuvelDevice:
             "Package manager never responded",
         )
 
-    def wait_for_camera_working(self, timeout: int) -> tuple[str, str]:
-        """Wait until any UVC camera is found.
+    def wait_for_camera_working(self, timeout: int, frame_save_path: str | None = None) -> tuple[str, str]:
+        """Wait until any UVC camera can stream.
         Returns (device_path, camera_name), e.g. ('/dev/video0', 'HD Pro Webcam C920').
+        If frame_save_path is given, pulls one captured JPEG frame to that local path.
         """
         found = [None]
 
         def check():
-            result = self._find_working_camera()
+            result = self._find_working_camera(frame_save_path)
             if result:
                 found[0] = result
                 return True
@@ -135,12 +136,13 @@ class DuvelDevice:
     # Camera helpers
     # ------------------------------------------------------------------
 
-    def _find_working_camera(self) -> tuple[str, str] | None:
+    def _find_working_camera(self, frame_save_path: str | None = None) -> tuple[str, str] | None:
         """Returns (dev_path, camera_name) for the first UVC node that can stream.
 
         Step 1 — sysfs: find UVC capture nodes (driver=uvcvideo, index=0).
-        Step 2 — v4l2_stream_test: actually open, start streaming, and dequeue
-                 one frame (exit 0 = streaming OK, exit 1 = timeout, exit 2 = error).
+        Step 2 — v4l2_stream_test: open, STREAMON, dequeue one frame.
+                 If frame_save_path is given, frame bytes are saved on device then
+                 pulled to that local path (MJPEG → .jpg, YUYV → .yuv).
         """
         # Step 1: enumerate UVC capture nodes via sysfs
         cmd = (
@@ -172,14 +174,41 @@ class DuvelDevice:
             i += 3  # dev, name, "---"
 
         # Step 2: streaming test on each candidate
+        remote_frame = "/data/local/tmp/v4l2_frame_tmp"
         for dev, name in candidates:
-            r = self._adb_raw(
-                ["shell", f"{_STREAM_TEST_BIN_REMOTE} {dev}"],
-                timeout=15,
-            )
+            run_cmd = f"{_STREAM_TEST_BIN_REMOTE} {dev}"
+            if frame_save_path:
+                run_cmd += f" {remote_frame}"
+            r = self._adb_raw(["shell", run_cmd], timeout=15)
             if r.returncode == 0:
+                if frame_save_path:
+                    self._pull_frame(remote_frame, frame_save_path, r.stdout)
                 return (dev, name)
         return None
+
+    def _pull_frame(self, remote_path: str, local_path: str, binary_stdout: str) -> None:
+        """Pull captured frame from device to local path.
+        Chooses extension based on pixel format reported by v4l2_stream_test.
+        """
+        # Determine extension from "format : 640x480 MJPG" line
+        ext = ".jpg"
+        for line in binary_stdout.splitlines():
+            if line.startswith("format"):
+                if "YUYV" in line or "YUY2" in line:
+                    ext = ".yuv"
+                break
+
+        # Ensure local path has correct extension
+        local = Path(local_path)
+        if local.suffix.lower() not in (".jpg", ".yuv"):
+            local = local.with_suffix(ext)
+        local.parent.mkdir(parents=True, exist_ok=True)
+
+        subprocess.run(
+            ["adb", "-s", self._serial, "pull", remote_path, str(local)],
+            capture_output=True, timeout=10,
+        )
+        self._adb_raw(["shell", f"rm -f {remote_path}"], timeout=5)
 
     # ------------------------------------------------------------------
     # Audio helpers

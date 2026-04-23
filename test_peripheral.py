@@ -37,6 +37,7 @@ class TestResult:
     audio_ready: float | None = None    # mic+speaker mixer responds
     camera_device: str | None = None    # e.g. /dev/video7
     camera_name: str | None = None      # e.g. "Rally Camera"
+    camera_frame: str | None = None     # local path to captured JPEG
     audio_card: str | None = None       # e.g. "RallyCamera"
     audio_name: str | None = None       # e.g. "Rally Camera"
     error: str | None = None
@@ -93,6 +94,8 @@ class ResultWriter:
         print(f"  Reboot triggered    : {ts(r.reboot_start)}")
         print(f"  Boot ready          : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
         print(f"  Camera working      : {ts(r.camera_ready)}{diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
+        if r.camera_frame:
+            print(f"  Frame saved         : {r.camera_frame}")
         print(f"  Audio working       : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
         total = r.total_seconds()
         print(f"  Total (reboot→audio): {total:.1f}s" if total else "  Total               : N/A")
@@ -146,6 +149,8 @@ class ResultWriter:
             lines.append(f"  Reboot triggered    : {ts(r.reboot_start)}")
             lines.append(f"  Boot ready          : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
             lines.append(f"  Camera working      : {ts(r.camera_ready)}{diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
+            if r.camera_frame:
+                lines.append(f"  Frame saved         : {r.camera_frame}")
             lines.append(f"  Audio working       : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
             total = r.total_seconds()
             lines.append(f"  Total (reboot→audio): {total:.1f}s" if total else "  Total               : N/A")
@@ -196,10 +201,13 @@ def run_one_round(device: DuvelDevice, round_num: int, total_rounds: int, args) 
         r.boot_ready = time.time()
         print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
 
-        print("  Waiting for camera (uvcvideo sysfs check)...")
-        r.camera_device, r.camera_name = device.wait_for_camera_working(args.device_timeout)
+        print("  Waiting for camera (streaming test)...")
+        frame_path = str(Path(args.output_dir) / "frames" / f"round{round_num:02d}.jpg")
+        r.camera_device, r.camera_name = device.wait_for_camera_working(args.device_timeout, frame_path)
         r.camera_ready = time.time()
+        r.camera_frame = frame_path
         print(f"  Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
+        print(f"  Frame saved     : {frame_path}")
 
         print("  Waiting for audio/mic/speaker (/proc/asound/cards check)...")
         r.audio_card, r.audio_name = device.wait_for_audio_working(args.device_timeout)

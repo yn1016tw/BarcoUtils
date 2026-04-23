@@ -82,33 +82,32 @@ class DuvelDevice:
             "Package manager never responded",
         )
 
-    def wait_for_camera_working(self, timeout: int) -> str:
-        """Wait until any UVC camera with VIDEO_CAPTURE capability is found.
-        Returns the device path (e.g. /dev/video7).
-        Uses v4l2-ctl --all to verify actual capture capability, not just node presence.
+    def wait_for_camera_working(self, timeout: int) -> tuple[str, str]:
+        """Wait until any UVC camera is found.
+        Returns (device_path, camera_name), e.g. ('/dev/video0', 'HD Pro Webcam C920').
         """
         found = [None]
 
         def check():
-            dev = self._find_working_camera()
-            if dev:
-                found[0] = dev
+            result = self._find_working_camera()
+            if result:
+                found[0] = result
                 return True
             return False
 
         self._poll_until(check, time.time() + timeout, "No working camera found within timeout")
         return found[0]
 
-    def wait_for_audio_working(self, timeout: int) -> str:
-        """Wait until audio mixer (mic+speaker) responds via tinymix.
-        Returns the card name found.
+    def wait_for_audio_working(self, timeout: int) -> tuple[str, str]:
+        """Wait until an audio device is enumerated in /proc/asound/cards.
+        Returns (short_name, full_name), e.g. ('C920', 'HD Pro Webcam C920').
         """
         found = [None]
 
         def check():
-            card = self._find_working_audio()
-            if card:
-                found[0] = card
+            result = self._find_working_audio()
+            if result:
+                found[0] = result
                 return True
             return False
 
@@ -119,38 +118,46 @@ class DuvelDevice:
     # Camera helpers
     # ------------------------------------------------------------------
 
-    def _find_working_camera(self) -> str | None:
-        """Returns first UVC capture node (/dev/videoX) found via sysfs.
+    def _find_working_camera(self) -> tuple[str, str] | None:
+        """Returns (dev_path, camera_name) for the first UVC capture node found via sysfs.
 
         v4l2-ctl is not available on Duvel. sysfs is used instead:
         - device/driver symlink contains 'uvcvideo' → USB camera bound to UVC driver
         - index == 0 → video capture node (index 1 is metadata-only)
+        Both the device path and human-readable name are emitted on separate lines.
         """
         cmd = (
             "for node in $(ls /sys/class/video4linux/); do "
             "  drv=$(readlink /sys/class/video4linux/$node/device/driver 2>/dev/null); "
             "  idx=$(cat /sys/class/video4linux/$node/index 2>/dev/null); "
             "  if echo \"$drv\" | grep -q uvcvideo && [ \"$idx\" = '0' ]; then "
-            "    echo /dev/$node; break; "
+            "    echo /dev/$node; "
+            "    cat /sys/class/video4linux/$node/name 2>/dev/null; "
+            "    break; "
             "  fi; "
             "done"
         )
         result = self._adb_raw(["shell", cmd], timeout=10)
         if result.returncode != 0:
             return None
-        dev = result.stdout.strip()
-        return dev if dev.startswith("/dev/video") else None
+        lines = result.stdout.strip().splitlines()
+        if not lines or not lines[0].startswith("/dev/video"):
+            return None
+        dev = lines[0].strip()
+        name = lines[1].strip() if len(lines) > 1 else dev
+        return (dev, name)
 
     # ------------------------------------------------------------------
     # Audio helpers
     # ------------------------------------------------------------------
 
-    def _find_working_audio(self) -> str | None:
-        """Returns audio card short-name from /proc/asound/cards, else None.
+    def _find_working_audio(self) -> tuple[str, str] | None:
+        """Returns (short_name, full_name) from /proc/asound/cards, else None.
 
         tinymix requires root. /proc/asound/cards is readable without root and
         confirms the kernel has enumerated the audio device (mic+speaker ready).
         Prefers USB-Audio cards (external camera) over internal SOC audio.
+        Line format: "0 [C920           ]: USB-Audio - HD Pro Webcam C920"
         """
         result = self._adb_raw(["shell", "cat /proc/asound/cards"], timeout=5)
         if result.returncode != 0 or not result.stdout.strip():
@@ -159,22 +166,21 @@ class DuvelDevice:
         if "no soundcards" in text.lower():
             return None
 
-        usb_card = None
-        any_card = None
+        usb_entry = None
+        any_entry = None
         for line in text.splitlines():
             stripped = line.strip()
-            # Index lines start with a digit: "0 [C920           ]: USB-Audio - ..."
             if not stripped or not stripped[0].isdigit():
                 continue
-            # Extract short name between [ and ]
             short = stripped.split("[", 1)[1].split("]")[0].strip() if "[" in stripped else stripped.split()[0]
-            if any_card is None:
-                any_card = short
+            full = stripped.split(" - ", 1)[1].strip() if " - " in stripped else short
+            if any_entry is None:
+                any_entry = (short, full)
             if "USB-Audio" in stripped:
-                usb_card = short
+                usb_entry = (short, full)
                 break
 
-        return usb_card or any_card
+        return usb_entry or any_entry
 
     # ------------------------------------------------------------------
     # Internal helpers

@@ -7,7 +7,7 @@ Camera check : v4l2-ctl --all -d <dev>  (capability 0x04200001 = VIDEO_CAPTURE+S
 Audio check  : tinymix -a               (mixer responds = mic+speaker accessible)
 
 Usage:
-    python test_peripheral.py --serial ABC123 --iterations 5
+    python test_peripheral.py --serial 1882000501 --iterations 5
     python test_peripheral.py --ip 192.168.1.100 --iterations 3
     python test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
 """
@@ -36,7 +36,9 @@ class TestResult:
     camera_ready: float | None = None   # first working camera found
     audio_ready: float | None = None    # mic+speaker mixer responds
     camera_device: str | None = None    # e.g. /dev/video7
-    audio_card: str | None = None       # e.g. "Rally"
+    camera_name: str | None = None      # e.g. "Rally Camera"
+    audio_card: str | None = None       # e.g. "RallyCamera"
+    audio_name: str | None = None       # e.g. "Rally Camera"
     error: str | None = None
     passed: bool = False
 
@@ -85,8 +87,8 @@ class ResultWriter:
                 return f"  (+{t - base:.1f}s{' ' + label if label else ''})"
             return ""
 
-        cam_label = f" [{r.camera_device}]" if r.camera_device else ""
-        aud_label = f" [{r.audio_card}]" if r.audio_card else ""
+        cam_label = f" [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
+        aud_label = f" [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
 
         print(f"  Reboot triggered    : {ts(r.reboot_start)}")
         print(f"  Boot ready          : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
@@ -138,8 +140,8 @@ class ResultWriter:
                     return f"  (+{t - base:.1f}s{' ' + label if label else ''})"
                 return ""
 
-            cam_label = f" [{r.camera_device}]" if r.camera_device else ""
-            aud_label = f" [{r.audio_card}]" if r.audio_card else ""
+            cam_label = f" [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
+            aud_label = f" [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
 
             lines.append(f"  Reboot triggered    : {ts(r.reboot_start)}")
             lines.append(f"  Boot ready          : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
@@ -194,15 +196,15 @@ def run_one_round(device: DuvelDevice, round_num: int, total_rounds: int, args) 
         r.boot_ready = time.time()
         print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
 
-        print("  Waiting for camera (v4l2-ctl capability check)...")
-        r.camera_device = device.wait_for_camera_working(args.device_timeout)
+        print("  Waiting for camera (uvcvideo sysfs check)...")
+        r.camera_device, r.camera_name = device.wait_for_camera_working(args.device_timeout)
         r.camera_ready = time.time()
-        print(f"  Camera working  {r.camera_device}  (+{r.camera_seconds():.1f}s from boot)")
+        print(f"  Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
 
-        print("  Waiting for audio/mic/speaker (tinymix check)...")
-        r.audio_card = device.wait_for_audio_working(args.device_timeout)
+        print("  Waiting for audio/mic/speaker (/proc/asound/cards check)...")
+        r.audio_card, r.audio_name = device.wait_for_audio_working(args.device_timeout)
         r.audio_ready = time.time()
-        print(f"  Audio working  [{r.audio_card}]  (+{r.audio_seconds():.1f}s from boot)")
+        print(f"  Audio working  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
 
         r.passed = True
 

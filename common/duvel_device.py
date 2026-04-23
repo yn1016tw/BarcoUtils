@@ -7,8 +7,13 @@ Requires `adb` in PATH.
 
 import subprocess
 import time
+from pathlib import Path
 
 _POLL_INTERVAL = 2  # seconds between polls
+
+# Precompiled static ARM64 binary; pushed once per test run to /data/local/tmp/
+_STREAM_TEST_BIN_LOCAL = str(Path(__file__).parent.parent / "tools" / "v4l2_stream_test")
+_STREAM_TEST_BIN_REMOTE = "/data/local/tmp/v4l2_stream_test"
 
 
 class DuvelDevice:
@@ -32,6 +37,18 @@ class DuvelDevice:
             if self._serial not in result.stdout:
                 raise ConnectionError(f"Device {self._serial} not found in adb devices")
             print(f"  [ADB] USB device {self._serial} found")
+        self._push_stream_test_bin()
+
+    def _push_stream_test_bin(self) -> None:
+        """Push the V4L2 streaming test binary to the device (once per session)."""
+        result = subprocess.run(
+            ["adb", "-s", self._serial, "push", _STREAM_TEST_BIN_LOCAL, _STREAM_TEST_BIN_REMOTE],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to push v4l2_stream_test: {result.stderr.strip()}")
+        self._adb_raw(["shell", f"chmod +x {_STREAM_TEST_BIN_REMOTE}"], timeout=5)
+        print(f"  [ADB] v4l2_stream_test pushed to {_STREAM_TEST_BIN_REMOTE}")
 
     def disconnect(self) -> None:
         if self._is_ip:
@@ -119,13 +136,13 @@ class DuvelDevice:
     # ------------------------------------------------------------------
 
     def _find_working_camera(self) -> tuple[str, str] | None:
-        """Returns (dev_path, camera_name) for the first UVC capture node found via sysfs.
+        """Returns (dev_path, camera_name) for the first UVC node that can stream.
 
-        v4l2-ctl is not available on Duvel. sysfs is used instead:
-        - device/driver symlink contains 'uvcvideo' → USB camera bound to UVC driver
-        - index == 0 → video capture node (index 1 is metadata-only)
-        Both the device path and human-readable name are emitted on separate lines.
+        Step 1 — sysfs: find UVC capture nodes (driver=uvcvideo, index=0).
+        Step 2 — v4l2_stream_test: actually open, start streaming, and dequeue
+                 one frame (exit 0 = streaming OK, exit 1 = timeout, exit 2 = error).
         """
+        # Step 1: enumerate UVC capture nodes via sysfs
         cmd = (
             "for node in $(ls /sys/class/video4linux/); do "
             "  drv=$(readlink /sys/class/video4linux/$node/device/driver 2>/dev/null); "
@@ -133,19 +150,36 @@ class DuvelDevice:
             "  if echo \"$drv\" | grep -q uvcvideo && [ \"$idx\" = '0' ]; then "
             "    echo /dev/$node; "
             "    cat /sys/class/video4linux/$node/name 2>/dev/null; "
-            "    break; "
+            "    echo '---'; "
             "  fi; "
             "done"
         )
         result = self._adb_raw(["shell", cmd], timeout=10)
-        if result.returncode != 0:
+        if result.returncode != 0 or not result.stdout.strip():
             return None
+
+        # Parse pairs: dev path + name
+        candidates: list[tuple[str, str]] = []
         lines = result.stdout.strip().splitlines()
-        if not lines or not lines[0].startswith("/dev/video"):
-            return None
-        dev = lines[0].strip()
-        name = lines[1].strip() if len(lines) > 1 else dev
-        return (dev, name)
+        i = 0
+        while i < len(lines):
+            dev = lines[i].strip()
+            if not dev.startswith("/dev/video"):
+                i += 1
+                continue
+            name = lines[i + 1].strip() if i + 1 < len(lines) and lines[i + 1].strip() != "---" else dev
+            candidates.append((dev, name))
+            i += 3  # dev, name, "---"
+
+        # Step 2: streaming test on each candidate
+        for dev, name in candidates:
+            r = self._adb_raw(
+                ["shell", f"{_STREAM_TEST_BIN_REMOTE} {dev}"],
+                timeout=15,
+            )
+            if r.returncode == 0:
+                return (dev, name)
+        return None
 
     # ------------------------------------------------------------------
     # Audio helpers

@@ -5,8 +5,12 @@ Provides reboot, boot-wait, camera, and audio device checks.
 Requires `adb` in PATH.
 """
 
+import math
+import struct
 import subprocess
+import tempfile
 import time
+import wave
 from pathlib import Path
 
 _POLL_INTERVAL = 2  # seconds between polls
@@ -14,6 +18,24 @@ _POLL_INTERVAL = 2  # seconds between polls
 # Precompiled static ARM64 binary; pushed once per test run to /data/local/tmp/
 _STREAM_TEST_BIN_LOCAL = str(Path(__file__).parent.parent / "tools" / "v4l2_stream_test")
 _STREAM_TEST_BIN_REMOTE = "/data/local/tmp/v4l2_stream_test"
+
+_TONE_WAV_REMOTE = "/data/local/tmp/test_tone.wav"
+_REC_PCM_REMOTE  = "/data/local/tmp/rec_loopback.pcm"
+
+
+def _generate_tone_wav(path: str, freq: int = 1000, duration: int = 3,
+                       sample_rate: int = 48000, channels: int = 2) -> None:
+    """Write a RIFF WAV file containing a sine-wave tone (16-bit LE, stereo)."""
+    n_frames = sample_rate * duration
+    amplitude = 16000  # ~half full-scale to avoid clipping
+    with wave.open(path, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(2)  # 16-bit
+        wf.setframerate(sample_rate)
+        for i in range(n_frames):
+            sample = int(amplitude * math.sin(2 * math.pi * freq * i / sample_rate))
+            frame = struct.pack("<h", sample) * channels
+            wf.writeframesraw(frame)
 
 
 class DuvelDevice:
@@ -244,6 +266,99 @@ class DuvelDevice:
                 break
 
         return usb_entry or any_entry
+
+    def _get_usb_audio_card(self) -> tuple[int, str, str] | None:
+        """Return (card_num, short_name, full_name) for the USB-Audio card, else None."""
+        result = self._adb_raw(["shell", "cat /proc/asound/cards"], timeout=5)
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        text = result.stdout
+        if "no soundcards" in text.lower():
+            return None
+
+        usb_entry = None
+        any_entry = None
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or not stripped[0].isdigit():
+                continue
+            try:
+                card_num = int(stripped.split()[0])
+            except ValueError:
+                continue
+            short = stripped.split("[", 1)[1].split("]")[0].strip() if "[" in stripped else stripped.split()[0]
+            full = stripped.split(" - ", 1)[1].strip() if " - " in stripped else short
+            if any_entry is None:
+                any_entry = (card_num, short, full)
+            if "USB-Audio" in stripped:
+                usb_entry = (card_num, short, full)
+                break
+
+        return usb_entry or any_entry
+
+    def test_audio_loopback(self, duration: int = 3, rms_threshold: float = 500.0) -> tuple[bool, float, str]:
+        """Play a 1kHz tone through the speaker while recording from the mic simultaneously.
+
+        Returns (passed, rms, card_name).
+          passed    : True if recorded RMS > rms_threshold
+          rms       : RMS amplitude of the recording (0–32767 scale for 16-bit audio)
+          card_name : human-readable card name, e.g. "Rally Camera"
+        """
+        card_info = self._get_usb_audio_card()
+        if card_info is None:
+            raise RuntimeError("No audio card found on device")
+        card_num, _, card_name = card_info
+
+        # Generate tone WAV locally
+        local_tone = tempfile.mktemp(suffix=".wav")
+        local_rec  = tempfile.mktemp(suffix=".pcm")
+        try:
+            _generate_tone_wav(local_tone, duration=duration)
+
+            # Push tone to device
+            r = subprocess.run(
+                ["adb", "-s", self._serial, "push", local_tone, _TONE_WAV_REMOTE],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode != 0:
+                raise RuntimeError(f"Failed to push tone WAV: {r.stderr.strip()}")
+
+            # Play + record simultaneously (single shell command)
+            shell_cmd = (
+                f"tinyplay {_TONE_WAV_REMOTE} -D {card_num} & "
+                f"tinycap {_REC_PCM_REMOTE} -D {card_num} -d 0 -r 48000 -b 16 -c 2 -T {duration}; "
+                f"wait"
+            )
+            self._adb_raw(["shell", shell_cmd], timeout=duration + 10)
+
+            # Pull recording
+            subprocess.run(
+                ["adb", "-s", self._serial, "pull", _REC_PCM_REMOTE, local_rec],
+                capture_output=True, timeout=15,
+            )
+
+            # Analyse RMS
+            try:
+                with open(local_rec, "rb") as f:
+                    raw = f.read()
+                n = len(raw) // 2
+                if n == 0:
+                    return (False, 0.0, card_name)
+                samples = struct.unpack(f"<{n}h", raw[:n * 2])
+                rms = math.sqrt(sum(s * s for s in samples) / n)
+            except (OSError, struct.error):
+                return (False, 0.0, card_name)
+
+            return (rms > rms_threshold, rms, card_name)
+
+        finally:
+            # Clean up remote and local temp files
+            self._adb_raw(["shell", f"rm -f {_TONE_WAV_REMOTE} {_REC_PCM_REMOTE}"], timeout=5)
+            for p in (local_tone, local_rec):
+                try:
+                    Path(p).unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     # ------------------------------------------------------------------
     # Internal helpers

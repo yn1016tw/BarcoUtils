@@ -96,6 +96,7 @@ device.reboot()
 device.wait_for_boot(timeout=300)
 dev, name = device.wait_for_camera_working(120, frame_save_path="frame.jpg")
 card, full = device.wait_for_audio_working(120)
+passed, rms, card_name = device.test_audio_loopback(duration=3)
 device.disconnect()
 ```
 
@@ -115,6 +116,29 @@ The binary is pushed to `/data/local/tmp/v4l2_stream_test` once at `connect()`.
 
 `tinymix` requires root. `/proc/asound/cards` is readable without root and confirms the kernel has enumerated the audio device.  
 USB-Audio cards (external camera mic/speaker) are preferred over the internal MT8195 SOC audio.
+
+### Audio loopback test
+
+`test_audio_loopback(duration, rms_threshold)` plays a 1 kHz sine-wave tone through the speaker while simultaneously recording from the mic. Returns `(passed, rms, card_name)`.
+
+```python
+passed, rms, card_name = device.test_audio_loopback(duration=3, rms_threshold=500.0)
+# e.g. (True, 1243.7, "Rally Camera")
+```
+
+| RMS range | Meaning |
+|-----------|---------|
+| < 50 | Near silence — hardware not responding |
+| 50–500 | Ambient noise only — speaker may not be playing |
+| > 500 (default threshold) | Audible signal confirmed |
+| > 2000 | Strong signal (close range, high volume) |
+
+Internally:
+1. Generates a RIFF WAV locally (stdlib `wave` + `struct`, no external deps)
+2. Pushes it to `/data/local/tmp/test_tone.wav`
+3. Runs `tinyplay … & tinycap … -T {duration}; wait` in a single `adb shell`
+4. Pulls the raw PCM recording back and computes RMS via `struct.unpack`
+5. Cleans up remote and local temp files in `finally`
 
 ---
 
@@ -146,6 +170,10 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 ---
 
 ## Changelog
+
+### v1.1.0
+- `common/duvel_device.py`: add `test_audio_loopback()` — simultaneous speaker playback + mic recording via `tinyplay`/`tinycap`, RMS-based pass/fail
+- `common/duvel_device.py`: add `_get_usb_audio_card()` — returns USB-Audio card number for `tinyplay`/`tinycap` `-D` flag
 
 ### v1.0.0
 - `test_peripheral.py`: peripheral boot-time measurement (camera / mic / speaker)

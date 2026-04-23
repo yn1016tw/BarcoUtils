@@ -1,7 +1,10 @@
 """
-Logi Rally Camera Boot Time Test
-Measures time from Duvel reboot to Camera/Mic/Speaker ready.
+Camera/Mic/Speaker Boot Time Test for Duvel
+Measures time from reboot to Camera (any UVC), Mic, and Speaker ready.
 Supports USB serial or IP connection. Supports stress testing.
+
+Camera check : v4l2-ctl --all -d <dev>  (capability 0x04200001 = VIDEO_CAPTURE+STREAMING)
+Audio check  : tinymix -a               (mixer responds = mic+speaker accessible)
 
 Usage:
     python test_logi_rally_boot_time.py --serial ABC123 --iterations 5
@@ -14,12 +17,12 @@ import statistics
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-# Logi Rally Camera USB vendor:product ID
-_LOGI_RALLY_USB_ID = "046d:0881"
+# v4l2 capability flag: VIDEO_CAPTURE (0x1) + EXT_PIX_FORMAT (0x200) + STREAMING (0x4000000)
+_VIDEO_CAPTURE_CAP = "0x04200001"
 _POLL_INTERVAL = 2  # seconds between polls
 
 
@@ -55,7 +58,6 @@ class DuvelDevice:
 
     def reboot(self) -> None:
         self._adb(["reboot"], timeout=10)
-        # Wait until device goes offline
         deadline = time.time() + 30
         while time.time() < deadline:
             result = self._adb_raw(["get-state"], timeout=3)
@@ -99,26 +101,108 @@ class DuvelDevice:
             "Package manager never responded",
         )
 
-    def wait_for_logi_rally(self, timeout: int) -> None:
-        self._poll_until(
-            lambda: self._lsusb_has(_LOGI_RALLY_USB_ID),
-            time.time() + timeout,
-            f"Logi Rally USB ({_LOGI_RALLY_USB_ID}) not detected within timeout",
-        )
+    def wait_for_camera_working(self, timeout: int) -> str:
+        """Wait until any UVC camera with VIDEO_CAPTURE capability is found.
+        Returns the device path (e.g. /dev/video7).
+        Uses v4l2-ctl --all to verify actual capture capability, not just node presence.
+        """
+        found = [None]
 
-    def wait_for_video_node(self, timeout: int) -> None:
-        self._poll_until(
-            lambda: self._node_exists("/dev/video*"),
-            time.time() + timeout,
-            "Video node /dev/video* not found within timeout",
-        )
+        def check():
+            dev = self._find_working_camera()
+            if dev:
+                found[0] = dev
+                return True
+            return False
 
-    def wait_for_audio_node(self, timeout: int) -> None:
-        self._poll_until(
-            lambda: self._node_exists("/dev/snd/pcmC*"),
-            time.time() + timeout,
-            "Audio node /dev/snd/pcmC* not found within timeout",
-        )
+        self._poll_until(check, time.time() + timeout, "No working camera found within timeout")
+        return found[0]
+
+    def wait_for_audio_working(self, timeout: int) -> str:
+        """Wait until audio mixer (mic+speaker) responds via tinymix.
+        Returns the card name found.
+        """
+        found = [None]
+
+        def check():
+            card = self._find_working_audio()
+            if card:
+                found[0] = card
+                return True
+            return False
+
+        self._poll_until(check, time.time() + timeout, "No working audio device found within timeout")
+        return found[0]
+
+    # ------------------------------------------------------------------
+    # Camera helpers
+    # ------------------------------------------------------------------
+
+    def _find_working_camera(self) -> str | None:
+        """Returns first /dev/videoX that has VIDEO_CAPTURE+STREAMING capability."""
+        # List all video nodes
+        result = self._adb_raw(["shell", "ls /dev/video*"], timeout=5)
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+
+        for line in result.stdout.strip().splitlines():
+            dev = line.strip()
+            if not dev.startswith("/dev/video"):
+                continue
+            if self._camera_can_capture(dev):
+                return dev
+        return None
+
+    def _camera_can_capture(self, dev: str) -> bool:
+        """Check if device reports VIDEO_CAPTURE+STREAMING capability via v4l2-ctl."""
+        result = self._adb_raw(["shell", f"v4l2-ctl --all -d {dev}"], timeout=8)
+        if result.returncode != 0:
+            return False
+        output = result.stdout
+        # Check capabilities line, e.g.: "Capabilities  : 0x04200001"
+        for line in output.splitlines():
+            if "capabilities" in line.lower() and _VIDEO_CAPTURE_CAP in line.lower():
+                return True
+        return False
+
+    # ------------------------------------------------------------------
+    # Audio helpers
+    # ------------------------------------------------------------------
+
+    def _find_working_audio(self) -> str | None:
+        """Returns audio card name if tinymix responds, else None."""
+        # Check /proc/asound/cards for connected audio devices
+        result = self._adb_raw(["shell", "cat /proc/asound/cards"], timeout=5)
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        lines = result.stdout.strip().splitlines()
+        if not lines or "no soundcards" in result.stdout.lower():
+            return None
+
+        # Find first external card (skip card 0 which is usually internal)
+        card_index = None
+        card_name = None
+        for line in lines:
+            parts = line.split()
+            if parts and parts[0].isdigit():
+                idx = int(parts[0])
+                # Prefer non-zero card index (external USB audio)
+                if idx > 0:
+                    card_index = idx
+                    card_name = " ".join(parts[2:]) if len(parts) > 2 else f"card{idx}"
+                    break
+                elif card_index is None:
+                    card_index = idx
+                    card_name = " ".join(parts[2:]) if len(parts) > 2 else f"card{idx}"
+
+        if card_index is None:
+            return None
+
+        # Verify tinymix can actually talk to the card
+        result = self._adb_raw(["shell", f"tinymix -D {card_index} -a"], timeout=8)
+        if result.returncode == 0 and result.stdout.strip():
+            return card_name
+        return None
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -141,14 +225,6 @@ class DuvelDevice:
     def _pm_list_responds(self) -> bool:
         result = self._adb_raw(["shell", "pm", "list", "packages", "-f"], timeout=10)
         return result.returncode == 0 and "package:" in result.stdout
-
-    def _lsusb_has(self, usb_id: str) -> bool:
-        result = self._adb_raw(["shell", "lsusb"], timeout=5)
-        return usb_id in result.stdout
-
-    def _node_exists(self, glob_path: str) -> bool:
-        result = self._adb_raw(["shell", "ls", glob_path], timeout=5)
-        return result.returncode == 0 and result.stdout.strip() != ""
 
     def _adb(self, args: list, timeout: int = 30) -> subprocess.CompletedProcess:
         result = self._adb_raw(args, timeout=timeout)
@@ -177,9 +253,10 @@ class TestResult:
     total_rounds: int
     reboot_start: float = 0.0
     boot_ready: float | None = None
-    usb_detected: float | None = None
-    video_ready: float | None = None
-    audio_ready: float | None = None
+    camera_ready: float | None = None   # first working camera found
+    audio_ready: float | None = None    # mic+speaker mixer responds
+    camera_device: str | None = None    # e.g. /dev/video7
+    audio_card: str | None = None       # e.g. "Rally"
     error: str | None = None
     passed: bool = False
 
@@ -193,19 +270,14 @@ class TestResult:
             return self.boot_ready - self.reboot_start
         return None
 
-    def usb_seconds(self) -> float | None:
-        if self.usb_detected and self.boot_ready:
-            return self.usb_detected - self.boot_ready
-        return None
-
-    def video_seconds(self) -> float | None:
-        if self.video_ready and self.usb_detected:
-            return self.video_ready - self.usb_detected
+    def camera_seconds(self) -> float | None:
+        if self.camera_ready and self.boot_ready:
+            return self.camera_ready - self.boot_ready
         return None
 
     def audio_seconds(self) -> float | None:
-        if self.audio_ready and self.usb_detected:
-            return self.audio_ready - self.usb_detected
+        if self.audio_ready and self.boot_ready:
+            return self.audio_ready - self.boot_ready
         return None
 
 
@@ -233,13 +305,15 @@ class ResultWriter:
                 return f"  (+{t - base:.1f}s{' ' + label if label else ''})"
             return ""
 
+        cam_label = f" [{r.camera_device}]" if r.camera_device else ""
+        aud_label = f" [{r.audio_card}]" if r.audio_card else ""
+
         print(f"  Reboot triggered   : {ts(r.reboot_start)}")
         print(f"  Boot ready         : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
-        print(f"  Logi Rally USB     : {ts(r.usb_detected)}{diff(r.usb_detected, r.boot_ready, 'from boot')}")
-        print(f"  Video node ready   : {ts(r.video_ready)}{diff(r.video_ready, r.usb_detected)}")
-        print(f"  Audio node ready   : {ts(r.audio_ready)}{diff(r.audio_ready, r.usb_detected)}")
+        print(f"  Camera working     : {ts(r.camera_ready)}{diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
+        print(f"  Audio working      : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
         total = r.total_seconds()
-        print(f"  Total              : {total:.1f}s" if total else "  Total              : N/A")
+        print(f"  Total (reboot→audio): {total:.1f}s" if total else "  Total              : N/A")
 
     def print_summary(self, results: list[TestResult]) -> None:
         passed = [r for r in results if r.passed]
@@ -254,15 +328,13 @@ class ResultWriter:
                 return f"{v[0]:.1f}s"
             return f"{min(v):.1f}s / {statistics.mean(v):.1f}s / {max(v):.1f}s"
 
-        print(f"  Total time   min/avg/max: {stats([r.total_seconds() for r in passed])}")
-        print(f"  Boot time    min/avg/max: {stats([r.boot_seconds() for r in passed])}")
-        print(f"  USB detect   min/avg/max: {stats([r.usb_seconds() for r in passed])}")
-        print(f"  Video ready  min/avg/max: {stats([r.video_seconds() for r in passed])}")
-        print(f"  Audio ready  min/avg/max: {stats([r.audio_seconds() for r in passed])}")
+        print(f"  Total time    min/avg/max: {stats([r.total_seconds() for r in passed])}")
+        print(f"  Boot time     min/avg/max: {stats([r.boot_seconds() for r in passed])}")
+        print(f"  Camera ready  min/avg/max: {stats([r.camera_seconds() for r in passed])}")
+        print(f"  Audio ready   min/avg/max: {stats([r.audio_seconds() for r in passed])}")
         print(f"{'=' * 60}")
 
-    def save_log(self, results: list[TestResult], output_dir: str) -> None:
-        path = Path(output_dir) / (self._run_start.strftime("%Y%m%d") + ".txt")
+    def _format_lines(self, results: list[TestResult]) -> list[str]:
         lines = []
         lines.append("=" * 80)
         lines.append(
@@ -286,13 +358,15 @@ class ResultWriter:
                     return f"  (+{t - base:.1f}s{' ' + label if label else ''})"
                 return ""
 
+            cam_label = f" [{r.camera_device}]" if r.camera_device else ""
+            aud_label = f" [{r.audio_card}]" if r.audio_card else ""
+
             lines.append(f"  Reboot triggered   : {ts(r.reboot_start)}")
             lines.append(f"  Boot ready         : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
-            lines.append(f"  Logi Rally USB     : {ts(r.usb_detected)}{diff(r.usb_detected, r.boot_ready, 'from boot')}")
-            lines.append(f"  Video node ready   : {ts(r.video_ready)}{diff(r.video_ready, r.usb_detected)}")
-            lines.append(f"  Audio node ready   : {ts(r.audio_ready)}{diff(r.audio_ready, r.usb_detected)}")
+            lines.append(f"  Camera working     : {ts(r.camera_ready)}{diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
+            lines.append(f"  Audio working      : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
             total = r.total_seconds()
-            lines.append(f"  Total              : {total:.1f}s" if total else "  Total              : N/A")
+            lines.append(f"  Total (reboot→audio): {total:.1f}s" if total else "  Total              : N/A")
             lines.append("")
 
         passed = [r for r in results if r.passed]
@@ -306,17 +380,19 @@ class ResultWriter:
             return f"{min(v):.1f}s / {statistics.mean(v):.1f}s / {max(v):.1f}s"
 
         lines.append(f"=== Summary ({len(passed)}/{len(results)} PASS) ===")
-        lines.append(f"  Total time   min/avg/max: {stats([r.total_seconds() for r in passed])}")
-        lines.append(f"  Boot time    min/avg/max: {stats([r.boot_seconds() for r in passed])}")
-        lines.append(f"  USB detect   min/avg/max: {stats([r.usb_seconds() for r in passed])}")
-        lines.append(f"  Video ready  min/avg/max: {stats([r.video_seconds() for r in passed])}")
-        lines.append(f"  Audio ready  min/avg/max: {stats([r.audio_seconds() for r in passed])}")
+        lines.append(f"  Total time    min/avg/max: {stats([r.total_seconds() for r in passed])}")
+        lines.append(f"  Boot time     min/avg/max: {stats([r.boot_seconds() for r in passed])}")
+        lines.append(f"  Camera ready  min/avg/max: {stats([r.camera_seconds() for r in passed])}")
+        lines.append(f"  Audio ready   min/avg/max: {stats([r.audio_seconds() for r in passed])}")
         lines.append("")
+        return lines
 
+    def save_log(self, results: list[TestResult], output_dir: str) -> None:
+        path = Path(output_dir) / (self._run_start.strftime("%Y%m%d") + ".txt")
+        lines = self._format_lines(results)
         mode = "a" if path.exists() else "w"
         with open(path, mode, encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
-
         print(f"\n  Log saved: {path}")
 
 
@@ -338,20 +414,15 @@ def run_one_round(device: DuvelDevice, round_num: int, total_rounds: int, args) 
         r.boot_ready = time.time()
         print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
 
-        print("  Waiting for Logi Rally USB...")
-        device.wait_for_logi_rally(args.device_timeout)
-        r.usb_detected = time.time()
-        print(f"  USB detected  (+{r.usb_seconds():.1f}s from boot)")
+        print("  Waiting for camera (v4l2-ctl capability check)...")
+        r.camera_device = device.wait_for_camera_working(args.device_timeout)
+        r.camera_ready = time.time()
+        print(f"  Camera working  {r.camera_device}  (+{r.camera_seconds():.1f}s from boot)")
 
-        print("  Waiting for video node...")
-        device.wait_for_video_node(args.device_timeout)
-        r.video_ready = time.time()
-        print(f"  Video ready  (+{r.video_seconds():.1f}s)")
-
-        print("  Waiting for audio node...")
-        device.wait_for_audio_node(args.device_timeout)
+        print("  Waiting for audio/mic/speaker (tinymix check)...")
+        r.audio_card = device.wait_for_audio_working(args.device_timeout)
         r.audio_ready = time.time()
-        print(f"  Audio ready  (+{r.audio_seconds():.1f}s)")
+        print(f"  Audio working  [{r.audio_card}]  (+{r.audio_seconds():.1f}s from boot)")
 
         r.passed = True
 
@@ -371,7 +442,7 @@ def run_one_round(device: DuvelDevice, round_num: int, total_rounds: int, args) 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Measure Logi Rally Camera ready time after Duvel reboot"
+        description="Measure camera/mic/speaker ready time after Duvel reboot"
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--serial", metavar="SERIAL", help="USB ADB serial number")
@@ -395,7 +466,7 @@ def main():
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
     results = []
 
-    print(f"Logi Rally Boot Time Test")
+    print("Camera/Mic/Speaker Boot Time Test")
     print(f"  Device     : {device.label}")
     print(f"  Iterations : {args.iterations}")
     print(f"  Output dir : {args.output_dir}")

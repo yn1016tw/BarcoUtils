@@ -21,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 from common.duvel_device import DuvelDevice
+from common.version import VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +125,7 @@ class ResultWriter:
         lines.append("=" * 80)
         lines.append(
             f"Test Run: {self._run_start.strftime('%Y-%m-%d %H:%M:%S')} "
-            f"| Device: {self._device_label} | Iterations: {self._total}"
+            f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}"
         )
         lines.append("=" * 80)
         lines.append("")
@@ -256,7 +257,7 @@ def main():
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
     results = []
 
-    print("Peripheral Boot Time Test")
+    print(f"Peripheral Boot Time Test  v{VERSION}")
     print(f"  Device     : {device.label}")
     print(f"  Iterations : {args.iterations}")
     print(f"  Output dir : {args.output_dir}")

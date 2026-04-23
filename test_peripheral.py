@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from duvel_device import DuvelDevice
+from common.duvel_device import DuvelDevice
 
 
 # ---------------------------------------------------------------------------

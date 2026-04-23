@@ -15,12 +15,17 @@ from pathlib import Path
 
 _POLL_INTERVAL = 2  # seconds between polls
 
+_DATA_DIR = Path(__file__).parent.parent / "data"
+
 # Precompiled static ARM64 binary; pushed once per test run to /data/local/tmp/
 _STREAM_TEST_BIN_LOCAL = str(Path(__file__).parent.parent / "tools" / "v4l2_stream_test")
 _STREAM_TEST_BIN_REMOTE = "/data/local/tmp/v4l2_stream_test"
 
-_TONE_WAV_REMOTE = "/data/local/tmp/test_tone.wav"
-_REC_PCM_REMOTE  = "/data/local/tmp/rec_loopback.pcm"
+# 1 kHz / 2 s tone WAV; generated locally if absent, pushed once at connect()
+_TONE_WAV_2S_LOCAL  = str(_DATA_DIR / "barco_tone_2s.wav")
+_TONE_WAV_2S_REMOTE = "/data/local/tmp/barco_tone_2s.wav"
+
+_REC_PCM_REMOTE = "/data/local/tmp/rec_loopback.pcm"
 
 
 class DuvelDevice:
@@ -52,6 +57,7 @@ class DuvelDevice:
                 raise ConnectionError(f"Device {self._serial} not found in adb devices")
             print(f"  [ADB] USB device {self._serial} found")
         self._push_stream_test_bin()
+        self._push_tone_wav()
 
     def disconnect(self) -> None:
         if self._is_ip:
@@ -151,15 +157,8 @@ class DuvelDevice:
         if card_info is None:
             raise RuntimeError("No audio card found on device")
         card_num, _, _ = card_info
-        local_tone = tempfile.mktemp(suffix=".wav")
-        try:
-            self._generate_tone_wav(local_tone, duration=duration)
-            self._push_file(local_tone, _TONE_WAV_REMOTE)
-            result = self._adb_raw(["shell", f"tinyplay {_TONE_WAV_REMOTE} -D {card_num}"], timeout=duration + 5)
-            return result.returncode == 0
-        finally:
-            self._adb_raw(["shell", f"rm -f {_TONE_WAV_REMOTE}"], timeout=5)
-            Path(local_tone).unlink(missing_ok=True)
+        result = self._adb_raw(["shell", f"su root tinyplay {_TONE_WAV_2S_REMOTE} -D {card_num} -d 0"], timeout=duration + 5)
+        return result.returncode == 0
 
     def test_mic(self, duration: int = 2, rms_threshold: float = 100.0) -> tuple[bool, float]:
         """Record from the mic for duration seconds and measure RMS.
@@ -174,7 +173,7 @@ class DuvelDevice:
         card_num, _, _ = card_info
         local_rec = tempfile.mktemp(suffix=".pcm")
         try:
-            shell_cmd = f"tinycap {_REC_PCM_REMOTE} -D {card_num} -d 0 -r 48000 -b 16 -c 2 -T {duration}"
+            shell_cmd = f"su root tinycap {_REC_PCM_REMOTE} -D {card_num} -d 0 -r 48000 -b 16 -c 2 -T {duration}"
             self._adb_raw(["shell", shell_cmd], timeout=duration + 5)
             self._pull_file(_REC_PCM_REMOTE, local_rec)
             try:
@@ -185,45 +184,6 @@ class DuvelDevice:
         finally:
             self._adb_raw(["shell", f"rm -f {_REC_PCM_REMOTE}"], timeout=5)
             Path(local_rec).unlink(missing_ok=True)
-
-    def test_audio_loopback(self, duration: int = 3, rms_threshold: float = 500.0) -> tuple[bool, float, str]:
-        """Play a 1kHz tone through the speaker while recording from the mic simultaneously.
-
-        Returns (passed, rms, card_name).
-          passed    : True if recorded RMS > rms_threshold
-          rms       : RMS amplitude of the recording (0-32767 scale for 16-bit audio)
-          card_name : human-readable card name, e.g. "Rally Camera"
-        """
-        card_info = self._get_usb_audio_card()
-        if card_info is None:
-            raise RuntimeError("No audio card found on device")
-        card_num, _, card_name = card_info
-
-        local_tone = tempfile.mktemp(suffix=".wav")
-        local_rec  = tempfile.mktemp(suffix=".pcm")
-        try:
-            self._generate_tone_wav(local_tone, duration=duration)
-            self._push_file(local_tone, _TONE_WAV_REMOTE)
-
-            shell_cmd = (
-                f"tinyplay {_TONE_WAV_REMOTE} -D {card_num} & "
-                f"tinycap {_REC_PCM_REMOTE} -D {card_num} -d 0 -r 48000 -b 16 -c 2 -T {duration}; "
-                f"wait"
-            )
-            self._adb_raw(["shell", shell_cmd], timeout=duration + 10)
-            self._pull_file(_REC_PCM_REMOTE, local_rec)
-
-            try:
-                rms = self._compute_rms(Path(local_rec).read_bytes())
-            except OSError:
-                return (False, 0.0, card_name)
-
-            return (rms > rms_threshold, rms, card_name)
-
-        finally:
-            self._adb_raw(["shell", f"rm -f {_TONE_WAV_REMOTE} {_REC_PCM_REMOTE}"], timeout=5)
-            for p in (local_tone, local_rec):
-                Path(p).unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
     # Camera helpers
@@ -393,6 +353,16 @@ class DuvelDevice:
     # ------------------------------------------------------------------
     # Static helpers
     # ------------------------------------------------------------------
+
+    def _push_tone_wav(self) -> None:
+        """Generate ./data/barco_tone_2s.wav if absent, then push to device once."""
+        path = Path(_TONE_WAV_2S_LOCAL)
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._generate_tone_wav(str(path), duration=2)
+            print(f"  [ADB] Generated {_TONE_WAV_2S_LOCAL}")
+        self._push_file(_TONE_WAV_2S_LOCAL, _TONE_WAV_2S_REMOTE)
+        print(f"  [ADB] barco_tone_2s.wav pushed to {_TONE_WAV_2S_REMOTE}")
 
     @staticmethod
     def _generate_tone_wav(path: str, freq: int = 1000, duration: int = 3,

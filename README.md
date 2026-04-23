@@ -11,6 +11,8 @@ No dependency on TEnTo or the Wave4 BSP — only `adb` in PATH and Python 3.10+.
 BarcoUtils/
 ├── common/
 │   └── duvel_device.py     # DuvelDevice — ADB wrapper (reusable)
+├── data/
+│   └── barco_tone_2s.wav   # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
 ├── tools/
 │   ├── v4l2_stream_test.c  # Minimal V4L2 streaming test (source)
 │   └── v4l2_stream_test    # Precompiled static ARM64 binary (Android 26+)
@@ -91,12 +93,13 @@ All ADB interaction lives here — import it in other test scripts as needed.
 from common.duvel_device import DuvelDevice
 
 device = DuvelDevice(serial="192.168.1.100:5555", is_ip=True)
-device.connect()                                    # adb connect + push test binary
+device.connect()                                    # adb connect + push test binary + push tone WAV
 device.reboot()
 device.wait_for_boot(timeout=300)
 dev, name = device.wait_for_camera_working(120, frame_save_path="frame.jpg")
 card, full = device.wait_for_audio_working(120)
-passed, rms, card_name = device.test_audio_loopback(duration=3)
+speaker_ok = device.test_speaker(duration=2)
+mic_ok, rms = device.test_mic(duration=2)
 device.disconnect()
 ```
 
@@ -114,31 +117,24 @@ The binary is pushed to `/data/local/tmp/v4l2_stream_test` once at `connect()`.
 
 ### Audio check detail
 
-`tinymix` requires root. `/proc/asound/cards` is readable without root and confirms the kernel has enumerated the audio device.  
+`/proc/asound/cards` is readable without root and confirms the kernel has enumerated the audio device.  
 USB-Audio cards (external camera mic/speaker) are preferred over the internal MT8195 SOC audio.
 
-### Audio loopback test
+`tinyplay` and `tinycap` require access to `/dev/snd/pcm*` which is owned by `system:audio`. Since `adb shell` runs as the `shell` user (not in the `audio` group), both commands are prefixed with `su root`.
 
-`test_audio_loopback(duration, rms_threshold)` plays a 1 kHz sine-wave tone through the speaker while simultaneously recording from the mic. Returns `(passed, rms, card_name)`.
+### Speaker test
 
-```python
-passed, rms, card_name = device.test_audio_loopback(duration=3, rms_threshold=500.0)
-# e.g. (True, 1243.7, "Rally Camera")
-```
+`test_speaker(duration)` plays `data/barco_tone_2s.wav` (pre-pushed at `connect()`) via `tinyplay`. Returns `True` if exit 0.
+
+### Mic test
+
+`test_mic(duration, rms_threshold)` records via `tinycap` and measures RMS. Returns `(passed, rms)`.
 
 | RMS range | Meaning |
 |-----------|---------|
 | < 50 | Near silence — hardware not responding |
-| 50–500 | Ambient noise only — speaker may not be playing |
-| > 500 (default threshold) | Audible signal confirmed |
-| > 2000 | Strong signal (close range, high volume) |
-
-Internally:
-1. Generates a RIFF WAV locally (stdlib `wave` + `struct`, no external deps)
-2. Pushes it to `/data/local/tmp/test_tone.wav`
-3. Runs `tinyplay … & tinycap … -T {duration}; wait` in a single `adb shell`
-4. Pulls the raw PCM recording back and computes RMS via `struct.unpack`
-5. Cleans up remote and local temp files in `finally`
+| 50–100 | Below default threshold |
+| > 100 (default threshold) | Ambient noise confirmed |
 
 ---
 
@@ -170,6 +166,11 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 ---
 
 ## Changelog
+
+### v1.4.0
+- `common/duvel_device.py`: prefix `tinyplay`/`tinycap` with `su root` — `adb shell` runs as `shell` user which is not in the `audio` group; without root, PCM devices cannot be opened
+- `common/duvel_device.py`: `data/barco_tone_2s.wav` generated once locally (if absent) and pushed to device at `connect()` — `test_speaker()` plays the pre-pushed file with no per-call push or temp files
+- `common/duvel_device.py`: remove `test_audio_loopback()`
 
 ### v1.3.0
 OOP refactoring — no behaviour change, public API unchanged.

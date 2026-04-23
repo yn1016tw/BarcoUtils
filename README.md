@@ -142,3 +142,15 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 - Python 3.10+
 - `adb` in PATH
 - Duvel device accessible via USB or TCP/IP
+
+---
+
+## Changelog
+
+### v1.0.0
+- `test_peripheral.py`: peripheral boot-time measurement (camera / mic / speaker)
+- `common/duvel_device.py`: reusable ADB wrapper with 4-step boot detection
+- Camera check: sysfs UVC enumeration + real V4L2 streaming verification (STREAMON → DQBUF)
+- Frame capture: JPEG pulled to local `<output-dir>/frames/roundNN.jpg` per round
+- Audio check: `/proc/asound/cards` (no root required), prefers USB-Audio over internal SOC
+- `tools/v4l2_stream_test`: static ARM64 binary compiled with NDK r28

@@ -8,8 +8,6 @@ Requires `adb` in PATH.
 import subprocess
 import time
 
-# v4l2 capability flag: VIDEO_CAPTURE (0x1) + EXT_PIX_FORMAT (0x200) + STREAMING (0x4000000)
-_VIDEO_CAPTURE_CAP = "0x04200001"
 _POLL_INTERVAL = 2  # seconds between polls
 
 
@@ -136,14 +134,14 @@ class DuvelDevice:
         return None
 
     def _camera_can_capture(self, dev: str) -> bool:
-        """Check if device reports VIDEO_CAPTURE+STREAMING capability via v4l2-ctl."""
+        """Check if device reports VIDEO_CAPTURE capability via v4l2-ctl."""
         result = self._adb_raw(["shell", f"v4l2-ctl --all -d {dev}"], timeout=8)
         if result.returncode != 0:
             return False
-        for line in result.stdout.splitlines():
-            if "capabilities" in line.lower() and _VIDEO_CAPTURE_CAP in line.lower():
-                return True
-        return False
+        # v4l2-ctl expands capability bits to human-readable names.
+        # The "Capabilities" line includes 0x80000000 (Device Caps flag), so hex matching
+        # against 0x04200001 fails. Checking for the expanded "Video Capture" text is reliable.
+        return "Video Capture" in result.stdout
 
     # ------------------------------------------------------------------
     # Audio helpers

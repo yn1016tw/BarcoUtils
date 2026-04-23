@@ -171,6 +171,16 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 
 ## Changelog
 
+### v1.3.0
+OOP refactoring — no behaviour change, public API unchanged.
+- `duvel_device`: `_generate_tone_wav()` moved from module-level to `@staticmethod` inside `DuvelDevice`
+- `duvel_device`: `_compute_rms()` extracted as `@staticmethod` — eliminates duplicate RMS logic in `test_mic` and `test_audio_loopback`
+- `duvel_device`: `_push_file()` / `_pull_file()` added — consolidates repeated `adb push/pull` + error-check pattern
+- `duvel_device`: `_find_working_audio()` simplified to delegate to `_get_usb_audio_card()` — eliminates duplicated `/proc/asound/cards` parsing
+- `test_peripheral`: `ts()` / `diff()` extracted as `@staticmethod` on `ResultWriter`
+- `test_peripheral`: `_format_round_lines()` / `_format_summary_lines()` — single formatting path used by both console and log file
+- `test_peripheral`: `run_one_round()` encapsulated into `PeripheralTestRunner` class
+
 ### v1.2.0
 - `common/duvel_device.py`: add `test_speaker(duration)` — plays 1kHz tone via `tinyplay`, returns True if exit 0
 - `common/duvel_device.py`: add `test_mic(duration, rms_threshold)` — records via `tinycap`, returns `(passed, rms)`; default threshold 100 (ambient noise sufficient)

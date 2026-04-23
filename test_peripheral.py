@@ -3,8 +3,8 @@ Peripheral Boot Time Test for Duvel
 Measures time from reboot to Camera, Mic, and Speaker ready.
 Supports USB serial or IP connection. Supports stress testing.
 
-Camera check : v4l2-ctl --all -d <dev>  (capability 0x04200001 = VIDEO_CAPTURE+STREAMING)
-Audio check  : tinymix -a               (mixer responds = mic+speaker accessible)
+Camera check : v4l2_stream_test (STREAMON + 5s warm-up + DQBUF)
+Audio check  : /proc/asound/cards -> tinyplay (speaker) -> tinycap RMS (mic)
 
 Usage:
     python test_peripheral.py --serial 1882000501 --iterations 5
@@ -90,114 +90,16 @@ class ResultWriter:
         self._run_start = datetime.now()
 
     def print_round(self, r: TestResult) -> None:
-        status = "PASS" if r.passed else "FAIL"
-        print(f"\n[Round {r.round_num}/{self._total}] {status}")
-        if r.error:
-            print(f"  ERROR: {r.error}")
-
-        def ts(t):
-            return datetime.fromtimestamp(t).strftime("%H:%M:%S.%f")[:-3] if t else "N/A"
-
-        def diff(t, base, label=""):
-            if t and base:
-                return f"  (+{t - base:.1f}s{' ' + label if label else ''})"
-            return ""
-
-        cam_label = f" [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
-        aud_label = f" [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
-        mic_label = f"  RMS={r.mic_rms:.0f}" if r.mic_rms is not None else ""
-
-        print(f"  Reboot triggered    : {ts(r.reboot_start)}")
-        print(f"  Boot ready          : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
-        print(f"  Camera working      : {ts(r.camera_ready)}{diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
-        if r.camera_frame:
-            print(f"  Frame saved         : {r.camera_frame}")
-        print(f"  Audio card ready    : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
-        print(f"  Speaker working     : {ts(r.speaker_ready)}{diff(r.speaker_ready, r.boot_ready, 'from boot')}")
-        print(f"  Mic working         : {ts(r.mic_ready)}{diff(r.mic_ready, r.boot_ready, 'from boot')}{mic_label}")
-        total = r.total_seconds()
-        print(f"  Total (reboot->mic) : {total:.1f}s" if total else "  Total               : N/A")
+        for line in self._format_round_lines(r):
+            print(line)
 
     def print_summary(self, results: list[TestResult]) -> None:
         passed = [r for r in results if r.passed]
         print(f"\n{'=' * 60}")
         print(f"=== Summary ({len(passed)}/{len(results)} PASS) ===")
-
-        def stats(values):
-            v = [x for x in values if x is not None]
-            if not v:
-                return "N/A"
-            if len(v) == 1:
-                return f"{v[0]:.1f}s"
-            return f"{min(v):.1f}s / {statistics.mean(v):.1f}s / {max(v):.1f}s"
-
-        print(f"  Total time    min/avg/max: {stats([r.total_seconds() for r in passed])}")
-        print(f"  Boot time     min/avg/max: {stats([r.boot_seconds() for r in passed])}")
-        print(f"  Camera ready  min/avg/max: {stats([r.camera_seconds() for r in passed])}")
-        print(f"  Audio card    min/avg/max: {stats([r.audio_seconds() for r in passed])}")
-        print(f"  Speaker ready min/avg/max: {stats([r.speaker_seconds() for r in passed])}")
-        print(f"  Mic ready     min/avg/max: {stats([r.mic_seconds() for r in passed])}")
+        for line in self._format_summary_lines(passed):
+            print(line)
         print(f"{'=' * 60}")
-
-    def _format_lines(self, results: list[TestResult]) -> list[str]:
-        lines = []
-        lines.append("=" * 80)
-        lines.append(
-            f"Test Run: {self._run_start.strftime('%Y-%m-%d %H:%M:%S')} "
-            f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}"
-        )
-        lines.append("=" * 80)
-        lines.append("")
-
-        for r in results:
-            status = "PASS" if r.passed else "FAIL"
-            lines.append(f"[Round {r.round_num}/{self._total}] {status}")
-            if r.error:
-                lines.append(f"  ERROR: {r.error}")
-
-            def ts(t):
-                return datetime.fromtimestamp(t).strftime("%H:%M:%S.%f")[:-3] if t else "N/A"
-
-            def diff(t, base, label=""):
-                if t and base:
-                    return f"  (+{t - base:.1f}s{' ' + label if label else ''})"
-                return ""
-
-            cam_label = f" [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
-            aud_label = f" [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
-            mic_label = f"  RMS={r.mic_rms:.0f}" if r.mic_rms is not None else ""
-
-            lines.append(f"  Reboot triggered    : {ts(r.reboot_start)}")
-            lines.append(f"  Boot ready          : {ts(r.boot_ready)}{diff(r.boot_ready, r.reboot_start)}")
-            lines.append(f"  Camera working      : {ts(r.camera_ready)}{diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
-            if r.camera_frame:
-                lines.append(f"  Frame saved         : {r.camera_frame}")
-            lines.append(f"  Audio card ready    : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
-            lines.append(f"  Speaker working     : {ts(r.speaker_ready)}{diff(r.speaker_ready, r.boot_ready, 'from boot')}")
-            lines.append(f"  Mic working         : {ts(r.mic_ready)}{diff(r.mic_ready, r.boot_ready, 'from boot')}{mic_label}")
-            total = r.total_seconds()
-            lines.append(f"  Total (reboot->mic) : {total:.1f}s" if total else "  Total               : N/A")
-            lines.append("")
-
-        passed = [r for r in results if r.passed]
-
-        def stats(values):
-            v = [x for x in values if x is not None]
-            if not v:
-                return "N/A"
-            if len(v) == 1:
-                return f"{v[0]:.1f}s"
-            return f"{min(v):.1f}s / {statistics.mean(v):.1f}s / {max(v):.1f}s"
-
-        lines.append(f"=== Summary ({len(passed)}/{len(results)} PASS) ===")
-        lines.append(f"  Total time    min/avg/max: {stats([r.total_seconds() for r in passed])}")
-        lines.append(f"  Boot time     min/avg/max: {stats([r.boot_seconds() for r in passed])}")
-        lines.append(f"  Camera ready  min/avg/max: {stats([r.camera_seconds() for r in passed])}")
-        lines.append(f"  Audio card    min/avg/max: {stats([r.audio_seconds() for r in passed])}")
-        lines.append(f"  Speaker ready min/avg/max: {stats([r.speaker_seconds() for r in passed])}")
-        lines.append(f"  Mic ready     min/avg/max: {stats([r.mic_seconds() for r in passed])}")
-        lines.append("")
-        return lines
 
     def save_log(self, results: list[TestResult], output_dir: str) -> None:
         path = Path(output_dir) / (self._run_start.strftime("%Y%m%d") + ".txt")
@@ -207,62 +109,145 @@ class ResultWriter:
             f.write("\n".join(lines) + "\n")
         print(f"\n  Log saved: {path}")
 
+    # ------------------------------------------------------------------
+    # Formatting helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _ts(t: float | None) -> str:
+        return datetime.fromtimestamp(t).strftime("%H:%M:%S.%f")[:-3] if t else "N/A"
+
+    @staticmethod
+    def _diff(t: float | None, base: float | None, label: str = "") -> str:
+        if t and base:
+            return f"  (+{t - base:.1f}s{' ' + label if label else ''})"
+        return ""
+
+    def _format_round_lines(self, r: TestResult) -> list[str]:
+        status = "PASS" if r.passed else "FAIL"
+        lines = [f"\n[Round {r.round_num}/{self._total}] {status}"]
+        if r.error:
+            lines.append(f"  ERROR: {r.error}")
+
+        cam_label = f" [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
+        aud_label = f" [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
+        mic_label = f"  RMS={r.mic_rms:.0f}" if r.mic_rms is not None else ""
+
+        lines.append(f"  Reboot triggered    : {self._ts(r.reboot_start)}")
+        lines.append(f"  Boot ready          : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}")
+        lines.append(f"  Camera working      : {self._ts(r.camera_ready)}{self._diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
+        if r.camera_frame:
+            lines.append(f"  Frame saved         : {r.camera_frame}")
+        lines.append(f"  Audio card ready    : {self._ts(r.audio_ready)}{self._diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
+        lines.append(f"  Speaker working     : {self._ts(r.speaker_ready)}{self._diff(r.speaker_ready, r.boot_ready, 'from boot')}")
+        lines.append(f"  Mic working         : {self._ts(r.mic_ready)}{self._diff(r.mic_ready, r.boot_ready, 'from boot')}{mic_label}")
+        total = r.total_seconds()
+        lines.append(f"  Total (reboot->mic) : {total:.1f}s" if total else "  Total               : N/A")
+        return lines
+
+    def _format_summary_lines(self, passed: list[TestResult]) -> list[str]:
+        def stats(values):
+            v = [x for x in values if x is not None]
+            if not v:
+                return "N/A"
+            if len(v) == 1:
+                return f"{v[0]:.1f}s"
+            return f"{min(v):.1f}s / {statistics.mean(v):.1f}s / {max(v):.1f}s"
+
+        return [
+            f"  Total time    min/avg/max: {stats([r.total_seconds() for r in passed])}",
+            f"  Boot time     min/avg/max: {stats([r.boot_seconds() for r in passed])}",
+            f"  Camera ready  min/avg/max: {stats([r.camera_seconds() for r in passed])}",
+            f"  Audio card    min/avg/max: {stats([r.audio_seconds() for r in passed])}",
+            f"  Speaker ready min/avg/max: {stats([r.speaker_seconds() for r in passed])}",
+            f"  Mic ready     min/avg/max: {stats([r.mic_seconds() for r in passed])}",
+        ]
+
+    def _format_lines(self, results: list[TestResult]) -> list[str]:
+        lines = [
+            "=" * 80,
+            f"Test Run: {self._run_start.strftime('%Y-%m-%d %H:%M:%S')} "
+            f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}",
+            "=" * 80,
+            "",
+        ]
+        for r in results:
+            lines.extend(self._format_round_lines(r))
+            lines.append("")
+
+        passed = [r for r in results if r.passed]
+        lines.append(f"=== Summary ({len(passed)}/{len(results)} PASS) ===")
+        lines.extend(self._format_summary_lines(passed))
+        lines.append("")
+        return lines
+
 
 # ---------------------------------------------------------------------------
-# Test execution
+# PeripheralTestRunner
 # ---------------------------------------------------------------------------
 
-def run_one_round(device: DuvelDevice, round_num: int, total_rounds: int, args) -> TestResult:
-    r = TestResult(round_num=round_num, total_rounds=total_rounds)
-    print(f"\n{'-' * 60}")
-    print(f"Round {round_num}/{total_rounds} - rebooting device...")
+class PeripheralTestRunner:
+    def __init__(self, device: DuvelDevice, args):
+        self._device = device
+        self._args = args
 
-    try:
-        r.reboot_start = time.time()
-        device.reboot()
+    def run(self) -> list[TestResult]:
+        results = []
+        for i in range(1, self._args.iterations + 1):
+            results.append(self.run_round(i, self._args.iterations))
+        return results
 
-        print("  Waiting for boot...")
-        device.wait_for_boot(args.boot_timeout)
-        r.boot_ready = time.time()
-        print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
+    def run_round(self, round_num: int, total_rounds: int) -> TestResult:
+        r = TestResult(round_num=round_num, total_rounds=total_rounds)
+        print(f"\n{'-' * 60}")
+        print(f"Round {round_num}/{total_rounds} - rebooting device...")
 
-        print("  Waiting for camera (streaming test)...")
-        frame_path = str(Path(args.output_dir) / "frames" / f"round{round_num:02d}.jpg")
-        r.camera_device, r.camera_name = device.wait_for_camera_working(args.device_timeout, frame_path)
-        r.camera_ready = time.time()
-        r.camera_frame = frame_path
-        print(f"  Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
-        print(f"  Frame saved     : {frame_path}")
+        try:
+            r.reboot_start = time.time()
+            self._device.reboot()
 
-        print("  Waiting for audio card (/proc/asound/cards check)...")
-        r.audio_card, r.audio_name = device.wait_for_audio_working(args.device_timeout)
-        r.audio_ready = time.time()
-        print(f"  Audio card ready  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
+            print("  Waiting for boot...")
+            self._device.wait_for_boot(self._args.boot_timeout)
+            r.boot_ready = time.time()
+            print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
 
-        print("  Testing speaker (tinyplay 1kHz tone)...")
-        speaker_ok = device.test_speaker(duration=2)
-        r.speaker_ready = time.time()
-        print(f"  Speaker {'OK' if speaker_ok else 'FAIL'}  (+{r.speaker_seconds():.1f}s from boot)")
-        if not speaker_ok:
-            raise RuntimeError("Speaker playback failed (tinyplay returned non-zero)")
+            print("  Waiting for camera (streaming test)...")
+            frame_path = str(Path(self._args.output_dir) / "frames" / f"round{round_num:02d}.jpg")
+            r.camera_device, r.camera_name = self._device.wait_for_camera_working(self._args.device_timeout, frame_path)
+            r.camera_ready = time.time()
+            r.camera_frame = frame_path
+            print(f"  Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
+            print(f"  Frame saved     : {frame_path}")
 
-        print("  Testing mic (tinycap RMS check)...")
-        mic_ok, r.mic_rms = device.test_mic(duration=2)
-        r.mic_ready = time.time()
-        print(f"  Mic {'OK' if mic_ok else 'FAIL'}  RMS={r.mic_rms:.0f}  (+{r.mic_seconds():.1f}s from boot)")
-        if not mic_ok:
-            raise RuntimeError(f"Mic recording too quiet (RMS={r.mic_rms:.0f} below threshold)")
+            print("  Waiting for audio card (/proc/asound/cards check)...")
+            r.audio_card, r.audio_name = self._device.wait_for_audio_working(self._args.device_timeout)
+            r.audio_ready = time.time()
+            print(f"  Audio card ready  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
 
-        r.passed = True
+            print("  Testing speaker (tinyplay 1kHz tone)...")
+            speaker_ok = self._device.test_speaker(duration=2)
+            r.speaker_ready = time.time()
+            print(f"  Speaker {'OK' if speaker_ok else 'FAIL'}  (+{r.speaker_seconds():.1f}s from boot)")
+            if not speaker_ok:
+                raise RuntimeError("Speaker playback failed (tinyplay returned non-zero)")
 
-    except TimeoutError as e:
-        r.error = f"TIMEOUT: {e}"
-        print(f"  [TIMEOUT] {e}")
-    except Exception as e:
-        r.error = str(e)
-        print(f"  [ERROR] {e}")
+            print("  Testing mic (tinycap RMS check)...")
+            mic_ok, r.mic_rms = self._device.test_mic(duration=2)
+            r.mic_ready = time.time()
+            print(f"  Mic {'OK' if mic_ok else 'FAIL'}  RMS={r.mic_rms:.0f}  (+{r.mic_seconds():.1f}s from boot)")
+            if not mic_ok:
+                raise RuntimeError(f"Mic recording too quiet (RMS={r.mic_rms:.0f} below threshold)")
 
-    return r
+            r.passed = True
+
+        except TimeoutError as e:
+            r.error = f"TIMEOUT: {e}"
+            print(f"  [TIMEOUT] {e}")
+        except Exception as e:
+            r.error = str(e)
+            print(f"  [ERROR] {e}")
+
+        return r
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +278,7 @@ def main():
         device = DuvelDevice(serial=args.serial, is_ip=False)
 
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
-    results = []
+    runner = PeripheralTestRunner(device=device, args=args)
 
     print(f"Peripheral Boot Time Test  v{VERSION}")
     print(f"  Device     : {device.label}")
@@ -306,9 +291,10 @@ def main():
         print(f"[ERROR] {e}")
         sys.exit(1)
 
+    results = []
     try:
         for i in range(1, args.iterations + 1):
-            result = run_one_round(device, i, args.iterations, args)
+            result = runner.run_round(i, args.iterations)
             results.append(result)
             writer.print_round(result)
     except KeyboardInterrupt:

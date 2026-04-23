@@ -167,6 +167,10 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 
 ## Changelog
 
+### v1.5.0
+- `test_peripheral.py`: each step in per-round output now shows `PASS` or `FAIL` inline
+- `test_peripheral.py`: summary shows per-step pass count (`N/M PASS`) alongside min/avg/max timing, computed across all rounds (not only passing ones)
+
 ### v1.4.0
 - `common/duvel_device.py`: prefix `tinyplay`/`tinycap` with `su root` — `adb shell` runs as `shell` user which is not in the `audio` group; without root, PCM devices cannot be opened
 - `common/duvel_device.py`: `data/barco_tone_2s.wav` generated once locally (if absent) and pushed to device at `connect()` — `test_speaker()` plays the pre-pushed file with no per-call push or temp files

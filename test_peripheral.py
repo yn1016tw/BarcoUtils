@@ -94,10 +94,10 @@ class ResultWriter:
             print(line)
 
     def print_summary(self, results: list[TestResult]) -> None:
-        passed = [r for r in results if r.passed]
+        passed = sum(r.passed for r in results)
         print(f"\n{'=' * 60}")
-        print(f"=== Summary ({len(passed)}/{len(results)} PASS) ===")
-        for line in self._format_summary_lines(passed):
+        print(f"=== Summary ({passed}/{len(results)} PASS) ===")
+        for line in self._format_summary_lines(results):
             print(line)
         print(f"{'=' * 60}")
 
@@ -129,23 +129,28 @@ class ResultWriter:
         if r.error:
             lines.append(f"  ERROR: {r.error}")
 
-        cam_label = f" [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
-        aud_label = f" [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
+        cam_label = f"  [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
+        aud_label = f"  [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
         mic_label = f"  RMS={r.mic_rms:.0f}" if r.mic_rms is not None else ""
 
+        def tag(t: float | None) -> str:
+            return "  PASS" if t is not None else "  FAIL"
+
         lines.append(f"  Reboot triggered    : {self._ts(r.reboot_start)}")
-        lines.append(f"  Boot ready          : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}")
-        lines.append(f"  Camera working      : {self._ts(r.camera_ready)}{self._diff(r.camera_ready, r.boot_ready, 'from boot')}{cam_label}")
+        lines.append(f"  Boot ready          : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}{tag(r.boot_ready)}")
+        lines.append(f"  Camera working      : {self._ts(r.camera_ready)}{self._diff(r.camera_ready, r.boot_ready, 'from boot')}{tag(r.camera_ready)}{cam_label}")
         if r.camera_frame:
             lines.append(f"  Frame saved         : {r.camera_frame}")
-        lines.append(f"  Audio card ready    : {self._ts(r.audio_ready)}{self._diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
-        lines.append(f"  Speaker working     : {self._ts(r.speaker_ready)}{self._diff(r.speaker_ready, r.boot_ready, 'from boot')}")
-        lines.append(f"  Mic working         : {self._ts(r.mic_ready)}{self._diff(r.mic_ready, r.boot_ready, 'from boot')}{mic_label}")
+        lines.append(f"  Audio card ready    : {self._ts(r.audio_ready)}{self._diff(r.audio_ready, r.boot_ready, 'from boot')}{tag(r.audio_ready)}{aud_label}")
+        lines.append(f"  Speaker working     : {self._ts(r.speaker_ready)}{self._diff(r.speaker_ready, r.boot_ready, 'from boot')}{tag(r.speaker_ready)}")
+        lines.append(f"  Mic working         : {self._ts(r.mic_ready)}{self._diff(r.mic_ready, r.boot_ready, 'from boot')}{tag(r.mic_ready)}{mic_label}")
         total = r.total_seconds()
         lines.append(f"  Total (reboot->mic) : {total:.1f}s" if total else "  Total               : N/A")
         return lines
 
-    def _format_summary_lines(self, passed: list[TestResult]) -> list[str]:
+    def _format_summary_lines(self, results: list[TestResult]) -> list[str]:
+        n = len(results)
+
         def stats(values):
             v = [x for x in values if x is not None]
             if not v:
@@ -154,13 +159,16 @@ class ResultWriter:
                 return f"{v[0]:.1f}s"
             return f"{min(v):.1f}s / {statistics.mean(v):.1f}s / {max(v):.1f}s"
 
+        def line(label, times, cnt):
+            return f"  {label}: {stats(times)}  ({cnt}/{n} PASS)"
+
         return [
-            f"  Total time    min/avg/max: {stats([r.total_seconds() for r in passed])}",
-            f"  Boot time     min/avg/max: {stats([r.boot_seconds() for r in passed])}",
-            f"  Camera ready  min/avg/max: {stats([r.camera_seconds() for r in passed])}",
-            f"  Audio card    min/avg/max: {stats([r.audio_seconds() for r in passed])}",
-            f"  Speaker ready min/avg/max: {stats([r.speaker_seconds() for r in passed])}",
-            f"  Mic ready     min/avg/max: {stats([r.mic_seconds() for r in passed])}",
+            line("Total time    min/avg/max", [r.total_seconds() for r in results], sum(r.passed for r in results)),
+            line("Boot time     min/avg/max", [r.boot_seconds() for r in results],   sum(r.boot_ready     is not None for r in results)),
+            line("Camera ready  min/avg/max", [r.camera_seconds() for r in results], sum(r.camera_ready   is not None for r in results)),
+            line("Audio card    min/avg/max", [r.audio_seconds() for r in results],  sum(r.audio_ready    is not None for r in results)),
+            line("Speaker ready min/avg/max", [r.speaker_seconds() for r in results],sum(r.speaker_ready  is not None for r in results)),
+            line("Mic ready     min/avg/max", [r.mic_seconds() for r in results],    sum(r.mic_ready      is not None for r in results)),
         ]
 
     def _format_lines(self, results: list[TestResult]) -> list[str]:
@@ -175,9 +183,9 @@ class ResultWriter:
             lines.extend(self._format_round_lines(r))
             lines.append("")
 
-        passed = [r for r in results if r.passed]
-        lines.append(f"=== Summary ({len(passed)}/{len(results)} PASS) ===")
-        lines.extend(self._format_summary_lines(passed))
+        passed = sum(r.passed for r in results)
+        lines.append(f"=== Summary ({passed}/{len(results)} PASS) ===")
+        lines.extend(self._format_summary_lines(results))
         lines.append("")
         return lines
 
@@ -280,7 +288,7 @@ def main():
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
     runner = PeripheralTestRunner(device=device, args=args)
 
-    print(f"Peripheral Boot Time Test  v{VERSION}")
+    print(f"Peripheral Test  v{VERSION}")
     print(f"  Device     : {device.label}")
     print(f"  Iterations : {args.iterations}")
     print(f"  Output dir : {args.output_dir}")

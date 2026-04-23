@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/select.h>
@@ -25,6 +26,7 @@
 #include <unistd.h>
 
 #define TIMEOUT_SEC 5
+#define WARMUP_SEC  5   /* stream for this many seconds before saving — lets AF/AE settle */
 
 static int xioctl(int fd, unsigned long req, void *arg)
 {
@@ -115,7 +117,26 @@ int main(int argc, char *argv[])
         close(fd); return 2;
     }
 
-    /* wait for first frame */
+    /* warm-up: drain frames for WARMUP_SEC so AF/AE can settle */
+    printf("warmup : streaming for %ds (AF/AE settling)...\n", WARMUP_SEC);
+    {
+        time_t end = time(NULL) + WARMUP_SEC;
+        while (time(NULL) < end) {
+            fd_set wfds;
+            struct timeval wtv = { .tv_sec = 1, .tv_usec = 0 };
+            FD_ZERO(&wfds);
+            FD_SET(fd, &wfds);
+            if (select(fd + 1, &wfds, NULL, NULL, &wtv) <= 0)
+                continue;
+            struct v4l2_buffer wb = {0};
+            wb.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            wb.memory = V4L2_MEMORY_MMAP;
+            if (xioctl(fd, VIDIOC_DQBUF, &wb) == 0)
+                xioctl(fd, VIDIOC_QBUF, &wb);
+        }
+    }
+
+    /* capture final frame after warm-up */
     fd_set fds;
     struct timeval tv = { .tv_sec = TIMEOUT_SEC, .tv_usec = 0 };
     FD_ZERO(&fds);
@@ -130,7 +151,7 @@ int main(int argc, char *argv[])
         close(fd); return 1;
     }
 
-    /* dequeue to confirm frame arrived */
+    /* dequeue final frame */
     memset(&buf, 0, sizeof(buf));
     buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     buf.memory = V4L2_MEMORY_MMAP;
@@ -138,7 +159,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "VIDIOC_DQBUF: %s\n", strerror(errno));
         close(fd); return 2;
     }
-    printf("frame  : %u bytes — streaming OK\n", buf.bytesused);
+    printf("frame  : %u bytes - streaming OK\n", buf.bytesused);
 
     /* write frame to file if requested */
     if (outfile) {

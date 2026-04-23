@@ -49,7 +49,10 @@ class DuvelDevice:
 
     def connect(self) -> None:
         if self._is_ip:
-            result = self._adb_raw(["connect", self._serial], timeout=10)
+            result = subprocess.run(
+                ["adb", "connect", self._serial],
+                capture_output=True, text=True, timeout=15,
+            )
             out = result.stdout.strip()
             if "connected" not in out.lower() and "already" not in out.lower():
                 raise ConnectionError(f"adb connect failed: {out}")
@@ -74,10 +77,14 @@ class DuvelDevice:
 
     def disconnect(self) -> None:
         if self._is_ip:
-            self._adb_raw(["disconnect", self._serial], timeout=5)
+            subprocess.run(["adb", "disconnect", self._serial], capture_output=True, timeout=5)
 
     def reboot(self) -> None:
-        self._adb(["reboot"], timeout=10)
+        # adb reboot drops the connection as the device shuts down — ignore timeout/errors
+        try:
+            self._adb_raw(["reboot"], timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
         deadline = time.time() + 30
         while time.time() < deadline:
             result = self._adb_raw(["get-state"], timeout=3)
@@ -201,7 +208,7 @@ class DuvelDevice:
             run_cmd = f"{_STREAM_TEST_BIN_REMOTE} {dev}"
             if frame_save_path:
                 run_cmd += f" {remote_frame}"
-            r = self._adb_raw(["shell", run_cmd], timeout=15)
+            r = self._adb_raw(["shell", run_cmd], timeout=25)
             if r.returncode == 0:
                 if frame_save_path:
                     self._pull_frame(remote_frame, frame_save_path, r.stdout)

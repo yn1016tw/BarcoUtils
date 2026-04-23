@@ -99,7 +99,7 @@ class ResultWriter:
             print(f"  Frame saved         : {r.camera_frame}")
         print(f"  Audio working       : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
         total = r.total_seconds()
-        print(f"  Total (reboot→audio): {total:.1f}s" if total else "  Total               : N/A")
+        print(f"  Total (reboot->audio): {total:.1f}s" if total else "  Total               : N/A")
 
     def print_summary(self, results: list[TestResult]) -> None:
         passed = [r for r in results if r.passed]
@@ -154,7 +154,7 @@ class ResultWriter:
                 lines.append(f"  Frame saved         : {r.camera_frame}")
             lines.append(f"  Audio working       : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
             total = r.total_seconds()
-            lines.append(f"  Total (reboot→audio): {total:.1f}s" if total else "  Total               : N/A")
+            lines.append(f"  Total (reboot->audio): {total:.1f}s" if total else "  Total               : N/A")
             lines.append("")
 
         passed = [r for r in results if r.passed]
@@ -190,8 +190,8 @@ class ResultWriter:
 
 def run_one_round(device: DuvelDevice, round_num: int, total_rounds: int, args) -> TestResult:
     r = TestResult(round_num=round_num, total_rounds=total_rounds)
-    print(f"\n{'─' * 60}")
-    print(f"Round {round_num}/{total_rounds} — rebooting device...")
+    print(f"\n{'-' * 60}")
+    print(f"Round {round_num}/{total_rounds} - rebooting device...")
 
     try:
         r.reboot_start = time.time()

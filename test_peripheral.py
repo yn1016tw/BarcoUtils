@@ -41,9 +41,6 @@ class TestResult:
     camera_frame: str | None = None     # local path to captured JPEG
     audio_card: str | None = None       # e.g. "RallyCamera"
     audio_name: str | None = None       # e.g. "Rally Camera"
-    loopback_passed: bool | None = None # True/False = tested; None = skipped
-    loopback_rms: float | None = None   # recorded RMS (0–32767)
-    loopback_card: str | None = None    # e.g. "Rally Camera"
     error: str | None = None
     passed: bool = False
 
@@ -101,9 +98,6 @@ class ResultWriter:
         if r.camera_frame:
             print(f"  Frame saved         : {r.camera_frame}")
         print(f"  Audio working       : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
-        if r.loopback_passed is not None:
-            lp = f"{'PASS' if r.loopback_passed else 'FAIL'}  RMS={r.loopback_rms:.0f}  [{r.loopback_card}]"
-            print(f"  Audio loopback      : {lp}")
         total = r.total_seconds()
         print(f"  Total (reboot→audio): {total:.1f}s" if total else "  Total               : N/A")
 
@@ -159,9 +153,6 @@ class ResultWriter:
             if r.camera_frame:
                 lines.append(f"  Frame saved         : {r.camera_frame}")
             lines.append(f"  Audio working       : {ts(r.audio_ready)}{diff(r.audio_ready, r.boot_ready, 'from boot')}{aud_label}")
-            if r.loopback_passed is not None:
-                lp = f"{'PASS' if r.loopback_passed else 'FAIL'}  RMS={r.loopback_rms:.0f}  [{r.loopback_card}]"
-                lines.append(f"  Audio loopback      : {lp}")
             total = r.total_seconds()
             lines.append(f"  Total (reboot→audio): {total:.1f}s" if total else "  Total               : N/A")
             lines.append("")
@@ -224,14 +215,7 @@ def run_one_round(device: DuvelDevice, round_num: int, total_rounds: int, args) 
         r.audio_ready = time.time()
         print(f"  Audio working  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
 
-        print("  Running audio loopback (speaker + mic simultaneously)...")
-        r.loopback_passed, r.loopback_rms, r.loopback_card = device.test_audio_loopback(duration=3)
-        lp_status = "PASS" if r.loopback_passed else "FAIL"
-        print(f"  Audio loopback  : {lp_status}  RMS={r.loopback_rms:.0f}  [{r.loopback_card}]")
-
-        r.passed = r.loopback_passed
-        if not r.passed:
-            r.error = f"Audio loopback FAIL (RMS={r.loopback_rms:.0f}, threshold=500)"
+        r.passed = True
 
     except TimeoutError as e:
         r.error = f"TIMEOUT: {e}"

@@ -1,6 +1,6 @@
 """
-Peripheral Boot Time Test for Duvel
-Measures time from reboot to Camera, Mic, and Speaker ready.
+Peripheral Test for Duvel
+Measures time and features from reboot to Camera, Mic, and Speaker ready.
 Supports USB serial or IP connection. Supports stress testing.
 
 Camera check : v4l2_stream_test (STREAMON + 5s warm-up + DQBUF)
@@ -159,16 +159,16 @@ class ResultWriter:
                 return f"{v[0]:.1f}s"
             return f"{min(v):.1f}s / {statistics.mean(v):.1f}s / {max(v):.1f}s"
 
-        def line(label, times, cnt):
-            return f"  {label}: {stats(times)}  ({cnt}/{n} PASS)"
+        def line(label, times):
+            return f"  {label}: {stats(times)}"
 
         return [
-            line("Total time    min/avg/max", [r.total_seconds() for r in results], sum(r.passed for r in results)),
-            line("Boot time     min/avg/max", [r.boot_seconds() for r in results],   sum(r.boot_ready     is not None for r in results)),
-            line("Camera ready  min/avg/max", [r.camera_seconds() for r in results], sum(r.camera_ready   is not None for r in results)),
-            line("Audio card    min/avg/max", [r.audio_seconds() for r in results],  sum(r.audio_ready    is not None for r in results)),
-            line("Speaker ready min/avg/max", [r.speaker_seconds() for r in results],sum(r.speaker_ready  is not None for r in results)),
-            line("Mic ready     min/avg/max", [r.mic_seconds() for r in results],    sum(r.mic_ready      is not None for r in results)),
+            line("Total time    min/avg/max", [r.total_seconds() for r in results]),
+            line("Boot time     min/avg/max", [r.boot_seconds() for r in results]),
+            line("Camera ready  min/avg/max", [r.camera_seconds() for r in results]),
+            line("Audio card    min/avg/max", [r.audio_seconds() for r in results]),
+            line("Speaker ready min/avg/max", [r.speaker_seconds() for r in results]),
+            line("Mic ready     min/avg/max", [r.mic_seconds() for r in results]),
         ]
 
     def _format_lines(self, results: list[TestResult]) -> list[str]:
@@ -270,7 +270,7 @@ def parse_args():
     group.add_argument("--serial", metavar="SERIAL", help="USB ADB serial number")
     group.add_argument("--ip", metavar="IP[:PORT]", help="ADB over TCP/IP (default port 5555)")
     parser.add_argument("--iterations", type=int, default=1, metavar="N", help="Number of test rounds (default: 1)")
-    parser.add_argument("--output-dir", default=".", metavar="DIR", help="Log output directory (default: current dir)")
+    parser.add_argument("--output-dir", default="logs", metavar="DIR", help="Log output directory (default: logs)")
     parser.add_argument("--boot-timeout", type=int, default=300, metavar="SEC", help="Max seconds to wait for boot (default: 300)")
     parser.add_argument("--device-timeout", type=int, default=120, metavar="SEC", help="Max seconds to wait for camera/audio (default: 120)")
     return parser.parse_args()
@@ -293,6 +293,9 @@ def main():
     print(f"  Iterations : {args.iterations}")
     print(f"  Output dir : {args.output_dir}")
 
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    (Path(args.output_dir) / "frames").mkdir(parents=True, exist_ok=True)
+
     try:
         device.connect()
     except ConnectionError as e:
@@ -310,7 +313,6 @@ def main():
     finally:
         if results:
             writer.print_summary(results)
-            Path(args.output_dir).mkdir(parents=True, exist_ok=True)
             writer.save_log(results, args.output_dir)
         device.disconnect()
 

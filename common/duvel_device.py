@@ -187,6 +187,10 @@ class DuvelDevice:
     # Camera helpers
     # ------------------------------------------------------------------
 
+    def clear_camera_tmp(self) -> None:
+        """Remove stale remote frame file before a camera test."""
+        self._adb_raw(["shell", f"rm -f /data/local/tmp/v4l2_frame_tmp"], timeout=5)
+
     def _push_stream_test_bin(self) -> None:
         self._push_file(_STREAM_TEST_BIN_LOCAL, _STREAM_TEST_BIN_REMOTE)
         self._adb_raw(["shell", f"chmod +x {_STREAM_TEST_BIN_REMOTE}"], timeout=5)

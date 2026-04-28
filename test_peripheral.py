@@ -227,6 +227,8 @@ class PeripheralTestRunner:
             if "camera" in tests:
                 print("  Waiting for camera (streaming test)...")
                 frame_path = str(Path(self._args.output_dir) / "frames" / f"round{round_num:02d}.jpg")
+                self._device.clear_camera_tmp()
+                Path(frame_path).unlink(missing_ok=True)
                 r.camera_device, r.camera_name = self._device.wait_for_camera_working(self._args.device_timeout, frame_path)
                 r.camera_ready = time.time()
                 r.camera_frame = frame_path

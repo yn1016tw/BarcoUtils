@@ -39,6 +39,7 @@ class TestResult:
     speaker_ready: float | None = None  # tinyplay succeeded
     mic_ready: float | None = None      # tinycap RMS > threshold
     mic_rms: float | None = None        # recorded RMS value
+    fw_version: str | None = None        # ro.barco.build.version
     camera_device: str | None = None    # e.g. /dev/video7
     camera_name: str | None = None      # e.g. "Rally Camera"
     camera_frame: str | None = None     # local path to captured JPEG
@@ -137,7 +138,8 @@ class ResultWriter:
             return "  PASS" if t is not None else "  FAIL"
 
         lines.append(f"  Reboot triggered    : {self._ts(r.reboot_start)}")
-        lines.append(f"  Boot ready          : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}{tag(r.boot_ready)}")
+        fw = f"  FW={r.fw_version}" if r.fw_version else ""
+        lines.append(f"  Boot ready          : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}{tag(r.boot_ready)}{fw}")
         lines.append(f"  Camera working      : {self._ts(r.camera_ready)}{self._diff(r.camera_ready, r.boot_ready, 'from boot')}{tag(r.camera_ready)}{cam_label}")
         if r.camera_frame:
             lines.append(f"  Frame saved         : {r.camera_frame}")
@@ -175,7 +177,8 @@ class ResultWriter:
         lines = [
             "=" * 80,
             f"Test Run: {self._run_start.strftime('%Y-%m-%d %H:%M:%S')} "
-            f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}",
+            f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}"
+            + (f" | FW: {results[0].fw_version}" if results and results[0].fw_version else ""),
             "=" * 80,
             "",
         ]
@@ -217,34 +220,41 @@ class PeripheralTestRunner:
             print("  Waiting for boot...")
             self._device.wait_for_boot(self._args.boot_timeout)
             r.boot_ready = time.time()
-            print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
+            r.fw_version = self._device.fw_version()
+            print(f"  Boot ready  (+{r.boot_seconds():.1f}s)  FW={r.fw_version}")
 
-            print("  Waiting for camera (streaming test)...")
-            frame_path = str(Path(self._args.output_dir) / "frames" / f"round{round_num:02d}.jpg")
-            r.camera_device, r.camera_name = self._device.wait_for_camera_working(self._args.device_timeout, frame_path)
-            r.camera_ready = time.time()
-            r.camera_frame = frame_path
-            print(f"  Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
-            print(f"  Frame saved     : {frame_path}")
+            tests = set(self._args.tests)
 
-            print("  Waiting for audio card (/proc/asound/cards check)...")
-            r.audio_card, r.audio_name = self._device.wait_for_audio_working(self._args.device_timeout)
-            r.audio_ready = time.time()
-            print(f"  Audio card ready  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
+            if "camera" in tests:
+                print("  Waiting for camera (streaming test)...")
+                frame_path = str(Path(self._args.output_dir) / "frames" / f"round{round_num:02d}.jpg")
+                r.camera_device, r.camera_name = self._device.wait_for_camera_working(self._args.device_timeout, frame_path)
+                r.camera_ready = time.time()
+                r.camera_frame = frame_path
+                print(f"  Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
+                print(f"  Frame saved     : {frame_path}")
 
-            print("  Testing speaker (tinyplay 1kHz tone)...")
-            speaker_ok = self._device.test_speaker(duration=2)
-            r.speaker_ready = time.time()
-            print(f"  Speaker {'OK' if speaker_ok else 'FAIL'}  (+{r.speaker_seconds():.1f}s from boot)")
-            if not speaker_ok:
-                raise RuntimeError("Speaker playback failed (tinyplay returned non-zero)")
+            if tests & {"speaker", "mic"}:
+                print("  Waiting for audio card (/proc/asound/cards check)...")
+                r.audio_card, r.audio_name = self._device.wait_for_audio_working(self._args.device_timeout)
+                r.audio_ready = time.time()
+                print(f"  Audio card ready  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
 
-            print("  Testing mic (tinycap RMS check)...")
-            mic_ok, r.mic_rms = self._device.test_mic(duration=2)
-            r.mic_ready = time.time()
-            print(f"  Mic {'OK' if mic_ok else 'FAIL'}  RMS={r.mic_rms:.0f}  (+{r.mic_seconds():.1f}s from boot)")
-            if not mic_ok:
-                raise RuntimeError(f"Mic recording too quiet (RMS={r.mic_rms:.0f} below threshold)")
+            if "speaker" in tests:
+                print("  Testing speaker (tinyplay 1kHz tone)...")
+                speaker_ok = self._device.test_speaker(duration=2)
+                r.speaker_ready = time.time()
+                print(f"  Speaker {'OK' if speaker_ok else 'FAIL'}  (+{r.speaker_seconds():.1f}s from boot)")
+                if not speaker_ok:
+                    raise RuntimeError("Speaker playback failed (tinyplay returned non-zero)")
+
+            if "mic" in tests:
+                print("  Testing mic (tinycap RMS check)...")
+                mic_ok, r.mic_rms = self._device.test_mic(duration=2)
+                r.mic_ready = time.time()
+                print(f"  Mic {'OK' if mic_ok else 'FAIL'}  RMS={r.mic_rms:.0f}  (+{r.mic_seconds():.1f}s from boot)")
+                if not mic_ok:
+                    raise RuntimeError(f"Mic recording too quiet (RMS={r.mic_rms:.0f} below threshold)")
 
             r.passed = True
 
@@ -270,6 +280,9 @@ def parse_args():
     group.add_argument("--serial", metavar="SERIAL", help="USB ADB serial number")
     group.add_argument("--ip", metavar="IP[:PORT]", help="ADB over TCP/IP (default port 5555)")
     parser.add_argument("--iterations", type=int, default=1, metavar="N", help="Number of test rounds (default: 1)")
+    parser.add_argument("--tests", nargs="+", choices=["camera", "speaker", "mic"],
+                        default=["camera", "speaker", "mic"], metavar="TEST",
+                        help="Tests to run: camera speaker mic (default: all)")
     parser.add_argument("--output-dir", default="logs", metavar="DIR", help="Log output directory (default: logs)")
     parser.add_argument("--boot-timeout", type=int, default=300, metavar="SEC", help="Max seconds to wait for boot (default: 300)")
     parser.add_argument("--device-timeout", type=int, default=120, metavar="SEC", help="Max seconds to wait for camera/audio (default: 120)")
@@ -288,11 +301,6 @@ def main():
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
     runner = PeripheralTestRunner(device=device, args=args)
 
-    print(f"Peripheral Test  v{VERSION}")
-    print(f"  Device     : {device.label}")
-    print(f"  Iterations : {args.iterations}")
-    print(f"  Output dir : {args.output_dir}")
-
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     (Path(args.output_dir) / "frames").mkdir(parents=True, exist_ok=True)
 
@@ -301,6 +309,13 @@ def main():
     except ConnectionError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
+
+    print(f"Peripheral Test  v{VERSION}")
+    print(f"  Device     : {device.label}")
+    print(f"  FW         : {device.fw_version()}")
+    print(f"  Iterations : {args.iterations}")
+    print(f"  Tests      : {' '.join(args.tests)}")
+    print(f"  Output dir : {args.output_dir}")
 
     results = []
     try:

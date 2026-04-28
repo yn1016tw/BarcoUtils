@@ -331,6 +331,12 @@ class DuvelDevice:
             time.sleep(_POLL_INTERVAL)
         raise TimeoutError(timeout_msg)
 
+    def fw_version(self) -> str:
+        """Return ro.barco.build.version, or 'unknown' if not set."""
+        result = self._adb_raw(["shell", "getprop", "ro.barco.build.version"], timeout=5)
+        v = result.stdout.strip()
+        return v if v else "unknown"
+
     def _getprop(self, prop: str) -> str:
         result = self._adb(["shell", "getprop", prop], timeout=5)
         return result.stdout.strip()

@@ -10,13 +10,14 @@ No dependency on TEnTo or the Wave4 BSP — only `adb` in PATH and Python 3.10+.
 ```
 BarcoUtils/
 ├── common/
-│   └── duvel_device.py     # DuvelDevice — ADB wrapper (reusable)
+│   ├── duvel_device.py     # DuvelDevice — ADB wrapper (reusable)
+│   └── version.py          # VERSION string
 ├── data/
 │   └── barco_tone_2s.wav   # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
 ├── tools/
 │   ├── v4l2_stream_test.c  # Minimal V4L2 streaming test (source)
 │   └── v4l2_stream_test    # Precompiled static ARM64 binary (Android 26+)
-└── test_peripheral.py      # Peripheral boot-time measurement script
+└── test_peripheral.py      # Peripheral test script
 ```
 
 ---
@@ -24,7 +25,7 @@ BarcoUtils/
 ## test_peripheral.py
 
 Measures how long after reboot it takes for the camera (UVC), microphone, and speaker to become ready.  
-Supports stress testing (configurable iterations) and logs results to a dated file.
+Supports stress testing (configurable iterations), selective test execution, and logs results to a dated file.
 
 ### What it tests
 
@@ -32,7 +33,9 @@ Supports stress testing (configurable iterations) and logs results to a dated fi
 |------|--------|----------------|
 | Boot complete | `getprop sys.boot_completed` + `init.svc.bootanim` + `pm list packages` | All three pass |
 | Camera streaming | sysfs `uvcvideo` driver check → `v4l2_stream_test` STREAMON + DQBUF | Frame delivered within 5 s |
-| Audio (mic/speaker) | `/proc/asound/cards` — prefers USB-Audio card over internal SOC | Card enumerated by kernel |
+| Audio card | `/proc/asound/cards` — prefers USB-Audio card over internal SOC | Card enumerated by kernel |
+| Speaker | `tinyplay` with pre-pushed 1 kHz tone WAV | Exit 0 |
+| Mic | `tinycap` RMS measurement | RMS > 100 (ambient noise) |
 
 A captured JPEG frame is saved locally for every camera check.
 
@@ -45,6 +48,12 @@ python test_peripheral.py --serial 1882000501 --iterations 5
 # ADB over TCP/IP
 python test_peripheral.py --ip 192.168.1.100 --iterations 3
 
+# Camera only
+python test_peripheral.py --ip 192.168.1.100 --tests camera
+
+# Speaker and mic only
+python test_peripheral.py --ip 192.168.1.100 --tests speaker mic
+
 # Custom output directory
 python test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
 ```
@@ -56,44 +65,65 @@ python test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:
 | `--serial SERIAL` | — | USB ADB serial number (mutually exclusive with `--ip`) |
 | `--ip IP[:PORT]` | — | ADB over TCP/IP (default port 5555) |
 | `--iterations N` | 1 | Number of test rounds |
-| `--output-dir DIR` | `.` | Directory for log file and captured frames |
+| `--tests TEST ...` | all | Tests to run: `camera` `speaker` `mic` |
+| `--output-dir DIR` | `logs` | Directory for log file and captured frames |
 | `--boot-timeout SEC` | 300 | Max seconds to wait for boot |
 | `--device-timeout SEC` | 120 | Max seconds to wait for camera / audio |
 
 ### Output
 
+Console header:
+```
+Peripheral Test  v1.8.0
+  Device     : 10.102.94.110:5555
+  FW         : 04.03.00.master-1649
+  Iterations : 3
+  Tests      : camera speaker mic
+  Output dir : logs
+  [ADB] Connected to 10.102.94.110:5555
+  [ADB] v4l2_stream_test -> /data/local/tmp/v4l2_stream_test
+  [ADB] barco_tone_2s.wav -> /data/local/tmp/barco_tone_2s.wav
+```
+
 Console (per round):
 ```
 [Round 1/3] PASS
   Reboot triggered    : 14:30:00.123
-  Boot ready          : 14:30:44.901  (+44.8s)
-  Camera working      : 14:31:05.210  (+20.3s from boot) [/dev/video0  Rally Camera]
-  Frame saved         : ./frames/round01.jpg
-  Audio working       : 14:31:06.400  (+21.5s from boot) [RallyCamera  Rally Camera]
-  Total (reboot→audio): 66.3s
-
-=== Summary (3/3 PASS) ===
-  Total time    min/avg/max: 64.1s / 66.3s / 68.7s
-  Boot time     min/avg/max: 43.2s / 44.8s / 46.1s
-  Camera ready  min/avg/max: 19.5s / 20.3s / 21.0s
-  Audio ready   min/avg/max: 20.8s / 21.5s / 22.3s
+  Boot ready          : 14:30:44.901  (+44.8s)  PASS
+  Camera working      : 14:31:05.210  (+20.3s from boot)  PASS  [/dev/video0  Rally Camera]
+  Frame saved         : logs/frames/round01.jpg
+  Audio card ready    : 14:31:06.400  (+21.5s from boot)  PASS  [RallyCamera  Rally Camera]
+  Speaker working     : 14:31:08.612  (+23.7s from boot)  PASS
+  Mic working         : 14:31:11.003  (+26.1s from boot)  PASS  RMS=412
+  Total (reboot->mic) : 70.9s
 ```
 
-Log file: `<output-dir>/YYYYMMDD.txt` (appended on each run)  
-Frames: `<output-dir>/frames/round01.jpg`, `round02.jpg`, …
+Summary:
+```
+=== Summary (3/3 PASS) ===
+  Total time    min/avg/max: 68.1s / 70.9s / 73.4s
+  Boot time     min/avg/max: 43.2s / 44.8s / 46.1s
+  Camera ready  min/avg/max: 19.5s / 20.3s / 21.0s
+  Audio card    min/avg/max: 20.8s / 21.5s / 22.3s
+  Speaker ready min/avg/max: 22.1s / 23.7s / 25.0s
+  Mic ready     min/avg/max: 24.9s / 26.1s / 27.5s
+```
+
+Log file: `logs/YYYYMMDD.txt` (appended on each run)  
+Frames: `logs/frames/round01.jpg`, `round02.jpg`, …
 
 ---
 
 ## common/duvel_device.py
 
-Reusable `DuvelDevice` class.  
-All ADB interaction lives here — import it in other test scripts as needed.
+Reusable `DuvelDevice` class. All ADB interaction lives here — import it in other scripts as needed.
 
 ```python
 from common.duvel_device import DuvelDevice
 
 device = DuvelDevice(serial="192.168.1.100:5555", is_ip=True)
 device.connect()                                    # adb connect + push test binary + push tone WAV
+device.fw_version()                                 # ro.barco.build.version
 device.reboot()
 device.wait_for_boot(timeout=300)
 dev, name = device.wait_for_camera_working(120, frame_save_path="frame.jpg")
@@ -167,45 +197,41 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 
 ## Changelog
 
+### v1.8.0
+- `test_peripheral.py`: FW version (`ro.barco.build.version`) shown in startup header
+- `test_peripheral.py`: ADB connection logs moved to after the header block
+- `test_peripheral.py`: default `--output-dir` changed from `.` to `logs`; `logs/` and `logs/frames/` created at startup
+
+### v1.7.0
+- `test_peripheral.py`: add `--tests` argument to selectively run `camera`, `speaker`, `mic` (default: all)
+- `common/duvel_device.py`: add `fw_version()` — reads `ro.barco.build.version` via `getprop`
+
+### v1.6.0
+- Remove `common/usb_switcher.py` (AcronameHubSwitcher) and `test_usb_switcher.py`
+- `test_peripheral.py`: remove per-metric pass/fail counts from summary output
+
 ### v1.5.0
 - `test_peripheral.py`: each step in per-round output now shows `PASS` or `FAIL` inline
-- `test_peripheral.py`: summary shows per-step pass count (`N/M PASS`) alongside min/avg/max timing, computed across all rounds (not only passing ones)
 
 ### v1.4.0
-- `common/duvel_device.py`: prefix `tinyplay`/`tinycap` with `su root` — `adb shell` runs as `shell` user which is not in the `audio` group; without root, PCM devices cannot be opened
-- `common/duvel_device.py`: `data/barco_tone_2s.wav` generated once locally (if absent) and pushed to device at `connect()` — `test_speaker()` plays the pre-pushed file with no per-call push or temp files
-- `common/duvel_device.py`: remove `test_audio_loopback()`
+- `common/duvel_device.py`: prefix `tinyplay`/`tinycap` with `su root`
+- `common/duvel_device.py`: `data/barco_tone_2s.wav` generated once locally and pushed at `connect()`
 
 ### v1.3.0
-OOP refactoring — no behaviour change, public API unchanged.
-- `duvel_device`: `_generate_tone_wav()` moved from module-level to `@staticmethod` inside `DuvelDevice`
-- `duvel_device`: `_compute_rms()` extracted as `@staticmethod` — eliminates duplicate RMS logic in `test_mic` and `test_audio_loopback`
-- `duvel_device`: `_push_file()` / `_pull_file()` added — consolidates repeated `adb push/pull` + error-check pattern
-- `duvel_device`: `_find_working_audio()` simplified to delegate to `_get_usb_audio_card()` — eliminates duplicated `/proc/asound/cards` parsing
-- `test_peripheral`: `ts()` / `diff()` extracted as `@staticmethod` on `ResultWriter`
-- `test_peripheral`: `_format_round_lines()` / `_format_summary_lines()` — single formatting path used by both console and log file
-- `test_peripheral`: `run_one_round()` encapsulated into `PeripheralTestRunner` class
+- OOP refactoring — no behaviour change, public API unchanged
 
 ### v1.2.0
-- `common/duvel_device.py`: add `test_speaker(duration)` — plays 1kHz tone via `tinyplay`, returns True if exit 0
-- `common/duvel_device.py`: add `test_mic(duration, rms_threshold)` — records via `tinycap`, returns `(passed, rms)`; default threshold 100 (ambient noise sufficient)
-- `test_peripheral.py`: add Speaker and Mic functional test steps after audio card enumeration, each with independent timing; `passed` requires all steps including speaker and mic
+- `common/duvel_device.py`: add `test_speaker(duration)` and `test_mic(duration, rms_threshold)`
+- `test_peripheral.py`: speaker and mic steps with independent timing
 
 ### v1.1.1
-- `common/duvel_device.py`: fix `connect()`/`disconnect()` — remove erroneous `-s` prefix from `adb connect/disconnect` (device not yet connected when these run)
-- `common/duvel_device.py`: fix `reboot()` — ignore `TimeoutExpired` from `adb reboot` (device drops connection during shutdown, not an error)
-- `common/duvel_device.py`: increase streaming test ADB timeout to 25 s to accommodate warm-up period
-- `tools/v4l2_stream_test.c`: add 5 s AF/AE/AWB warm-up before saving frame — stream is kept running for 5 s (dequeue+requeue loop) so auto-focus and auto-exposure settle before the final frame is captured
-- `test_peripheral.py`: replace non-ASCII box-drawing characters (`─`, `→`, `—`) with ASCII equivalents for Windows cp1252 compatibility
+- Bug fixes: `connect()`/`disconnect()`, `reboot()` timeout handling, streaming test ADB timeout
+- `tools/v4l2_stream_test.c`: 5 s AF/AE/AWB warm-up before saving frame
 
 ### v1.1.0
-- `common/duvel_device.py`: add `test_audio_loopback()` — simultaneous speaker playback + mic recording via `tinyplay`/`tinycap`, RMS-based pass/fail
-- `common/duvel_device.py`: add `_get_usb_audio_card()` — returns USB-Audio card number for `tinyplay`/`tinycap` `-D` flag
+- `common/duvel_device.py`: add `test_audio_loopback()`, `_get_usb_audio_card()`
 
 ### v1.0.0
-- `test_peripheral.py`: peripheral boot-time measurement (camera / mic / speaker)
+- Initial release: peripheral boot-time measurement (camera / mic / speaker)
 - `common/duvel_device.py`: reusable ADB wrapper with 4-step boot detection
-- Camera check: sysfs UVC enumeration + real V4L2 streaming verification (STREAMON → DQBUF)
-- Frame capture: JPEG pulled to local `<output-dir>/frames/roundNN.jpg` per round
-- Audio check: `/proc/asound/cards` (no root required), prefers USB-Audio over internal SOC
 - `tools/v4l2_stream_test`: static ARM64 binary compiled with NDK r28

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from common.duvel_device import DuvelDevice
+from common.duvel_device import DuvelDevice, _STREAM_TEST_BIN_REMOTE, _TONE_WAV_2S_REMOTE
 from common.version import VERSION
 
 
@@ -138,8 +138,7 @@ class ResultWriter:
             return "  PASS" if t is not None else "  FAIL"
 
         lines.append(f"  Reboot triggered    : {self._ts(r.reboot_start)}")
-        fw = f"  FW={r.fw_version}" if r.fw_version else ""
-        lines.append(f"  Boot ready          : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}{tag(r.boot_ready)}{fw}")
+        lines.append(f"  Boot ready          : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}{tag(r.boot_ready)}")
         lines.append(f"  Camera working      : {self._ts(r.camera_ready)}{self._diff(r.camera_ready, r.boot_ready, 'from boot')}{tag(r.camera_ready)}{cam_label}")
         if r.camera_frame:
             lines.append(f"  Frame saved         : {r.camera_frame}")
@@ -221,7 +220,7 @@ class PeripheralTestRunner:
             self._device.wait_for_boot(self._args.boot_timeout)
             r.boot_ready = time.time()
             r.fw_version = self._device.fw_version()
-            print(f"  Boot ready  (+{r.boot_seconds():.1f}s)  FW={r.fw_version}")
+            print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
 
             tests = set(self._args.tests)
 
@@ -316,6 +315,9 @@ def main():
     print(f"  Iterations : {args.iterations}")
     print(f"  Tests      : {' '.join(args.tests)}")
     print(f"  Output dir : {args.output_dir}")
+    print(f"  [ADB] {'Connected to' if args.ip else 'USB device'} {device.label}")
+    print(f"  [ADB] v4l2_stream_test -> {_STREAM_TEST_BIN_REMOTE}")
+    print(f"  [ADB] barco_tone_2s.wav -> {_TONE_WAV_2S_REMOTE}")
 
     results = []
     try:

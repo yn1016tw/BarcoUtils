@@ -50,12 +50,10 @@ class DuvelDevice:
             out = result.stdout.strip()
             if "connected" not in out.lower() and "already" not in out.lower():
                 raise ConnectionError(f"adb connect failed: {out}")
-            print(f"  [ADB] Connected to {self._serial}")
         else:
             result = self._adb_raw(["devices"], timeout=10)
             if self._serial not in result.stdout:
                 raise ConnectionError(f"Device {self._serial} not found in adb devices")
-            print(f"  [ADB] USB device {self._serial} found")
         self._push_stream_test_bin()
         self._push_tone_wav()
 
@@ -192,7 +190,6 @@ class DuvelDevice:
     def _push_stream_test_bin(self) -> None:
         self._push_file(_STREAM_TEST_BIN_LOCAL, _STREAM_TEST_BIN_REMOTE)
         self._adb_raw(["shell", f"chmod +x {_STREAM_TEST_BIN_REMOTE}"], timeout=5)
-        print(f"  [ADB] v4l2_stream_test pushed to {_STREAM_TEST_BIN_REMOTE}")
 
     def _find_working_camera(self, frame_save_path: str | None = None) -> tuple[str, str] | None:
         """Returns (dev_path, camera_name) for the first UVC node that can stream.
@@ -366,9 +363,7 @@ class DuvelDevice:
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
             self._generate_tone_wav(str(path), duration=2)
-            print(f"  [ADB] Generated {_TONE_WAV_2S_LOCAL}")
         self._push_file(_TONE_WAV_2S_LOCAL, _TONE_WAV_2S_REMOTE)
-        print(f"  [ADB] barco_tone_2s.wav pushed to {_TONE_WAV_2S_REMOTE}")
 
     @staticmethod
     def _generate_tone_wav(path: str, freq: int = 1000, duration: int = 3,

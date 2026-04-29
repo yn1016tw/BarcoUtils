@@ -55,6 +55,7 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 
 ```
 common/duvel_device.py   — DuvelDevice class (all ADB logic lives here)
+common/mtr_ui.py         — MtrUi class (ADB-based UI controller for MTR / Teams)
 test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
 tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()
@@ -74,6 +75,18 @@ common/version.py        — VERSION string (bump manually on releases)
 - `wait_for_audio_working(timeout)` → `(short_name, full_name)`
 - `test_speaker(duration)` → `bool`
 - `test_mic(duration, rms_threshold)` → `(passed, rms)`
+
+**MtrUi public API** (`common/mtr_ui.py`):
+- `tap(x, y)` / `long_press(x, y, duration_ms)` / `swipe(x1, y1, x2, y2, duration_ms)`
+- `keyevent(keycode)` / `input_text(text)` — module-level constants `KEY_HOME`, `KEY_BACK`, `KEY_ENTER`, etc.
+- `home()` / `back()` / `recent_apps()`
+- `screenshot(local_path)` — uses `adb exec-out screencap -p` (no temp file on device)
+- `dump_ui()` → raw XML; `find_element(text, text_contains, content_desc, resource_id, cls)` → dict with `center` tuple
+- `tap_element(...)` → bool; `wait_for_element(timeout, ...)` → bool; `wait_for_element_gone(timeout, ...)` → bool
+- `current_activity()` → `"package/activity"` string
+- `launch(package, activity)` / `force_stop(package)`
+- `launch_teams()` / `is_teams_foreground()` / `end_call()` — MTR-specific helpers
+- Takes `serial` directly (same format as `DuvelDevice`); no `connect()` needed — call after `DuvelDevice.connect()`
 
 **Key implementation details:**
 - Camera check uses a two-stage approach: sysfs UVC enumeration (no `v4l2-ctl`) → `v4l2_stream_test` STREAMON + 5s AF/AE warm-up + DQBUF

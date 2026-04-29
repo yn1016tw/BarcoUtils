@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Standalone ADB-based test utilities for the Barco Duvel (ClickShare base unit). No dependency on TEnTo or the Wave4 BSP — only requires `adb` in PATH and Python 3.10+.
 
+UI page objects and element references are based on: Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.071`. Resource IDs and UI hierarchy may differ on other versions.
+
 ## Running the test
 
 ```bash

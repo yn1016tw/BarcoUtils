@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     from common.ui_main import MainPage
     from common.ui_invite_people import InvitePeoplePage
     from common.ui_in_call import InCallPage
+    from common.ui_more_menu import MoreMenuPage
+    from common.ui_settings import SettingsPage
+    from common.ui_device_settings import DeviceSettingsPage
 
 _MTR_PACKAGE = "com.microsoft.skype.teams.ipphone"
 _POLL_INTERVAL = 1  # seconds between element polls
@@ -52,6 +55,9 @@ class MtrUi:
         self._main = None           # lazily created by .main property
         self._invite_people = None  # lazily created by .invite_people property
         self._in_call = None        # lazily created by .in_call property
+        self._more_menu = None      # lazily created by .more_menu property
+        self._settings = None         # lazily created by .settings property
+        self._device_settings = None  # lazily created by .device_settings property
 
     @property
     def main(self) -> "MainPage":
@@ -76,6 +82,30 @@ class MtrUi:
             from common.ui_in_call import InCallPage
             self._in_call = InCallPage(self)
         return self._in_call
+
+    @property
+    def more_menu(self) -> "MoreMenuPage":
+        """Return the MoreMenuPage page object (created on first access)."""
+        if self._more_menu is None:
+            from common.ui_more_menu import MoreMenuPage
+            self._more_menu = MoreMenuPage(self)
+        return self._more_menu
+
+    @property
+    def settings(self) -> "SettingsPage":
+        """Return the SettingsPage page object (created on first access)."""
+        if self._settings is None:
+            from common.ui_settings import SettingsPage
+            self._settings = SettingsPage(self)
+        return self._settings
+
+    @property
+    def device_settings(self) -> "DeviceSettingsPage":
+        """Return the DeviceSettingsPage page object (created on first access)."""
+        if self._device_settings is None:
+            from common.ui_device_settings import DeviceSettingsPage
+            self._device_settings = DeviceSettingsPage(self)
+        return self._device_settings
 
     # ------------------------------------------------------------------
     # ADB transport (mirrors DuvelDevice pattern)

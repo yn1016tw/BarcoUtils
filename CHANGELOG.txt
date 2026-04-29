@@ -1,3 +1,9 @@
+v1.12.0
+- Add `common/ui_more_menu.py` (`MoreMenuPage`): More overlay (Meet now, Call, Share, Whiteboard, Join with an ID, Settings, Back)
+- Add `common/ui_settings.py` (`SettingsPage`): Teams Rooms Settings dialog (org name, About, Device settings)
+- Add `common/ui_device_settings.py` (`DeviceSettingsPage`): Android Device Settings panel (Accessibility, System, About, Admin settings)
+- `common/ui_mtr.py`: add `more_menu`, `settings`, `device_settings` lazy properties
+
 v1.11.0
 - `common/ui_base.py`: add `_poll(check_fn, timeout)` helper — polls every 1s up to timeout; timeout <= 0 runs once
 - All page objects `is_visible()`: add `timeout=0` parameter; delegates to `_poll` so callers can block until visible without writing their own loop

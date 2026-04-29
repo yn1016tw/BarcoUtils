@@ -60,6 +60,9 @@ common/ui_base.py           — BasePage base class shared by all page objects
 common/ui_main.py           — MainPage page object (Teams Rooms home screen buttons)
 common/ui_invite_people.py  — InvitePeoplePage page object ("Invite people to join you" dialog)
 common/ui_in_call.py        — InCallPage page object (active call screen)
+common/ui_more_menu.py      — MoreMenuPage page object (More overlay: Meet now, Call, Share, Whiteboard, Join with an ID, Settings)
+common/ui_settings.py       — SettingsPage page object (Settings dialog: org name, About, Device settings)
+common/ui_device_settings.py — DeviceSettingsPage page object (Android Device Settings: Accessibility, System, About, Admin settings)
 testcases/test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
 tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()
@@ -94,6 +97,9 @@ common/version.py        — VERSION string (bump manually on releases)
 - `main` → `MainPage` — lazy property
 - `invite_people` → `InvitePeoplePage` — lazy property
 - `in_call` → `InCallPage` — lazy property
+- `more_menu` → `MoreMenuPage` — lazy property
+- `settings` → `SettingsPage` — lazy property
+- `device_settings` → `DeviceSettingsPage` — lazy property
 
 **Page object base** (`common/ui_base.py`): all page objects inherit `BasePage` — provides `__init__(ui)` and `_tap(candidates: list[dict]) -> bool` (tries each kwarg dict against `tap_element` in order).
 
@@ -109,6 +115,19 @@ common/version.py        — VERSION string (bump manually on releases)
 **InCallPage** (`common/ui_in_call.py`, access via `device.ui.in_call`):
 - `is_visible()` → bool; `get_meeting_title()` → str | None
 - `hang_up()` / `mute()` / `toggle_camera()` / `change_video()` / `show_participants()` / `reactions()` / `share()` / `more_options()` / `change_view()` / `volume_up()` / `volume_down()` → bool
+
+**MoreMenuPage** (`common/ui_more_menu.py`, access via `device.ui.more_menu`):
+- `is_visible()` → bool
+- `click_back()` / `click_meet_now()` / `click_call()` / `click_share()` / `click_whiteboard()` / `click_join_with_an_id()` / `click_settings()` → bool
+
+**SettingsPage** (`common/ui_settings.py`, access via `device.ui.settings`):
+- `is_visible()` → bool
+- `click_back()` → bool; `get_org_name()` → str | None
+- `click_about()` / `click_device_settings()` → bool
+
+**DeviceSettingsPage** (`common/ui_device_settings.py`, access via `device.ui.device_settings`):
+- `is_visible()` → bool; `click_exit()` → bool
+- `click_accessibility()` / `click_system()` / `click_about()` / `click_admin_settings()` → bool
 
 **Key implementation details:**
 - Camera check uses a two-stage approach: sysfs UVC enumeration (no `v4l2-ctl`) → `v4l2_stream_test` STREAMON + 5s AF/AE warm-up + DQBUF

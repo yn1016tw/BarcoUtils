@@ -36,6 +36,7 @@ No install step — run directly from the repo root. There are no automated test
 - Version bump commits: `bump to vX.Y.Z: <one-line summary of what changed>`
 - Non-bump commits: imperative lowercase summary, e.g. `add --fail-fast flag`, `fix audio card parsing`
 - Do not include a body or issue references unless something non-obvious needs explanation
+- Do not include AI authorship lines (e.g. `Co-Authored-By`) in any commit message
 
 **When to bump the version:**
 - Bump in the same commit that introduces the change (not a separate follow-up commit)

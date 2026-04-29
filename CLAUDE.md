@@ -67,6 +67,7 @@ common/ui_more_menu.py      — MoreMenuPage page object (More overlay: Meet now
 common/ui_settings.py       — SettingsPage page object (Settings dialog: org name, About, Device settings)
 common/ui_device_settings.py — DeviceSettingsPage page object (Android Device Settings: Accessibility, System, About, Admin settings)
 testcases/test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
+testcases/test_mtr_camera.py       — CLI entry point for the 8-step MTR camera test (reboot → Teams UI → screenshot)
 tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()
 scripts/                 — Windows helper batch files (ADB key switcher, Duvel device setup)
@@ -144,4 +145,4 @@ common/version.py        — VERSION string (bump manually on releases)
 - Audio card detection reads `/proc/asound/cards` (no root required); prefers USB-Audio cards over internal SOC
 - `_adb_raw()` never raises; `_adb()` raises on non-zero exit. Internal polling uses `_poll_until()` with a 2s interval
 - `connect()` must be called before any device operations; for TCP/IP it runs `adb connect`, for USB it verifies presence in `adb devices`
-- Log file is appended to `<output-dir>/YYYYMMDD.txt`; frames go to `<output-dir>/frames/roundNN.jpg`
+- Log file is appended to `<output-dir>/YYYYMMDD.txt`; frames go to `<output-dir>/files/round01_HHMMSS.jpg`

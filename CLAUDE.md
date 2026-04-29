@@ -83,7 +83,7 @@ common/version.py        — VERSION string (bump manually on releases)
 - `wait_for_audio_working(timeout)` → `(short_name, full_name)`
 - `test_speaker(duration)` → `bool`
 - `test_mic(duration, rms_threshold)` → `(passed, rms)`
-- `fw_version()` → `str` — reads `ro.barco.build.version`
+- `barco_fw_version()` → `str` — reads `ro.barco.build.version`
 - `mdep_version()` → `str` — reads `ro.mdep.build.id`
 - `barco_platform()` → `str` — reads `ro.barco.platform` (e.g. `w4duvel`)
 - `barco_product()` → `str` — reads `ro.barco.product` (e.g. `Hub Pro`)

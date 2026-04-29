@@ -49,7 +49,7 @@ class TestResult:
     dialog_dismissed: float | None = None
     screenshot_saved: float | None = None
     call_ended: float | None = None
-    fw_version: str | None = None
+    barco_fw_version: str | None = None
     screenshot_path: str | None = None
     error: str | None = None
     passed: bool = False
@@ -162,7 +162,7 @@ class ResultWriter:
             "=" * 80,
             f"Test Run: {self._run_start.strftime('%Y-%m-%d %H:%M:%S')} "
             f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}"
-            + (f" | FW: {results[0].fw_version}" if results and results[0].fw_version else ""),
+            + (f" | FW: {results[0].barco_fw_version}" if results and results[0].barco_fw_version else ""),
             "=" * 80,
             "",
         ]
@@ -200,7 +200,7 @@ class MtrCameraTestRunner:
             print("  Waiting for boot...")
             self._device.wait_for_boot(self._args.boot_timeout)
             r.boot_ready = time.time()
-            r.fw_version = self._device.fw_version()
+            r.barco_fw_version = self._device.barco_fw_version()
             print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
 
             ui = self._device.ui
@@ -325,7 +325,7 @@ def main():
 
     print(f"MTR Camera Test  v{VERSION}")
     print(f"  Device     : {device.label}")
-    print(f"  FW         : {device.fw_version()}")
+    print(f"  FW         : {device.barco_fw_version()}")
     print(f"  Iterations : {args.iterations}")
     print(f"  Output dir : {args.output_dir}")
 

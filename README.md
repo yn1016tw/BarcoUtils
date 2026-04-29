@@ -226,7 +226,7 @@ from common.duvel_device import DuvelDevice
 
 device = DuvelDevice(serial="192.168.1.100:5555", is_ip=True)
 device.connect()                                    # adb connect + push test binary + push tone WAV
-device.fw_version()                                 # ro.barco.build.version
+device.barco_fw_version()                                 # ro.barco.build.version
 device.reboot()
 device.wait_for_boot(timeout=300)
 dev, name = device.wait_for_camera_working(120, frame_save_path="frame.jpg")

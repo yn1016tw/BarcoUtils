@@ -1,3 +1,6 @@
+v1.12.3
+- `common/duvel_device.py`: rename `fw_version()` → `barco_fw_version()`; update all call sites in `test_peripheral.py`, `test_mtr_camera.py`
+
 v1.12.2
 - `common/duvel_device.py`: add `barco_platform()`, `barco_product()`, `barco_board_id()`, `barco_build_type()`, `barco_minimal_version()` — each reads the corresponding `ro.barco.*` getprop
 

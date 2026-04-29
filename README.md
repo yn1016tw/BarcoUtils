@@ -9,20 +9,25 @@ No dependency on TEnTo or the Wave4 BSP — only `adb` in PATH and Python 3.10+.
 
 ```
 BarcoUtils/
-├── common/
-│   ├── duvel_device.py     # DuvelDevice — ADB wrapper (reusable)
-│   ├── mtr_ui.py           # MtrUi — ADB-based UI controller for MTR / Teams
-│   └── version.py          # VERSION string
-├── data/
-│   └── barco_tone_2s.wav   # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
-├── scripts/
-│   ├── adb_key_switch.bat  # Switch active ADB key between Duvel / Fruitesse
-│   └── duvel_setup.bat     # Interactive Duvel device setup helper
 ├── testcases/
-│   └── test_peripheral.py  # Peripheral test script
+│   ├── common/
+│   │   ├── duvel_device.py       # DuvelDevice — ADB wrapper (reusable)
+│   │   ├── ui_mtr.py             # MtrUi — ADB-based UI controller for MTR / Teams
+│   │   ├── ui_base.py            # BasePage — shared base class for all page objects
+│   │   ├── ui_main.py            # MainPage — Teams Rooms home screen
+│   │   ├── ui_invite_people.py   # InvitePeoplePage — "Invite people to join you" dialog
+│   │   ├── ui_in_call.py         # InCallPage — active call screen
+│   │   └── version.py            # VERSION string
+│   ├── test_peripheral.py        # Peripheral boot-time test (camera / mic / speaker)
+│   └── test_mtr_camera.py        # MTR camera test (reboot → Teams UI → screenshot)
+├── data/
+│   └── barco_tone_2s.wav         # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
+├── scripts/
+│   ├── adb_key_switch.bat        # Switch active ADB key between Duvel / Fruitesse
+│   └── duvel_setup.bat           # Interactive Duvel device setup helper
 └── tools/
-    ├── v4l2_stream_test.c  # Minimal V4L2 streaming test (source)
-    └── v4l2_stream_test    # Precompiled static ARM64 binary (Android 26+)
+    ├── v4l2_stream_test.c        # Minimal V4L2 streaming test (source)
+    └── v4l2_stream_test          # Precompiled static ARM64 binary (Android 26+)
 ```
 
 ---
@@ -115,8 +120,100 @@ Summary:
   Mic ready     min/avg/max: 24.9s / 26.1s / 27.5s
 ```
 
-Log file: `logs/YYYYMMDD.txt` (appended on each run)  
-Frames: `logs/frames/round01.jpg`, `round02.jpg`, …
+Log file: `logs/test_peripheral/YYYYMMDD/YYYYMMDD.log` (appended on each run)  
+Frames: `logs/test_peripheral/YYYYMMDD/files/round01_HHMMSS.jpg`, …
+
+---
+
+## testcases/test_mtr_camera.py
+
+Verifies the Teams Rooms camera flow end-to-end after a full reboot, with per-step timestamps.
+
+### Test procedure
+
+| Step | Action | Pass condition |
+|------|--------|----------------|
+| 1 | Reboot device | Command accepted |
+| 2 | Wait for boot | `sys.boot_completed` + `bootanim` + `pm list packages` |
+| 3 | Wait for main page | `meetnow_btn` visible in UI hierarchy |
+| 4 | Tap "Meet now" | Button found and tapped |
+| 5 | Invite dialog visible | `invite_button` or "Invite people to join you" text found |
+| 6 | Dismiss dialog | Dismiss (X) button found and tapped |
+| 7 | Screenshot saved | PNG written to `files/` |
+| 8 | Hang up | End call button found and tapped |
+
+### Usage
+
+```bash
+python testcases/test_mtr_camera.py --ip 192.168.1.100
+python testcases/test_mtr_camera.py --serial 1882000501 --iterations 3
+python testcases/test_mtr_camera.py --ip 192.168.1.100 --output-dir C:/logs --fail-fast
+```
+
+### CLI options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--serial SERIAL` | — | USB ADB serial number |
+| `--ip IP[:PORT]` | — | ADB over TCP/IP (default port 5555) |
+| `--iterations N` | 1 | Number of test rounds |
+| `--output-dir DIR` | `logs` | Directory for log file and screenshots |
+| `--boot-timeout SEC` | 300 | Max seconds to wait for boot |
+| `--device-timeout SEC` | 120 | Max seconds to wait for main page |
+| `--fail-fast` | off | Stop after the first failed round |
+
+### Output
+
+```
+[Round 1/1] PASS
+  Reboot triggered      : 14:30:00.123
+  Boot ready            : 14:30:44.901  (+44.8s)  PASS
+  Main page visible     : 14:30:52.210  (+7.3s from boot)  PASS
+  Meet now tapped       : 14:30:52.650  (+7.7s from boot)  PASS
+  Invite dialog visible : 14:30:53.900  (+9.0s from boot)  PASS
+  Dialog dismissed      : 14:30:54.300  (+9.4s from boot)  PASS
+  Screenshot saved      : 14:30:55.100  (+10.2s from boot)  PASS
+  Screenshot path       : logs/test_mtr_camera/20260429/files/round01_143054.png
+  Call ended            : 14:30:55.600  (+10.7s from boot)  PASS
+  Total (reboot->shot)  : 55.0s
+```
+
+Log file: `logs/test_mtr_camera/YYYYMMDD/YYYYMMDD.log` (appended on each run)  
+Screenshots: `logs/test_mtr_camera/YYYYMMDD/files/round01_HHMMSS.png`, …
+
+---
+
+## common/ui_mtr.py — MtrUi
+
+ADB-based UI controller for Microsoft Teams Rooms. Wraps raw ADB input, UI hierarchy queries, and app lifecycle. Page objects are accessed via lazy properties.
+
+```python
+from common.ui_mtr import MtrUi
+ui = MtrUi(serial="192.168.1.100:5555")
+ui.launch_teams()
+ui.screenshot("logs/screen.png")
+el = ui.find_element(resource_id="com.microsoft.skype.teams.ipphone:id/meetnow_btn")
+ui.tap(*el["center"])
+
+# Page objects
+ui.main.is_visible()
+ui.main.click_meet_now()
+ui.invite_people.is_visible()
+ui.invite_people.dismiss()
+ui.in_call.hang_up()
+```
+
+`device.ui` returns the `MtrUi` for a `DuvelDevice` (lazy property, same serial).
+
+### Page objects
+
+| Property | Class | File | Screen |
+|----------|-------|------|--------|
+| `ui.main` | `MainPage` | `ui_main.py` | Teams Rooms home screen |
+| `ui.invite_people` | `InvitePeoplePage` | `ui_invite_people.py` | "Invite people to join you" dialog |
+| `ui.in_call` | `InCallPage` | `ui_in_call.py` | Active call screen |
+
+All page objects inherit `BasePage` (`ui_base.py`) which provides `__init__(ui)` and `_tap(candidates)`. Element matching tries `resource_id` first, `content_desc` second.
 
 ---
 
@@ -201,49 +298,4 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 
 ---
 
-## Changelog
-
-### v1.9.1
-- `test_peripheral.py`: add `--fail-fast` flag — stop after the first failed round (default: continue)
-
-### v1.9.0
-- `common/duvel_device.py`: clear stale `/data/local/tmp/v4l2_frame_tmp` before each camera test to prevent a previous round's file from masking a streaming failure
-
-### v1.8.0
-- `test_peripheral.py`: FW version (`ro.barco.build.version`) shown in startup header
-- `test_peripheral.py`: ADB connection logs moved to after the header block
-- `test_peripheral.py`: default `--output-dir` changed from `.` to `logs`; `logs/` and `logs/frames/` created at startup
-
-### v1.7.0
-- `test_peripheral.py`: add `--tests` argument to selectively run `camera`, `speaker`, `mic` (default: all)
-- `common/duvel_device.py`: add `fw_version()` — reads `ro.barco.build.version` via `getprop`
-
-### v1.6.0
-- Remove `common/usb_switcher.py` (AcronameHubSwitcher) and `test_usb_switcher.py`
-- `test_peripheral.py`: remove per-metric pass/fail counts from summary output
-
-### v1.5.0
-- `test_peripheral.py`: each step in per-round output now shows `PASS` or `FAIL` inline
-
-### v1.4.0
-- `common/duvel_device.py`: prefix `tinyplay`/`tinycap` with `su root`
-- `common/duvel_device.py`: `data/barco_tone_2s.wav` generated once locally and pushed at `connect()`
-
-### v1.3.0
-- OOP refactoring — no behaviour change, public API unchanged
-
-### v1.2.0
-- `common/duvel_device.py`: add `test_speaker(duration)` and `test_mic(duration, rms_threshold)`
-- `test_peripheral.py`: speaker and mic steps with independent timing
-
-### v1.1.1
-- Bug fixes: `connect()`/`disconnect()`, `reboot()` timeout handling, streaming test ADB timeout
-- `tools/v4l2_stream_test.c`: 5 s AF/AE/AWB warm-up before saving frame
-
-### v1.1.0
-- `common/duvel_device.py`: add `test_audio_loopback()`, `_get_usb_audio_card()`
-
-### v1.0.0
-- Initial release: peripheral boot-time measurement (camera / mic / speaker)
-- `common/duvel_device.py`: reusable ADB wrapper with 4-step boot detection
-- `tools/v4l2_stream_test`: static ARM64 binary compiled with NDK r28
+See [CHANGELOG.txt](CHANGELOG.txt) for version history.

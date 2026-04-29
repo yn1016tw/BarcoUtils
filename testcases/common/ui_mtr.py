@@ -7,7 +7,7 @@ capture, app lifecycle control, and MTR-specific helpers.
 Requires `adb` in PATH and an already-connected device (USB or TCP/IP).
 
 Usage:
-    from common.mtr_ui import MtrUi
+    from common.ui_mtr import MtrUi
     ui = MtrUi(serial="192.168.1.100:5555")
     ui.launch_teams()
     ui.wait_for_element(timeout=15, text="Join")
@@ -15,12 +15,20 @@ Usage:
     ui.screenshot("logs/screen.png")
 """
 
+from __future__ import annotations
+
 import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-_MTR_PACKAGE = "com.microsoft.teams"
+if TYPE_CHECKING:
+    from common.ui_main import MainPage
+    from common.ui_invite_people import InvitePeoplePage
+    from common.ui_in_call import InCallPage
+
+_MTR_PACKAGE = "com.microsoft.skype.teams.ipphone"
 _POLL_INTERVAL = 1  # seconds between element polls
 _UI_DUMP_REMOTE = "/data/local/tmp/ui_dump.xml"
 
@@ -41,6 +49,33 @@ KEY_VOLUME_DOWN = 25
 class MtrUi:
     def __init__(self, serial: str):
         self._serial = serial  # e.g. "ABC123" or "192.168.1.100:5555"
+        self._main = None           # lazily created by .main property
+        self._invite_people = None  # lazily created by .invite_people property
+        self._in_call = None        # lazily created by .in_call property
+
+    @property
+    def main(self) -> "MainPage":
+        """Return the MainPage page object for this device (created on first access)."""
+        if self._main is None:
+            from common.ui_main import MainPage
+            self._main = MainPage(self)
+        return self._main
+
+    @property
+    def invite_people(self) -> "InvitePeoplePage":
+        """Return the InvitePeoplePage page object (created on first access)."""
+        if self._invite_people is None:
+            from common.ui_invite_people import InvitePeoplePage
+            self._invite_people = InvitePeoplePage(self)
+        return self._invite_people
+
+    @property
+    def in_call(self) -> "InCallPage":
+        """Return the InCallPage page object (created on first access)."""
+        if self._in_call is None:
+            from common.ui_in_call import InCallPage
+            self._in_call = InCallPage(self)
+        return self._in_call
 
     # ------------------------------------------------------------------
     # ADB transport (mirrors DuvelDevice pattern)
@@ -111,9 +146,9 @@ class MtrUi:
     # ------------------------------------------------------------------
 
     def dump_ui(self) -> str:
-        """Dump the current UI hierarchy and return raw XML."""
-        self._adb(["shell", f"uiautomator dump {_UI_DUMP_REMOTE} >/dev/null 2>&1"], timeout=15)
-        result = self._adb(["shell", "cat", _UI_DUMP_REMOTE], timeout=10)
+        """Dump the current UI hierarchy and return raw XML, or '' if dump fails."""
+        self._adb_raw(["shell", f"uiautomator dump {_UI_DUMP_REMOTE} >/dev/null 2>&1"], timeout=15)
+        result = self._adb_raw(["shell", "cat", _UI_DUMP_REMOTE], timeout=10)
         self._adb_raw(["shell", "rm", "-f", _UI_DUMP_REMOTE], timeout=5)
         return result.stdout
 
@@ -216,6 +251,17 @@ class MtrUi:
 
     def current_activity(self) -> str:
         """Return 'package/activity' for the foreground window, or '' if unknown."""
+        # Try activity manager first (reliable on AOSP/MTR devices)
+        result = self._adb_raw(["shell", "dumpsys", "activity", "activities"], timeout=10)
+        for line in result.stdout.splitlines():
+            if "topResumedActivity" in line or "ResumedActivity" in line:
+                # format: ActivityRecord{... package/activity} ...
+                for token in line.split():
+                    if "/" in token and "}" not in token:
+                        return token.rstrip("}")
+                    if "/" in token:
+                        return token.rstrip("}")
+        # Fallback: window manager
         result = self._adb_raw(["shell", "dumpsys", "window", "windows"], timeout=10)
         for line in result.stdout.splitlines():
             if "mCurrentFocus" in line or "mFocusedApp" in line:
@@ -252,10 +298,7 @@ class MtrUi:
 
     def end_call(self) -> bool:
         """Tap the hang-up / leave button if visible. Returns True if found."""
-        for desc in ("End call", "Hang up", "Leave"):
-            if self.tap_element(content_desc=desc):
-                return True
-        return False
+        return self.in_call.hang_up()
 
 
 # ------------------------------------------------------------------

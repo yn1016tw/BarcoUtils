@@ -1,2 +1,0 @@
-VERSION = "1.10.0"
-VERSION_INFO = (1, 10, 0)

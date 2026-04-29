@@ -32,6 +32,15 @@ class DuvelDevice:
     def __init__(self, serial: str, is_ip: bool):
         self._serial = serial      # e.g. "ABC123" or "192.168.1.100:5555"
         self._is_ip = is_ip
+        self._ui = None            # lazily created by .ui property
+
+    @property
+    def ui(self) -> "MtrUi":
+        """Return the MtrUi controller for this device (created on first access)."""
+        if self._ui is None:
+            from common.ui_mtr import MtrUi
+            self._ui = MtrUi(self._serial)
+        return self._ui
 
     @property
     def label(self) -> str:

@@ -1,0 +1,60 @@
+v1.11.0
+- `common/ui_base.py`: add `_poll(check_fn, timeout)` helper — polls every 1s up to timeout; timeout <= 0 runs once
+- All page objects `is_visible()`: add `timeout=0` parameter; delegates to `_poll` so callers can block until visible without writing their own loop
+- `common/ui_mtr.py`: fix `dump_ui()` — use `_adb_raw` for both the dump and cat calls so transient `uiautomator dump` failures return `""` instead of raising
+- `test_mtr_camera.py`: add 5s wait before screenshot to let in-call UI settle; verify invite dialog is gone after dismiss; simplify step 3 and step 5 polling loops to use `is_visible(timeout=...)`
+
+v1.10.0
+- Add `test_mtr_camera.py`: full 8-step MTR camera test (reboot → boot → main page → Meet now → invite dialog → dismiss → screenshot → hang up) with per-step timestamps, `TestResult` dataclass, `ResultWriter`, and min/avg/max summary
+- Add `common/ui_mtr.py` (`MtrUi`): ADB-based UI controller with tap/swipe/keyevent, `dump_ui`, `find_element`, `tap_element`, `wait_for_element`, `current_activity`, app lifecycle, and lazy page-object properties
+- Add `common/ui_base.py` (`BasePage`): shared base class — `__init__(ui)` + `_tap(candidates)` — inherited by all page objects
+- Add `common/ui_main.py` (`MainPage`): Teams Rooms home screen (Meet now, Call, Share, Join with an ID, More)
+- Add `common/ui_invite_people.py` (`InvitePeoplePage`): "Invite people to join you" dialog (dismiss, add participants, meeting ID, passcode, dial-in info)
+- Add `common/ui_in_call.py` (`InCallPage`): active call screen (hang up, mute, camera, participants, reactions, share, more, volume)
+- Move `common/`, `data/`, `tools/` into `testcases/`; log path changed to `logs/{testcase_name}/{YYYYMMDD}/{YYYYMMDD}.log`
+- Rename output `frames/` → `files/`; frame filenames now include timestamp (`round01_HHMMSS.jpg`)
+
+v1.9.1
+- `test_peripheral.py`: add `--fail-fast` flag — stop after the first failed round (default: continue)
+
+v1.9.0
+- `common/duvel_device.py`: clear stale `/data/local/tmp/v4l2_frame_tmp` before each camera test to prevent a previous round's file from masking a streaming failure
+
+v1.8.0
+- `test_peripheral.py`: FW version (`ro.barco.build.version`) shown in startup header
+- `test_peripheral.py`: ADB connection logs moved to after the header block
+- `test_peripheral.py`: default `--output-dir` changed from `.` to `logs`; `logs/` and `logs/frames/` created at startup
+
+v1.7.0
+- `test_peripheral.py`: add `--tests` argument to selectively run `camera`, `speaker`, `mic` (default: all)
+- `common/duvel_device.py`: add `fw_version()` — reads `ro.barco.build.version` via `getprop`
+
+v1.6.0
+- Remove `common/usb_switcher.py` (AcronameHubSwitcher) and `test_usb_switcher.py`
+- `test_peripheral.py`: remove per-metric pass/fail counts from summary output
+
+v1.5.0
+- `test_peripheral.py`: each step in per-round output now shows `PASS` or `FAIL` inline
+
+v1.4.0
+- `common/duvel_device.py`: prefix `tinyplay`/`tinycap` with `su root`
+- `common/duvel_device.py`: `data/barco_tone_2s.wav` generated once locally and pushed at `connect()`
+
+v1.3.0
+- OOP refactoring — no behaviour change, public API unchanged
+
+v1.2.0
+- `common/duvel_device.py`: add `test_speaker(duration)` and `test_mic(duration, rms_threshold)`
+- `test_peripheral.py`: speaker and mic steps with independent timing
+
+v1.1.1
+- Bug fixes: `connect()`/`disconnect()`, `reboot()` timeout handling, streaming test ADB timeout
+- `tools/v4l2_stream_test.c`: 5 s AF/AE/AWB warm-up before saving frame
+
+v1.1.0
+- `common/duvel_device.py`: add `test_audio_loopback()`, `_get_usb_audio_card()`
+
+v1.0.0
+- Initial release: peripheral boot-time measurement (camera / mic / speaker)
+- `common/duvel_device.py`: reusable ADB wrapper with 4-step boot detection
+- `tools/v4l2_stream_test`: static ARM64 binary compiled with NDK r28

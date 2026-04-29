@@ -54,8 +54,12 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 ## Architecture
 
 ```
-common/duvel_device.py   — DuvelDevice class (all ADB logic lives here)
-common/mtr_ui.py         — MtrUi class (ADB-based UI controller for MTR / Teams)
+common/duvel_device.py      — DuvelDevice class (all ADB logic lives here)
+common/ui_mtr.py            — MtrUi class (ADB-based UI controller for MTR / Teams)
+common/ui_base.py           — BasePage base class shared by all page objects
+common/ui_main.py           — MainPage page object (Teams Rooms home screen buttons)
+common/ui_invite_people.py  — InvitePeoplePage page object ("Invite people to join you" dialog)
+common/ui_in_call.py        — InCallPage page object (active call screen)
 testcases/test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
 tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()
@@ -75,8 +79,9 @@ common/version.py        — VERSION string (bump manually on releases)
 - `wait_for_audio_working(timeout)` → `(short_name, full_name)`
 - `test_speaker(duration)` → `bool`
 - `test_mic(duration, rms_threshold)` → `(passed, rms)`
+- `ui` → `MtrUi` — lazy property; returns the `MtrUi` instance for this device (same serial, created on first access)
 
-**MtrUi public API** (`common/mtr_ui.py`):
+**MtrUi public API** (access via `device.ui` or `common/ui_mtr.py` directly):
 - `tap(x, y)` / `long_press(x, y, duration_ms)` / `swipe(x1, y1, x2, y2, duration_ms)`
 - `keyevent(keycode)` / `input_text(text)` — module-level constants `KEY_HOME`, `KEY_BACK`, `KEY_ENTER`, etc.
 - `home()` / `back()` / `recent_apps()`
@@ -85,8 +90,25 @@ common/version.py        — VERSION string (bump manually on releases)
 - `tap_element(...)` → bool; `wait_for_element(timeout, ...)` → bool; `wait_for_element_gone(timeout, ...)` → bool
 - `current_activity()` → `"package/activity"` string
 - `launch(package, activity)` / `force_stop(package)`
-- `launch_teams()` / `is_teams_foreground()` / `end_call()` — MTR-specific helpers
-- Takes `serial` directly (same format as `DuvelDevice`); no `connect()` needed — call after `DuvelDevice.connect()`
+- `launch_teams()` / `is_teams_foreground()` / `end_call()` — MTR-specific helpers; `end_call()` delegates to `in_call.hang_up()`
+- `main` → `MainPage` — lazy property
+- `invite_people` → `InvitePeoplePage` — lazy property
+- `in_call` → `InCallPage` — lazy property
+
+**Page object base** (`common/ui_base.py`): all page objects inherit `BasePage` — provides `__init__(ui)` and `_tap(candidates: list[dict]) -> bool` (tries each kwarg dict against `tap_element` in order).
+
+**MainPage** (`common/ui_main.py`, access via `device.ui.main`):
+- `is_visible()` → bool
+- `click_meet_now()` / `click_call()` / `click_share()` / `click_join_with_an_id()` / `click_more()` → bool
+
+**InvitePeoplePage** (`common/ui_invite_people.py`, access via `device.ui.invite_people`):
+- `is_visible()` → bool
+- `dismiss()` / `click_add_participants()` → bool
+- `get_meeting_id()` / `get_passcode()` / `get_dial_in_info()` → str | None
+
+**InCallPage** (`common/ui_in_call.py`, access via `device.ui.in_call`):
+- `is_visible()` → bool; `get_meeting_title()` → str | None
+- `hang_up()` / `mute()` / `toggle_camera()` / `change_video()` / `show_participants()` / `reactions()` / `share()` / `more_options()` / `change_view()` / `volume_up()` / `volume_down()` → bool
 
 **Key implementation details:**
 - Camera check uses a two-stage approach: sysfs UVC enumeration (no `v4l2-ctl`) → `v4l2_stream_test` STREAMON + 5s AF/AE warm-up + DQBUF

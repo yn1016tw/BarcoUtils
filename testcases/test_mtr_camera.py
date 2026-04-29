@@ -1,15 +1,22 @@
 """
-Peripheral Test for Duvel
-Measures time and features from reboot to Camera, Mic, and Speaker ready.
-Supports USB serial or IP connection. Supports stress testing.
+MTR Camera Test for Duvel
+Reboots the device, waits for boot, then verifies the Teams Rooms camera
+flow end-to-end with per-step timing.
 
-Camera check : v4l2_stream_test (STREAMON + 5s warm-up + DQBUF)
-Audio check  : /proc/asound/cards -> tinyplay (speaker) -> tinycap RMS (mic)
+Steps:
+  1. Reboot device
+  2. Wait for boot complete
+  3. Wait for Teams Rooms main page to appear
+  4. Tap "Meet now"
+  5. Verify "Invite people" dialog is visible
+  6. Dismiss the dialog
+  7. Save a screenshot
+  8. Hang up the meeting
 
 Usage:
-    python testcases/test_peripheral.py --serial 1882000501 --iterations 5
-    python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 3
-    python testcases/test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
+    python testcases/test_mtr_camera.py --ip 192.168.1.100
+    python testcases/test_mtr_camera.py --serial 1882000501
+    python testcases/test_mtr_camera.py --ip 192.168.1.100 --output-dir C:/logs --iterations 3
 """
 
 import argparse
@@ -20,8 +27,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from common.duvel_device import DuvelDevice, _STREAM_TEST_BIN_REMOTE, _TONE_WAV_2S_REMOTE
+from common.duvel_device import DuvelDevice
 from common.version import VERSION
+
+_INVITE_DIALOG_TIMEOUT = 15   # seconds to wait for invite dialog after tapping Meet now
 
 
 # ---------------------------------------------------------------------------
@@ -34,49 +43,35 @@ class TestResult:
     total_rounds: int
     reboot_start: float = 0.0
     boot_ready: float | None = None
-    camera_ready: float | None = None   # first working camera found
-    audio_ready: float | None = None    # kernel card enumerated
-    speaker_ready: float | None = None  # tinyplay succeeded
-    mic_ready: float | None = None      # tinycap RMS > threshold
-    mic_rms: float | None = None        # recorded RMS value
-    fw_version: str | None = None        # ro.barco.build.version
-    camera_device: str | None = None    # e.g. /dev/video7
-    camera_name: str | None = None      # e.g. "Rally Camera"
-    camera_frame: str | None = None     # local path to captured JPEG
-    audio_card: str | None = None       # e.g. "RallyCamera"
-    audio_name: str | None = None       # e.g. "Rally Camera"
+    main_visible: float | None = None
+    meet_now_tapped: float | None = None
+    invite_visible: float | None = None
+    dialog_dismissed: float | None = None
+    screenshot_saved: float | None = None
+    call_ended: float | None = None
+    fw_version: str | None = None
+    screenshot_path: str | None = None
     error: str | None = None
     passed: bool = False
-
-    def total_seconds(self) -> float | None:
-        last = self.mic_ready or self.speaker_ready or self.audio_ready
-        if last and self.reboot_start:
-            return last - self.reboot_start
-        return None
 
     def boot_seconds(self) -> float | None:
         if self.boot_ready and self.reboot_start:
             return self.boot_ready - self.reboot_start
         return None
 
-    def camera_seconds(self) -> float | None:
-        if self.camera_ready and self.boot_ready:
-            return self.camera_ready - self.boot_ready
+    def main_seconds(self) -> float | None:
+        if self.main_visible and self.boot_ready:
+            return self.main_visible - self.boot_ready
         return None
 
-    def audio_seconds(self) -> float | None:
-        if self.audio_ready and self.boot_ready:
-            return self.audio_ready - self.boot_ready
+    def invite_seconds(self) -> float | None:
+        if self.invite_visible and self.boot_ready:
+            return self.invite_visible - self.boot_ready
         return None
 
-    def speaker_seconds(self) -> float | None:
-        if self.speaker_ready and self.boot_ready:
-            return self.speaker_ready - self.boot_ready
-        return None
-
-    def mic_seconds(self) -> float | None:
-        if self.mic_ready and self.boot_ready:
-            return self.mic_ready - self.boot_ready
+    def total_seconds(self) -> float | None:
+        if self.screenshot_saved and self.reboot_start:
+            return self.screenshot_saved - self.reboot_start
         return None
 
 
@@ -110,10 +105,6 @@ class ResultWriter:
             f.write("\n".join(lines) + "\n")
         print(f"\n  Log saved: {path}")
 
-    # ------------------------------------------------------------------
-    # Formatting helpers
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _ts(t: float | None) -> str:
         return datetime.fromtimestamp(t).strftime("%H:%M:%S.%f")[:-3] if t else "N/A"
@@ -130,28 +121,24 @@ class ResultWriter:
         if r.error:
             lines.append(f"  ERROR: {r.error}")
 
-        cam_label = f"  [{r.camera_device}  {r.camera_name}]" if r.camera_device else ""
-        aud_label = f"  [{r.audio_card}  {r.audio_name}]" if r.audio_card else ""
-        mic_label = f"  RMS={r.mic_rms:.0f}" if r.mic_rms is not None else ""
-
         def tag(t: float | None) -> str:
             return "  PASS" if t is not None else "  FAIL"
 
-        lines.append(f"  Reboot triggered    : {self._ts(r.reboot_start)}")
-        lines.append(f"  Boot ready          : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}{tag(r.boot_ready)}")
-        lines.append(f"  Camera working      : {self._ts(r.camera_ready)}{self._diff(r.camera_ready, r.boot_ready, 'from boot')}{tag(r.camera_ready)}{cam_label}")
-        if r.camera_frame:
-            lines.append(f"  Frame saved         : {r.camera_frame}")
-        lines.append(f"  Audio card ready    : {self._ts(r.audio_ready)}{self._diff(r.audio_ready, r.boot_ready, 'from boot')}{tag(r.audio_ready)}{aud_label}")
-        lines.append(f"  Speaker working     : {self._ts(r.speaker_ready)}{self._diff(r.speaker_ready, r.boot_ready, 'from boot')}{tag(r.speaker_ready)}")
-        lines.append(f"  Mic working         : {self._ts(r.mic_ready)}{self._diff(r.mic_ready, r.boot_ready, 'from boot')}{tag(r.mic_ready)}{mic_label}")
+        lines.append(f"  Reboot triggered      : {self._ts(r.reboot_start)}")
+        lines.append(f"  Boot ready            : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}{tag(r.boot_ready)}")
+        lines.append(f"  Main page visible     : {self._ts(r.main_visible)}{self._diff(r.main_visible, r.boot_ready, 'from boot')}{tag(r.main_visible)}")
+        lines.append(f"  Meet now tapped       : {self._ts(r.meet_now_tapped)}{self._diff(r.meet_now_tapped, r.boot_ready, 'from boot')}{tag(r.meet_now_tapped)}")
+        lines.append(f"  Invite dialog visible : {self._ts(r.invite_visible)}{self._diff(r.invite_visible, r.boot_ready, 'from boot')}{tag(r.invite_visible)}")
+        lines.append(f"  Dialog dismissed      : {self._ts(r.dialog_dismissed)}{self._diff(r.dialog_dismissed, r.boot_ready, 'from boot')}{tag(r.dialog_dismissed)}")
+        lines.append(f"  Screenshot saved      : {self._ts(r.screenshot_saved)}{self._diff(r.screenshot_saved, r.boot_ready, 'from boot')}{tag(r.screenshot_saved)}")
+        if r.screenshot_path:
+            lines.append(f"  Screenshot path       : {r.screenshot_path}")
+        lines.append(f"  Call ended            : {self._ts(r.call_ended)}{self._diff(r.call_ended, r.boot_ready, 'from boot')}{tag(r.call_ended)}")
         total = r.total_seconds()
-        lines.append(f"  Total (reboot->mic) : {total:.1f}s" if total else "  Total               : N/A")
+        lines.append(f"  Total (reboot->shot)  : {total:.1f}s" if total else "  Total                 : N/A")
         return lines
 
     def _format_summary_lines(self, results: list[TestResult]) -> list[str]:
-        n = len(results)
-
         def stats(values):
             v = [x for x in values if x is not None]
             if not v:
@@ -166,10 +153,8 @@ class ResultWriter:
         return [
             line("Total time    min/avg/max", [r.total_seconds() for r in results]),
             line("Boot time     min/avg/max", [r.boot_seconds() for r in results]),
-            line("Camera ready  min/avg/max", [r.camera_seconds() for r in results]),
-            line("Audio card    min/avg/max", [r.audio_seconds() for r in results]),
-            line("Speaker ready min/avg/max", [r.speaker_seconds() for r in results]),
-            line("Mic ready     min/avg/max", [r.mic_seconds() for r in results]),
+            line("Main visible  min/avg/max", [r.main_seconds() for r in results]),
+            line("Invite dialog min/avg/max", [r.invite_seconds() for r in results]),
         ]
 
     def _format_lines(self, results: list[TestResult]) -> list[str]:
@@ -193,19 +178,13 @@ class ResultWriter:
 
 
 # ---------------------------------------------------------------------------
-# PeripheralTestRunner
+# MtrCameraTestRunner
 # ---------------------------------------------------------------------------
 
-class PeripheralTestRunner:
+class MtrCameraTestRunner:
     def __init__(self, device: DuvelDevice, args):
         self._device = device
         self._args = args
-
-    def run(self) -> list[TestResult]:
-        results = []
-        for i in range(1, self._args.iterations + 1):
-            results.append(self.run_round(i, self._args.iterations))
-        return results
 
     def run_round(self, round_num: int, total_rounds: int) -> TestResult:
         r = TestResult(round_num=round_num, total_rounds=total_rounds)
@@ -213,61 +192,91 @@ class PeripheralTestRunner:
         print(f"Round {round_num}/{total_rounds} - rebooting device...")
 
         try:
+            # Step 1: Reboot
             r.reboot_start = time.time()
             self._device.reboot()
 
+            # Step 2: Wait for boot
             print("  Waiting for boot...")
             self._device.wait_for_boot(self._args.boot_timeout)
             r.boot_ready = time.time()
             r.fw_version = self._device.fw_version()
             print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
 
-            tests = set(self._args.tests)
+            ui = self._device.ui
 
-            if "camera" in tests:
-                print("  Waiting for camera (streaming test)...")
-                ts = datetime.now().strftime("%H%M%S")
-                frame_path = str(Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}.jpg")
-                self._device.clear_camera_tmp()
-                Path(frame_path).unlink(missing_ok=True)
-                r.camera_device, r.camera_name = self._device.wait_for_camera_working(self._args.device_timeout, frame_path)
-                r.camera_ready = time.time()
-                r.camera_frame = frame_path
-                print(f"  Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
-                print(f"  Frame saved     : {frame_path}")
+            # Step 3: Wait for main page
+            print("  Waiting for Teams Rooms main page...")
+            if not ui.main.is_visible(timeout=self._args.device_timeout):
+                raise TimeoutError(f"Main page not visible within {self._args.device_timeout}s")
+            r.main_visible = time.time()
+            print(f"  Main page visible  (+{r.main_visible - r.boot_ready:.1f}s from boot)")
 
-            if tests & {"speaker", "mic"}:
-                print("  Waiting for audio card (/proc/asound/cards check)...")
-                r.audio_card, r.audio_name = self._device.wait_for_audio_working(self._args.device_timeout)
-                r.audio_ready = time.time()
-                print(f"  Audio card ready  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
+            # Step 4: Tap Meet now
+            print("  Tapping 'Meet now'...")
+            if not ui.main.click_meet_now():
+                raise RuntimeError("Could not tap 'Meet now' button")
+            r.meet_now_tapped = time.time()
+            print(f"  Meet now tapped  (+{r.meet_now_tapped - r.boot_ready:.1f}s from boot)")
 
-            if "speaker" in tests:
-                print("  Testing speaker (tinyplay 1kHz tone)...")
-                speaker_ok = self._device.test_speaker(duration=2)
-                r.speaker_ready = time.time()
-                print(f"  Speaker {'OK' if speaker_ok else 'FAIL'}  (+{r.speaker_seconds():.1f}s from boot)")
-                if not speaker_ok:
-                    raise RuntimeError("Speaker playback failed (tinyplay returned non-zero)")
+            # Step 5: Wait for invite dialog
+            print("  Waiting for 'Invite people' dialog...")
+            if not ui.invite_people.is_visible(timeout=_INVITE_DIALOG_TIMEOUT):
+                raise TimeoutError(f"Invite dialog not visible within {_INVITE_DIALOG_TIMEOUT}s")
+            r.invite_visible = time.time()
+            print(f"  Invite dialog visible  (+{r.invite_visible - r.boot_ready:.1f}s from boot)")
 
-            if "mic" in tests:
-                print("  Testing mic (tinycap RMS check)...")
-                mic_ok, r.mic_rms = self._device.test_mic(duration=2)
-                r.mic_ready = time.time()
-                print(f"  Mic {'OK' if mic_ok else 'FAIL'}  RMS={r.mic_rms:.0f}  (+{r.mic_seconds():.1f}s from boot)")
-                if not mic_ok:
-                    raise RuntimeError(f"Mic recording too quiet (RMS={r.mic_rms:.0f} below threshold)")
+            # Step 6: Dismiss dialog
+            print("  Dismissing invite dialog...")
+            if not ui.invite_people.dismiss():
+                raise RuntimeError("Could not dismiss invite dialog")
+            r.dialog_dismissed = time.time()
+            print(f"  Dialog dismissed  (+{r.dialog_dismissed - r.boot_ready:.1f}s from boot)")
+            if ui.invite_people.is_visible():
+                raise RuntimeError("Invite dialog still visible after dismiss")
+
+            # Step 7: Screenshot
+            time.sleep(5)
+            ts = datetime.now().strftime("%H%M%S")
+            shot_path = str(Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}.png")
+            print(f"  Saving screenshot...")
+            ui.screenshot(shot_path)
+            r.screenshot_saved = time.time()
+            r.screenshot_path = shot_path
+            print(f"  Screenshot saved  (+{r.screenshot_saved - r.boot_ready:.1f}s from boot)  {shot_path}")
+
+            # Step 8: Hang up
+            print("  Hanging up meeting...")
+            ui.end_call()
+            r.call_ended = time.time()
+            print(f"  Call ended  (+{r.call_ended - r.boot_ready:.1f}s from boot)")
 
             r.passed = True
 
         except TimeoutError as e:
             r.error = f"TIMEOUT: {e}"
             print(f"  [TIMEOUT] {e}")
+            _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
         except Exception as e:
             r.error = str(e)
             print(f"  [ERROR] {e}")
+            _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
 
         return r
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _save_debug_screenshot(ui, output_dir: str, round_num: int) -> None:
+    ts = datetime.now().strftime("%H%M%S")
+    path = str(Path(output_dir) / "files" / f"round{round_num:02d}_{ts}_fail.png")
+    try:
+        ui.screenshot(path)
+        print(f"  Debug screenshot: {path}")
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -276,19 +285,16 @@ class PeripheralTestRunner:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Measure peripheral (camera/mic/speaker) ready time after Duvel reboot"
+        description="MTR camera test: reboot, boot, Teams Rooms main → Meet now → screenshot"
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--serial", metavar="SERIAL", help="USB ADB serial number")
     group.add_argument("--ip", metavar="IP[:PORT]", help="ADB over TCP/IP (default port 5555)")
     parser.add_argument("--iterations", type=int, default=1, metavar="N", help="Number of test rounds (default: 1)")
-    parser.add_argument("--tests", nargs="+", choices=["camera", "speaker", "mic"],
-                        default=["camera", "speaker", "mic"], metavar="TEST",
-                        help="Tests to run: camera speaker mic (default: all)")
     parser.add_argument("--output-dir", default=None, metavar="DIR", help="Log output directory (default: logs/ next to this script)")
     parser.add_argument("--boot-timeout", type=int, default=300, metavar="SEC", help="Max seconds to wait for boot (default: 300)")
-    parser.add_argument("--device-timeout", type=int, default=120, metavar="SEC", help="Max seconds to wait for camera/audio (default: 120)")
-    parser.add_argument("--fail-fast", action="store_true", help="Stop after the first failed round (default: continue)")
+    parser.add_argument("--device-timeout", type=int, default=120, metavar="SEC", help="Max seconds to wait for main page (default: 120)")
+    parser.add_argument("--fail-fast", action="store_true", help="Stop after the first failed round")
     return parser.parse_args()
 
 
@@ -305,9 +311,6 @@ def main():
     else:
         device = DuvelDevice(serial=args.serial, is_ip=False)
 
-    writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
-    runner = PeripheralTestRunner(device=device, args=args)
-
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     (Path(args.output_dir) / "files").mkdir(parents=True, exist_ok=True)
 
@@ -317,15 +320,14 @@ def main():
         print(f"[ERROR] {e}")
         sys.exit(1)
 
-    print(f"Peripheral Test  v{VERSION}")
+    writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
+    runner = MtrCameraTestRunner(device=device, args=args)
+
+    print(f"MTR Camera Test  v{VERSION}")
     print(f"  Device     : {device.label}")
     print(f"  FW         : {device.fw_version()}")
     print(f"  Iterations : {args.iterations}")
-    print(f"  Tests      : {' '.join(args.tests)}")
     print(f"  Output dir : {args.output_dir}")
-    print(f"  [ADB] {'Connected to' if args.ip else 'USB device'} {device.label}")
-    print(f"  [ADB] v4l2_stream_test -> {_STREAM_TEST_BIN_REMOTE}")
-    print(f"  [ADB] barco_tone_2s.wav -> {_TONE_WAV_2S_REMOTE}")
 
     results = []
     try:

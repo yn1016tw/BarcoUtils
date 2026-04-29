@@ -353,6 +353,36 @@ class DuvelDevice:
         v = result.stdout.strip()
         return v if v else "unknown"
 
+    def barco_platform(self) -> str:
+        """Return ro.barco.platform (hardware platform, e.g. 'w4duvel'), or 'unknown'."""
+        result = self._adb_raw(["shell", "getprop", "ro.barco.platform"], timeout=5)
+        v = result.stdout.strip()
+        return v if v else "unknown"
+
+    def barco_product(self) -> str:
+        """Return ro.barco.product (UI product name, e.g. 'Hub Pro'), or 'unknown'."""
+        result = self._adb_raw(["shell", "getprop", "ro.barco.product"], timeout=5)
+        v = result.stdout.strip()
+        return v if v else "unknown"
+
+    def barco_board_id(self) -> str:
+        """Return ro.barco.board.id (hardware board revision, e.g. 'DVT2'), or 'unknown'."""
+        result = self._adb_raw(["shell", "getprop", "ro.barco.board.id"], timeout=5)
+        v = result.stdout.strip()
+        return v if v else "unknown"
+
+    def barco_build_type(self) -> str:
+        """Return ro.barco.build.type (debug/test/release), or 'unknown'."""
+        result = self._adb_raw(["shell", "getprop", "ro.barco.build.type"], timeout=5)
+        v = result.stdout.strip()
+        return v if v else "unknown"
+
+    def barco_minimal_version(self) -> str:
+        """Return ro.barco.build.minimal_version (minimum OTA-compatible version), or 'unknown'."""
+        result = self._adb_raw(["shell", "getprop", "ro.barco.build.minimal_version"], timeout=5)
+        v = result.stdout.strip()
+        return v if v else "unknown"
+
     def _getprop(self, prop: str) -> str:
         result = self._adb(["shell", "getprop", prop], timeout=5)
         return result.stdout.strip()

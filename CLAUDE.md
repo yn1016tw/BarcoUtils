@@ -85,6 +85,11 @@ common/version.py        — VERSION string (bump manually on releases)
 - `test_mic(duration, rms_threshold)` → `(passed, rms)`
 - `fw_version()` → `str` — reads `ro.barco.build.version`
 - `mdep_version()` → `str` — reads `ro.mdep.build.id`
+- `barco_platform()` → `str` — reads `ro.barco.platform` (e.g. `w4duvel`)
+- `barco_product()` → `str` — reads `ro.barco.product` (e.g. `Hub Pro`)
+- `barco_board_id()` → `str` — reads `ro.barco.board.id` (e.g. `DVT2`)
+- `barco_build_type()` → `str` — reads `ro.barco.build.type` (`debug`/`test`/`release`)
+- `barco_minimal_version()` → `str` — reads `ro.barco.build.minimal_version`
 - `ui` → `MtrUi` — lazy property; returns the `MtrUi` instance for this device (same serial, created on first access)
 
 **MtrUi public API** (access via `device.ui` or `common/ui_mtr.py` directly):

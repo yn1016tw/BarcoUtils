@@ -1,3 +1,6 @@
+v1.12.2
+- `common/duvel_device.py`: add `barco_platform()`, `barco_product()`, `barco_board_id()`, `barco_build_type()`, `barco_minimal_version()` — each reads the corresponding `ro.barco.*` getprop
+
 v1.12.1
 - `common/duvel_device.py`: add `mdep_version()` — reads `ro.mdep.build.id` via `getprop`
 

@@ -21,6 +21,22 @@ python test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:
 
 No install step — run directly from the repo root. There are no automated tests, linting config, or build system.
 
+## Version control
+
+**Versioning:** `common/version.py` holds `VERSION` and `VERSION_INFO`. Bump both manually — patch (`1.9.x`) for bug fixes and minor additions, minor (`1.x.0`) for new features or behavioural changes.
+
+**Commit message format:**
+- Version bump commits: `bump to vX.Y.Z: <one-line summary of what changed>`
+- Non-bump commits: imperative lowercase summary, e.g. `add --fail-fast flag`, `fix audio card parsing`
+- Do not include a body or issue references unless something non-obvious needs explanation
+
+**When to bump the version:**
+- Bump in the same commit that introduces the change (not a separate follow-up commit)
+- Do not bump for documentation-only changes (e.g. CLAUDE.md, README updates)
+- After bumping, the commit message must start with `bump to vX.Y.Z:`
+
+**Branch strategy:** work directly on `master` — this is a single-developer utility repo with no CI. Force-push is prohibited; amend only unpushed commits.
+
 ## Recompiling the ARM64 binary
 
 ```bash

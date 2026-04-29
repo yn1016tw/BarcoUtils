@@ -287,6 +287,7 @@ def parse_args():
     parser.add_argument("--output-dir", default="logs", metavar="DIR", help="Log output directory (default: logs)")
     parser.add_argument("--boot-timeout", type=int, default=300, metavar="SEC", help="Max seconds to wait for boot (default: 300)")
     parser.add_argument("--device-timeout", type=int, default=120, metavar="SEC", help="Max seconds to wait for camera/audio (default: 120)")
+    parser.add_argument("--fail-fast", action="store_true", help="Stop after the first failed round (default: continue)")
     return parser.parse_args()
 
 
@@ -327,6 +328,9 @@ def main():
             result = runner.run_round(i, args.iterations)
             results.append(result)
             writer.print_round(result)
+            if args.fail_fast and not result.passed:
+                print("\n[Stopped: --fail-fast]")
+                break
     except KeyboardInterrupt:
         print("\n[Interrupted by user]")
     finally:

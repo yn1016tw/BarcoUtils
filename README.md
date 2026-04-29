@@ -11,21 +11,23 @@ No dependency on TEnTo or the Wave4 BSP — only `adb` in PATH and Python 3.10+.
 BarcoUtils/
 ├── common/
 │   ├── duvel_device.py     # DuvelDevice — ADB wrapper (reusable)
+│   ├── mtr_ui.py           # MtrUi — ADB-based UI controller for MTR / Teams
 │   └── version.py          # VERSION string
 ├── data/
 │   └── barco_tone_2s.wav   # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
 ├── scripts/
 │   ├── adb_key_switch.bat  # Switch active ADB key between Duvel / Fruitesse
 │   └── duvel_setup.bat     # Interactive Duvel device setup helper
-├── tools/
-│   ├── v4l2_stream_test.c  # Minimal V4L2 streaming test (source)
-│   └── v4l2_stream_test    # Precompiled static ARM64 binary (Android 26+)
-└── test_peripheral.py      # Peripheral test script
+├── testcases/
+│   └── test_peripheral.py  # Peripheral test script
+└── tools/
+    ├── v4l2_stream_test.c  # Minimal V4L2 streaming test (source)
+    └── v4l2_stream_test    # Precompiled static ARM64 binary (Android 26+)
 ```
 
 ---
 
-## test_peripheral.py
+## testcases/test_peripheral.py
 
 Measures how long after reboot it takes for the camera (UVC), microphone, and speaker to become ready.  
 Supports stress testing (configurable iterations), selective test execution, and logs results to a dated file.
@@ -46,19 +48,19 @@ A captured JPEG frame is saved locally for every camera check.
 
 ```bash
 # USB serial
-python test_peripheral.py --serial 1882000501 --iterations 5
+python testcases/test_peripheral.py --serial 1882000501 --iterations 5
 
 # ADB over TCP/IP
-python test_peripheral.py --ip 192.168.1.100 --iterations 3
+python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 3
 
 # Camera only
-python test_peripheral.py --ip 192.168.1.100 --tests camera
+python testcases/test_peripheral.py --ip 192.168.1.100 --tests camera
 
 # Speaker and mic only
-python test_peripheral.py --ip 192.168.1.100 --tests speaker mic
+python testcases/test_peripheral.py --ip 192.168.1.100 --tests speaker mic
 
 # Custom output directory
-python test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
+python testcases/test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
 ```
 
 ### CLI options

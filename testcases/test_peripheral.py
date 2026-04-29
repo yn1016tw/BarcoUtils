@@ -7,9 +7,9 @@ Camera check : v4l2_stream_test (STREAMON + 5s warm-up + DQBUF)
 Audio check  : /proc/asound/cards -> tinyplay (speaker) -> tinycap RMS (mic)
 
 Usage:
-    python test_peripheral.py --serial 1882000501 --iterations 5
-    python test_peripheral.py --ip 192.168.1.100 --iterations 3
-    python test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
+    python testcases/test_peripheral.py --serial 1882000501 --iterations 5
+    python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 3
+    python testcases/test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
 """
 
 import argparse

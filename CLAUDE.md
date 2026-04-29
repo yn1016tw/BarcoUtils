@@ -10,20 +10,20 @@ Standalone ADB-based test utilities for the Barco Duvel (ClickShare base unit). 
 
 ```bash
 # USB
-python test_peripheral.py --serial 1882000501 --iterations 5
+python testcases/test_peripheral.py --serial 1882000501 --iterations 5
 
 # TCP/IP
-python test_peripheral.py --ip 192.168.1.100 --iterations 3
+python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 3
 
 # With custom output dir
-python test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
+python testcases/test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
 
 # Selective tests
-python test_peripheral.py --ip 192.168.1.100 --tests camera
-python test_peripheral.py --ip 192.168.1.100 --tests speaker mic
+python testcases/test_peripheral.py --ip 192.168.1.100 --tests camera
+python testcases/test_peripheral.py --ip 192.168.1.100 --tests speaker mic
 
 # Stop on first failure
-python test_peripheral.py --ip 192.168.1.100 --iterations 10 --fail-fast
+python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 10 --fail-fast
 ```
 
 No install step — run directly from the repo root. There are no automated tests, linting config, or build system.
@@ -56,14 +56,14 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 ```
 common/duvel_device.py   — DuvelDevice class (all ADB logic lives here)
 common/mtr_ui.py         — MtrUi class (ADB-based UI controller for MTR / Teams)
-test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
+testcases/test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
 tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()
 scripts/                 — Windows helper batch files (ADB key switcher, Duvel device setup)
 common/version.py        — VERSION string (bump manually on releases)
 ```
 
-**Data flow in test_peripheral.py:**
+**Data flow in testcases/test_peripheral.py:**
 1. `main()` constructs `DuvelDevice` and calls `connect()` — this pushes `v4l2_stream_test` to `/data/local/tmp/`
 2. `PeripheralTestRunner.run_round()` drives the full reboot → boot → camera → audio → speaker → mic sequence
 3. Timing is captured as Unix timestamps in `TestResult`; `ResultWriter` formats and saves them

@@ -83,6 +83,8 @@ common/version.py        — VERSION string (bump manually on releases)
 - `wait_for_audio_working(timeout)` → `(short_name, full_name)`
 - `test_speaker(duration)` → `bool`
 - `test_mic(duration, rms_threshold)` → `(passed, rms)`
+- `fw_version()` → `str` — reads `ro.barco.build.version`
+- `mdep_version()` → `str` — reads `ro.mdep.build.id`
 - `ui` → `MtrUi` — lazy property; returns the `MtrUi` instance for this device (same serial, created on first access)
 
 **MtrUi public API** (access via `device.ui` or `common/ui_mtr.py` directly):

@@ -347,6 +347,12 @@ class DuvelDevice:
         v = result.stdout.strip()
         return v if v else "unknown"
 
+    def mdep_version(self) -> str:
+        """Return ro.mdep.build.id, or 'unknown' if not set."""
+        result = self._adb_raw(["shell", "getprop", "ro.mdep.build.id"], timeout=5)
+        v = result.stdout.strip()
+        return v if v else "unknown"
+
     def _getprop(self, prop: str) -> str:
         result = self._adb(["shell", "getprop", prop], timeout=5)
         return result.stdout.strip()

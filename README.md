@@ -14,6 +14,9 @@ BarcoUtils/
 │   └── version.py          # VERSION string
 ├── data/
 │   └── barco_tone_2s.wav   # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
+├── scripts/
+│   ├── adb_key_switch.bat  # Switch active ADB key between Duvel / Fruitesse
+│   └── duvel_setup.bat     # Interactive Duvel device setup helper
 ├── tools/
 │   ├── v4l2_stream_test.c  # Minimal V4L2 streaming test (source)
 │   └── v4l2_stream_test    # Precompiled static ARM64 binary (Android 26+)
@@ -69,12 +72,13 @@ python test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:
 | `--output-dir DIR` | `logs` | Directory for log file and captured frames |
 | `--boot-timeout SEC` | 300 | Max seconds to wait for boot |
 | `--device-timeout SEC` | 120 | Max seconds to wait for camera / audio |
+| `--fail-fast` | off | Stop after the first failed round |
 
 ### Output
 
 Console header:
 ```
-Peripheral Test  v1.8.0
+Peripheral Test  v1.9.1
   Device     : 10.102.94.110:5555
   FW         : 04.03.00.master-1649
   Iterations : 3
@@ -196,6 +200,12 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 ---
 
 ## Changelog
+
+### v1.9.1
+- `test_peripheral.py`: add `--fail-fast` flag — stop after the first failed round (default: continue)
+
+### v1.9.0
+- `common/duvel_device.py`: clear stale `/data/local/tmp/v4l2_frame_tmp` before each camera test to prevent a previous round's file from masking a streaming failure
 
 ### v1.8.0
 - `test_peripheral.py`: FW version (`ro.barco.build.version`) shown in startup header

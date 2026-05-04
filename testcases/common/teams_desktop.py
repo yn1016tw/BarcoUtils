@@ -379,8 +379,27 @@ class TeamsDesktopController:
         Must use Application.connect()-based lookup so pywinauto can fully
         traverse the WebView2 accessibility tree inside the Teams process.
         Desktop().windows() returns raw handles that lack this traversal.
+
+        If Teams is minimised to the system tray (hidden), the window won't be
+        found by title — we restore it via the msteams: URI and retry once.
         """
-        # Find the main nav window (NOT the in-call meeting window)
+        result = self._find_main_window()
+        if result is not None:
+            return result
+
+        # Teams is likely hidden in the system tray — restore it and retry
+        print("[teams] Main window not found — restoring Teams from tray...")
+        subprocess.Popen(["explorer", "msteams:"])
+        time.sleep(3)
+
+        result = self._find_main_window()
+        if result is not None:
+            return result
+
+        raise RuntimeError("Could not find main Teams window")
+
+    def _find_main_window(self):
+        """Try to locate the main Teams nav window. Returns window or None."""
         _non_call_patterns = [
             r"Calendar \|.*Microsoft Teams",
             r"Chat \|.*Microsoft Teams",
@@ -393,21 +412,20 @@ class TeamsDesktopController:
                 return app.window(title_re=pattern)
             except Exception:
                 pass
-        # Generic fallback: connect by process and pick first non-call window
-        try:
-            app = Application(backend="uia").connect(
-                path="ms-teams.exe", timeout=3
-            )
-            for w in app.windows():
-                try:
-                    t = w.window_text() or ""
-                    if "Microsoft Teams" in t and "Microsoft Teams meeting" not in t:
-                        return w
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        raise RuntimeError("Could not find main Teams window")
+        # Fallback: connect by process (covers hidden windows) and pick first non-call window
+        for visible_only in (True, False):
+            try:
+                app = Application(backend="uia").connect(path="ms-teams.exe", timeout=3)
+                for w in app.windows(visible_only=visible_only):
+                    try:
+                        t = w.window_text() or ""
+                        if "Microsoft Teams" in t and "Microsoft Teams meeting" not in t:
+                            return w
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        return None
 
     def _call_window(self):
         """Return the active call/meeting window, or None.

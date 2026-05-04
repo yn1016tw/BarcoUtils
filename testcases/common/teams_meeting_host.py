@@ -13,16 +13,16 @@ Steps when started:
 
 Other test cases can read meeting info from the JSON file:
 
-    from teams_meeting_host import MeetingInfo
+    from common.teams_meeting_host import MeetingInfo
     info = MeetingInfo.load()          # reads default path
     info = MeetingInfo.load("C:/logs") # reads from custom dir
     print(info.meeting_id, info.passcode)
 
 Usage:
-    python testcases/teams_meeting_host.py
-    python testcases/teams_meeting_host.py --output-dir C:/logs
-    python testcases/teams_meeting_host.py --accept-video
-    python testcases/teams_meeting_host.py --no-auto-accept  # create meeting only
+    python testcases/common/teams_meeting_host.py
+    python testcases/common/teams_meeting_host.py --output-dir C:/logs
+    python testcases/common/teams_meeting_host.py --accept-video
+    python testcases/common/teams_meeting_host.py --no-auto-accept  # create meeting only
 """
 
 from __future__ import annotations
@@ -39,12 +39,12 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common.teams_desktop import TeamsDesktopController
 
-# Default JSON path (next to this script)
-_DEFAULT_INFO_FILE = Path(__file__).parent / "logs" / "meeting_info.json"
+# Default JSON path (testcases/logs/)
+_DEFAULT_INFO_FILE = Path(__file__).parent.parent / "logs" / "meeting_info.json"
 
 # How often to poll for incoming calls
 _ACCEPT_POLL_INTERVAL = 1.0

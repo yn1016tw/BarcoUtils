@@ -12,7 +12,7 @@ UI references are based on Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.07
 - Python 3.10+
 - `adb` in PATH
 - Duvel device accessible via USB or TCP/IP
-- Windows Teams desktop (for `teams_meeting_host.py`): `pip install pywinauto pywin32`
+- Windows Teams desktop (for `testcases/common/teams_meeting_host.py`): `pip install pywinauto pywin32`
 
 ---
 
@@ -34,11 +34,11 @@ BarcoUtils/
 │   │   ├── ui_norden_call.py      # NordenCallPage — dial screen
 │   │   ├── ui_join_with_id.py     # JoinWithIdPage — Join with an ID dialog
 │   │   ├── teams_desktop.py       # TeamsDesktopController — Windows Teams desktop automation
+│   │   ├── teams_meeting_host.py  # Windows host: create Meet Now meeting, auto-admit from lobby
 │   │   └── version.py             # VERSION string
 │   ├── test_peripheral.py         # Peripheral boot-time test (camera / mic / speaker)
 │   ├── test_mtr_meet_now.py       # MTR camera test (reboot → Teams UI → Meet now → screenshot)
-│   ├── test_mtr_join_call.py      # MTR join-call test (reboot → join by ID → in-call screenshot)
-│   └── teams_meeting_host.py      # Windows host: create Meet Now meeting, auto-admit from lobby
+│   └── test_mtr_join_call.py      # MTR join-call test (reboot → join by ID → in-call screenshot)
 ├── data/
 │   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
 ├── scripts/
@@ -180,7 +180,7 @@ Screenshots: `<output-dir>/files/round01_HHMMSS.png`, …
 ## testcases/test_mtr_join_call.py
 
 Verifies the Teams Rooms join-by-ID flow end-to-end after a full reboot.  
-Designed to run alongside `teams_meeting_host.py` on the Windows PC.
+Designed to run alongside `testcases/common/teams_meeting_host.py` on the Windows PC.
 
 ### Test procedure
 
@@ -233,7 +233,7 @@ python testcases/test_mtr_join_call.py --ip 192.168.1.100 --from-host --iteratio
 
 ---
 
-## testcases/teams_meeting_host.py
+## testcases/common/teams_meeting_host.py
 
 Windows-side host script. Creates a Meet Now meeting in Teams desktop, writes meeting info to JSON,  
 and automatically admits MTR devices from the lobby.
@@ -244,16 +244,16 @@ Requires `pip install pywinauto pywin32`.
 
 ```bash
 # Start meeting and auto-admit (default)
-python testcases/teams_meeting_host.py
+python testcases/common/teams_meeting_host.py
 
 # Custom output directory for meeting_info.json and log file
-python testcases/teams_meeting_host.py --output-dir C:/logs
+python testcases/common/teams_meeting_host.py --output-dir C:/logs
 
 # Create meeting only, do not accept calls
-python testcases/teams_meeting_host.py --no-auto-accept
+python testcases/common/teams_meeting_host.py --no-auto-accept
 
 # Accept video calls instead of audio-only
-python testcases/teams_meeting_host.py --accept-video
+python testcases/common/teams_meeting_host.py --accept-video
 ```
 
 ### CLI options
@@ -285,7 +285,7 @@ Written to `<output-dir>/meeting_info.json` once the meeting is created.
 
 **PC (Windows)** — run first:
 ```bash
-python testcases/teams_meeting_host.py --output-dir C:/logs
+python testcases/common/teams_meeting_host.py --output-dir C:/logs
 ```
 
 **MTR device** — run once the host is ready:

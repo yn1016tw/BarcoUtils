@@ -71,7 +71,7 @@ common/ui_device_settings.py — DeviceSettingsPage page object (Android Device 
 common/ui_norden_call.py    — NordenCallPage page object (dial screen: type name/number, Call button)
 common/ui_join_with_id.py   — JoinWithIdPage page object (Join with an ID dialog: meeting ID, passcode, Join button)
 common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
-testcases/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
+testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
 testcases/test_mtr_join_call.py — CLI entry point for the 10-step MTR join-call test (reboot → Teams UI → join by ID → screenshot); supports --meeting-id (manual), --from-host (default JSON path), or --meeting-info-dir DIR (custom JSON path) to load meeting info from teams_meeting_host.py
 testcases/test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
 testcases/test_mtr_meet_now.py       — CLI entry point for the 8-step MTR camera test (reboot → Teams UI → screenshot)

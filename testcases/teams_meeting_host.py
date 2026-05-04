@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import sys
 import threading
@@ -47,6 +48,28 @@ _DEFAULT_INFO_FILE = Path(__file__).parent / "logs" / "meeting_info.json"
 
 # How often to poll for incoming calls
 _ACCEPT_POLL_INTERVAL = 1.0
+
+log = logging.getLogger("teams_host")
+
+
+def _setup_logging(output_dir: str | Path | None) -> None:
+    """Configure console + file logging. Call once from main()."""
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(fmt)
+
+    handlers: list[logging.Handler] = [console]
+
+    log_dir = Path(output_dir) if output_dir else _DEFAULT_INFO_FILE.parent
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"{datetime.now().strftime('%Y%m%d')}_meeting_host.log"
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setFormatter(fmt)
+    handlers.append(file_handler)
+
+    logging.basicConfig(level=logging.INFO, handlers=handlers)
+    log.info("Log file: %s", log_path)
 
 
 # ---------------------------------------------------------------------------
@@ -156,11 +179,11 @@ class TeamsMeetingHost:
         Returns a MeetingInfo with meeting_id/passcode/join_url populated.
         Saves the info to JSON immediately so other processes can read it.
         """
-        print("Connecting to Teams...")
+        log.info("Connecting to Teams...")
         self._ctrl.connect(launch=True, timeout=connect_timeout)
-        print("Connected.")
+        log.info("Connected.")
 
-        print("Starting Meet Now meeting...")
+        log.info("Starting Meet Now meeting...")
         # create_meeting() returns dict: {meeting_id, passcode, join_url}
         info_dict = self._ctrl.create_meeting(timeout=meeting_timeout)
 
@@ -172,8 +195,8 @@ class TeamsMeetingHost:
         )
 
         saved_path = self._info.save(self._output_dir)
-        print(f"Meeting created:\n{self._info}")
-        print(f"  Info saved : {saved_path}")
+        log.info("Meeting created:\n%s", self._info)
+        log.info("Info saved: %s", saved_path)
         return self._info
 
     def get_meeting_info(self) -> MeetingInfo:
@@ -189,24 +212,24 @@ class TeamsMeetingHost:
             target=self._accept_loop, daemon=True, name="auto-accept"
         )
         self._accept_thread.start()
-        print("Auto-accept started (background thread running).")
+        log.info("Auto-accept started (background thread running).")
 
     def stop(self) -> None:
         """Stop the auto-accept loop."""
         self._accepting = False
         if self._accept_thread:
             self._accept_thread.join(timeout=5)
-        print("Auto-accept stopped.")
+        log.info("Auto-accept stopped.")
 
     def run_forever(self) -> None:
         """Block, accept calls, until Ctrl+C."""
         self.start_auto_accept()
-        print("Waiting for incoming calls... (Ctrl+C to stop)\n")
+        log.info("Waiting for incoming calls... (Ctrl+C to stop)")
         try:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            print("\nStopped by user.")
+            log.info("Stopped by user.")
         finally:
             self.stop()
 
@@ -217,28 +240,28 @@ class TeamsMeetingHost:
             try:
                 if self._ctrl.wait_for_incoming_call(timeout=2):
                     caller = self._get_caller_name()
-                    ts = datetime.now().strftime("%H:%M:%S")
-                    print(f"[{ts}] Incoming call detected{f' from {caller}' if caller else ''} — accepting...")
+                    log.info("Incoming call detected%s — accepting...",
+                             f" from {caller}" if caller else "")
                     ok = (
                         self._ctrl.accept_video_call()
                         if self._accept_video
                         else self._ctrl.accept_call()
                     )
                     if ok:
-                        print(f"[{ts}] Call accepted.")
+                        log.info("Call accepted.")
                     else:
                         # Race condition: popup may have disappeared between detection
                         # and the click attempt — re-check before declaring failure.
                         time.sleep(1)
                         if not self._ctrl.wait_for_incoming_call(timeout=1):
-                            print(f"[{ts}] Call accepted (popup cleared before click confirmed).")
+                            log.info("Call accepted (popup cleared before click confirmed).")
                         else:
-                            print(f"[{ts}] Accept failed — button not found. Running diagnostic dump...")
+                            log.warning("Accept failed — button not found. Running diagnostic dump...")
                             self._ctrl.dump_incoming_call_info()
                     time.sleep(2)  # debounce: wait before checking again
             except Exception as e:
-                print(f"[auto-accept error] {e}")
-                traceback.print_exc()
+                log.error("auto-accept error: %s", e)
+                log.debug(traceback.format_exc())
                 time.sleep(_ACCEPT_POLL_INTERVAL)
 
     def _get_caller_name(self) -> str:
@@ -289,6 +312,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    _setup_logging(args.output_dir)
 
     host = TeamsMeetingHost(
         accept_video=args.accept_video,
@@ -301,12 +325,12 @@ def main():
             meeting_timeout=args.meeting_timeout,
         )
     except Exception as e:
-        print(f"[ERROR] {e}")
+        log.error("%s", e)
         sys.exit(1)
 
     if not info.is_valid():
-        print("[WARN] Could not extract meeting ID/passcode — check Teams UI manually.")
-        print("       The JSON file was saved with whatever info was available.")
+        log.warning("Could not extract meeting ID/passcode — check Teams UI manually.")
+        log.warning("The JSON file was saved with whatever info was available.")
 
     if args.no_auto_accept:
         return

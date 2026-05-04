@@ -269,7 +269,7 @@ class MtrJoinCallTestRunner:
                   + (f"  title: {title}" if title else ""))
 
             # Step 9: Screenshot
-            time.sleep(5)
+            time.sleep(20)
             ts = datetime.now().strftime("%H%M%S")
             shot_path = str(Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}.png")
             print("  Saving screenshot...")

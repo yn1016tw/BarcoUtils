@@ -227,8 +227,14 @@ class TeamsMeetingHost:
                     if ok:
                         print(f"[{ts}] Call accepted.")
                     else:
-                        print(f"[{ts}] Accept failed — button not found. Running diagnostic dump...")
-                        self._ctrl.dump_incoming_call_info()
+                        # Race condition: popup may have disappeared between detection
+                        # and the click attempt — re-check before declaring failure.
+                        time.sleep(0.5)
+                        if not self._ctrl.wait_for_incoming_call(timeout=1):
+                            print(f"[{ts}] Call accepted (popup cleared before click confirmed).")
+                        else:
+                            print(f"[{ts}] Accept failed — button not found. Running diagnostic dump...")
+                            self._ctrl.dump_incoming_call_info()
                     time.sleep(2)  # debounce: wait before checking again
             except Exception as e:
                 print(f"[auto-accept error] {e}")

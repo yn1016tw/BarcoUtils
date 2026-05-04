@@ -66,8 +66,13 @@ common/ui_in_call.py        — InCallPage page object (active call screen)
 common/ui_more_menu.py      — MoreMenuPage page object (More overlay: Meet now, Call, Share, Whiteboard, Join with an ID, Settings)
 common/ui_settings.py       — SettingsPage page object (Settings dialog: org name, About, Device settings)
 common/ui_device_settings.py — DeviceSettingsPage page object (Android Device Settings: Accessibility, System, About, Admin settings)
+common/ui_norden_call.py    — NordenCallPage page object (dial screen: type name/number, Call button)
+common/ui_join_with_id.py   — JoinWithIdPage page object (Join with an ID dialog: meeting ID, passcode, Join button)
+common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
+testcases/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
+testcases/test_mtr_join_call.py — CLI entry point for the 10-step MTR join-call test (reboot → Teams UI → join by ID → screenshot); supports --meeting-id (manual), --from-host (default JSON path), or --meeting-info-dir DIR (custom JSON path) to load meeting info from teams_meeting_host.py
 testcases/test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
-testcases/test_mtr_camera.py       — CLI entry point for the 8-step MTR camera test (reboot → Teams UI → screenshot)
+testcases/test_mtr_meet_now.py       — CLI entry point for the 8-step MTR camera test (reboot → Teams UI → screenshot)
 tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()
 scripts/                 — Windows helper batch files (ADB key switcher, Duvel device setup)
@@ -111,6 +116,8 @@ common/version.py        — VERSION string (bump manually on releases)
 - `more_menu` → `MoreMenuPage` — lazy property
 - `settings` → `SettingsPage` — lazy property
 - `device_settings` → `DeviceSettingsPage` — lazy property
+- `norden_call` → `NordenCallPage` — lazy property
+- `join_with_id` → `JoinWithIdPage` — lazy property
 
 **Page object base** (`common/ui_base.py`): all page objects inherit `BasePage` — provides `__init__(ui)` and `_tap(candidates: list[dict]) -> bool` (tries each kwarg dict against `tap_element` in order).
 
@@ -139,6 +146,22 @@ common/version.py        — VERSION string (bump manually on releases)
 **DeviceSettingsPage** (`common/ui_device_settings.py`, access via `device.ui.device_settings`):
 - `is_visible()` → bool; `click_exit()` → bool
 - `click_accessibility()` / `click_system()` / `click_about()` / `click_admin_settings()` → bool
+
+**NordenCallPage** (`common/ui_norden_call.py`, access via `device.ui.norden_call`):
+- `is_visible()` → bool
+- `type_name_or_number(text)` → bool; `click_call()` / `click_back()` → bool
+
+**JoinWithIdPage** (`common/ui_join_with_id.py`, access via `device.ui.join_with_id`):
+- `is_visible()` → bool
+- `enter_meeting_id(meeting_id)` / `enter_passcode(passcode)` → bool; `click_join()` / `click_back()` → bool
+
+**TeamsDesktopController** (`common/teams_desktop.py`): pywinauto-based automation for the Windows Teams desktop app. Requires `pip install pywinauto pywin32`.
+- `connect(launch=True, timeout=30)` — attach to running Teams; launch if not running
+- `create_meeting(timeout=20)` → `str | None` — start Meet Now, copy join link, return URL
+- `wait_for_incoming_call(timeout=60)` → `bool` — poll for incoming call toast
+- `accept_call()` / `accept_video_call()` / `decline_call()` → `bool` — interact with incoming call toast
+- `end_call()` → `bool` — hang up active call
+- `mute()` / `toggle_camera()` → `bool` — in-call controls
 
 **Key implementation details:**
 - Camera check uses a two-stage approach: sysfs UVC enumeration (no `v4l2-ctl`) → `v4l2_stream_test` STREAMON + 5s AF/AE warm-up + DQBUF

@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from common.ui_more_menu import MoreMenuPage
     from common.ui_settings import SettingsPage
     from common.ui_device_settings import DeviceSettingsPage
+    from common.ui_norden_call import NordenCallPage
+    from common.ui_join_with_id import JoinWithIdPage
 
 _MTR_PACKAGE = "com.microsoft.skype.teams.ipphone"
 _POLL_INTERVAL = 1  # seconds between element polls
@@ -58,6 +60,8 @@ class MtrUi:
         self._more_menu = None      # lazily created by .more_menu property
         self._settings = None         # lazily created by .settings property
         self._device_settings = None  # lazily created by .device_settings property
+        self._norden_call = None      # lazily created by .norden_call property
+        self._join_with_id = None     # lazily created by .join_with_id property
 
     @property
     def main(self) -> "MainPage":
@@ -106,6 +110,22 @@ class MtrUi:
             from common.ui_device_settings import DeviceSettingsPage
             self._device_settings = DeviceSettingsPage(self)
         return self._device_settings
+
+    @property
+    def norden_call(self) -> "NordenCallPage":
+        """Return the NordenCallPage page object (created on first access)."""
+        if self._norden_call is None:
+            from common.ui_norden_call import NordenCallPage
+            self._norden_call = NordenCallPage(self)
+        return self._norden_call
+
+    @property
+    def join_with_id(self) -> "JoinWithIdPage":
+        """Return the JoinWithIdPage page object (created on first access)."""
+        if self._join_with_id is None:
+            from common.ui_join_with_id import JoinWithIdPage
+            self._join_with_id = JoinWithIdPage(self)
+        return self._join_with_id
 
     # ------------------------------------------------------------------
     # ADB transport (mirrors DuvelDevice pattern)

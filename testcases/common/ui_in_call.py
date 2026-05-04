@@ -29,11 +29,20 @@ class InCallPage(BasePage):
     """Page object for the Teams Rooms active call screen."""
 
     def is_visible(self, timeout: int = 0) -> bool:
-        """Return True if the in-call screen is displayed. Polls until timeout if > 0."""
+        """Return True if the in-call screen is displayed. Polls until timeout if > 0.
+
+        Requires both incall_fragment_root (confirms the call fragment is loaded)
+        and call_end_button / Hang up (confirms controls are ready). Checking only
+        the hang-up button is insufficient — it also appears during the joining/
+        connecting transition before the call is fully entered.
+        """
         return self._poll(
             lambda: bool(
-                self._ui.find_element(resource_id=f"{_PKG}:id/call_end_button")
-                or self._ui.find_element(content_desc="Hang up")
+                self._ui.find_element(resource_id=f"{_PKG}:id/incall_fragment_root")
+                and (
+                    self._ui.find_element(resource_id=f"{_PKG}:id/call_end_button")
+                    or self._ui.find_element(content_desc="Hang up")
+                )
             ),
             timeout,
         )

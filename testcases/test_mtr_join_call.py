@@ -1,22 +1,35 @@
 """
-MTR Camera Test for Duvel
-Reboots the device, waits for boot, then verifies the Teams Rooms camera
+MTR Join-Call Test for Duvel
+Reboots the device, waits for boot, then verifies the Teams Rooms join-by-ID
 flow end-to-end with per-step timing.
 
 Steps:
   1. Reboot device
   2. Wait for boot complete
   3. Wait for Teams Rooms main page to appear
-  4. Tap "Meet now"
-  5. Verify "Invite people" dialog is visible
-  6. Dismiss the dialog
-  7. Save a screenshot
-  8. Hang up the meeting
+  4. Tap "Join with an ID"
+  5. Verify the join-with-ID dialog is visible
+  6. Enter meeting ID (and optional passcode)
+  7. Tap "Join Teams meeting"
+  8. Verify in-call screen is visible
+  9. Save a screenshot
+  10. Hang up the call
 
-Usage:
-    python testcases/test_mtr_camera.py --ip 192.168.1.100
-    python testcases/test_mtr_camera.py --serial 1882000501
-    python testcases/test_mtr_camera.py --ip 192.168.1.100 --output-dir C:/logs --iterations 3
+Meeting info can be provided manually or loaded from teams_meeting_host.py:
+
+  Manual:
+    python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-id 123456789
+    python testcases/test_mtr_join_call.py --serial 1882000501 --meeting-id 123456789 --passcode abc123
+    python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-id 123456789 --iterations 3
+
+  From teams_meeting_host.py (reads meeting_info.json written by the host):
+    python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-info-dir C:/logs
+    python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-info-dir C:/logs --meeting-info-timeout 180
+    python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-info-dir C:/logs --iterations 5
+
+  Default meeting-info path (logs/ next to script):
+    python testcases/test_mtr_join_call.py --serial 1882000501 --from-host
+    python testcases/test_mtr_join_call.py --ip 192.168.1.100 --from-host
 """
 
 import argparse
@@ -29,8 +42,10 @@ from pathlib import Path
 
 from common.duvel_device import DuvelDevice
 from common.version import VERSION
+from teams_meeting_host import MeetingInfo
 
-_INVITE_DIALOG_TIMEOUT = 30   # seconds to wait for invite dialog after tapping Meet now
+_JOIN_PAGE_TIMEOUT = 30   # seconds to wait for join-with-ID dialog after tapping button
+_IN_CALL_TIMEOUT   = 60   # seconds to wait for in-call screen after tapping Join
 
 
 # ---------------------------------------------------------------------------
@@ -44,9 +59,10 @@ class TestResult:
     reboot_start: float = 0.0
     boot_ready: float | None = None
     main_visible: float | None = None
-    meet_now_tapped: float | None = None
-    invite_visible: float | None = None
-    dialog_dismissed: float | None = None
+    join_id_tapped: float | None = None
+    join_page_visible: float | None = None
+    join_tapped: float | None = None
+    in_call_visible: float | None = None
     screenshot_saved: float | None = None
     call_ended: float | None = None
     barco_fw_version: str | None = None
@@ -64,9 +80,9 @@ class TestResult:
             return self.main_visible - self.boot_ready
         return None
 
-    def invite_seconds(self) -> float | None:
-        if self.invite_visible and self.boot_ready:
-            return self.invite_visible - self.boot_ready
+    def in_call_seconds(self) -> float | None:
+        if self.in_call_visible and self.boot_ready:
+            return self.in_call_visible - self.boot_ready
         return None
 
     def total_seconds(self) -> float | None:
@@ -127,9 +143,10 @@ class ResultWriter:
         lines.append(f"  Reboot triggered      : {self._ts(r.reboot_start)}")
         lines.append(f"  Boot ready            : {self._ts(r.boot_ready)}{self._diff(r.boot_ready, r.reboot_start)}{tag(r.boot_ready)}")
         lines.append(f"  Main page visible     : {self._ts(r.main_visible)}{self._diff(r.main_visible, r.boot_ready, 'from boot')}{tag(r.main_visible)}")
-        lines.append(f"  Meet now tapped       : {self._ts(r.meet_now_tapped)}{self._diff(r.meet_now_tapped, r.boot_ready, 'from boot')}{tag(r.meet_now_tapped)}")
-        lines.append(f"  Invite dialog visible : {self._ts(r.invite_visible)}{self._diff(r.invite_visible, r.boot_ready, 'from boot')}{tag(r.invite_visible)}")
-        lines.append(f"  Dialog dismissed      : {self._ts(r.dialog_dismissed)}{self._diff(r.dialog_dismissed, r.boot_ready, 'from boot')}{tag(r.dialog_dismissed)}")
+        lines.append(f"  Join ID tapped        : {self._ts(r.join_id_tapped)}{self._diff(r.join_id_tapped, r.boot_ready, 'from boot')}{tag(r.join_id_tapped)}")
+        lines.append(f"  Join page visible     : {self._ts(r.join_page_visible)}{self._diff(r.join_page_visible, r.boot_ready, 'from boot')}{tag(r.join_page_visible)}")
+        lines.append(f"  Join tapped           : {self._ts(r.join_tapped)}{self._diff(r.join_tapped, r.boot_ready, 'from boot')}{tag(r.join_tapped)}")
+        lines.append(f"  In-call visible       : {self._ts(r.in_call_visible)}{self._diff(r.in_call_visible, r.boot_ready, 'from boot')}{tag(r.in_call_visible)}")
         lines.append(f"  Screenshot saved      : {self._ts(r.screenshot_saved)}{self._diff(r.screenshot_saved, r.boot_ready, 'from boot')}{tag(r.screenshot_saved)}")
         if r.screenshot_path:
             lines.append(f"  Screenshot path       : {r.screenshot_path}")
@@ -154,7 +171,7 @@ class ResultWriter:
             line("Total time    min/avg/max", [r.total_seconds() for r in results]),
             line("Boot time     min/avg/max", [r.boot_seconds() for r in results]),
             line("Main visible  min/avg/max", [r.main_seconds() for r in results]),
-            line("Invite dialog min/avg/max", [r.invite_seconds() for r in results]),
+            line("In-call       min/avg/max", [r.in_call_seconds() for r in results]),
         ]
 
     def _format_lines(self, results: list[TestResult]) -> list[str]:
@@ -178,10 +195,10 @@ class ResultWriter:
 
 
 # ---------------------------------------------------------------------------
-# MtrCameraTestRunner
+# MtrJoinCallTestRunner
 # ---------------------------------------------------------------------------
 
-class MtrCameraTestRunner:
+class MtrJoinCallTestRunner:
     def __init__(self, device: DuvelDevice, args):
         self._device = device
         self._args = args
@@ -212,41 +229,57 @@ class MtrCameraTestRunner:
             r.main_visible = time.time()
             print(f"  Main page visible  (+{r.main_visible - r.boot_ready:.1f}s from boot)")
 
-            # Step 4: Tap Meet now
-            print("  Tapping 'Meet now'...")
-            if not ui.main.click_meet_now():
-                raise RuntimeError("Could not tap 'Meet now' button")
-            r.meet_now_tapped = time.time()
-            print(f"  Meet now tapped  (+{r.meet_now_tapped - r.boot_ready:.1f}s from boot)")
+            # Step 4: Tap "Join with an ID"
+            print("  Tapping 'Join with an ID'...")
+            if not ui.main.click_join_with_an_id():
+                raise RuntimeError("Could not tap 'Join with an ID' button")
+            r.join_id_tapped = time.time()
+            print(f"  Join with an ID tapped  (+{r.join_id_tapped - r.boot_ready:.1f}s from boot)")
 
-            # Step 5: Wait for invite dialog
-            print("  Waiting for 'Invite people' dialog...")
-            if not ui.invite_people.is_visible(timeout=_INVITE_DIALOG_TIMEOUT):
-                raise TimeoutError(f"Invite dialog not visible within {_INVITE_DIALOG_TIMEOUT}s")
-            r.invite_visible = time.time()
-            print(f"  Invite dialog visible  (+{r.invite_visible - r.boot_ready:.1f}s from boot)")
+            # Step 5: Wait for join-with-ID dialog
+            print("  Waiting for join-with-ID dialog...")
+            if not ui.join_with_id.is_visible(timeout=_JOIN_PAGE_TIMEOUT):
+                raise TimeoutError(f"Join-with-ID dialog not visible within {_JOIN_PAGE_TIMEOUT}s")
+            r.join_page_visible = time.time()
+            print(f"  Join dialog visible  (+{r.join_page_visible - r.boot_ready:.1f}s from boot)")
 
-            # Step 6: Dismiss dialog
-            print("  Dismissing invite dialog...")
-            if not ui.invite_people.dismiss():
-                raise RuntimeError("Could not dismiss invite dialog")
-            r.dialog_dismissed = time.time()
-            print(f"  Dialog dismissed  (+{r.dialog_dismissed - r.boot_ready:.1f}s from boot)")
-            if ui.invite_people.is_visible():
-                raise RuntimeError("Invite dialog still visible after dismiss")
+            # Step 6: Enter meeting ID (and optional passcode)
+            print(f"  Entering meeting ID: {self._args.meeting_id}")
+            if not ui.join_with_id.enter_meeting_id(self._args.meeting_id):
+                raise RuntimeError("Could not enter meeting ID")
+            if self._args.passcode:
+                print(f"  Entering passcode...")
+                if not ui.join_with_id.enter_passcode(self._args.passcode):
+                    raise RuntimeError("Could not enter passcode")
 
-            # Step 7: Screenshot
+            # Step 7: Tap Join
+            print("  Tapping 'Join Teams meeting'...")
+            if not ui.join_with_id.click_join():
+                raise RuntimeError("Could not tap 'Join Teams meeting' button")
+            r.join_tapped = time.time()
+            print(f"  Join tapped  (+{r.join_tapped - r.boot_ready:.1f}s from boot)")
+
+            # Step 8: Wait for in-call screen
+            print("  Waiting for in-call screen...")
+            if not ui.in_call.is_visible(timeout=_IN_CALL_TIMEOUT):
+                raise TimeoutError(f"In-call screen not visible within {_IN_CALL_TIMEOUT}s")
+            r.in_call_visible = time.time()
+            title = ui.in_call.get_meeting_title()
+            print(f"  In-call visible  (+{r.in_call_visible - r.boot_ready:.1f}s from boot)"
+                  + (f"  title: {title}" if title else ""))
+
+            # Step 9: Screenshot
             time.sleep(5)
             ts = datetime.now().strftime("%H%M%S")
             shot_path = str(Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}.png")
-            print(f"  Saving screenshot...")
+            print("  Saving screenshot...")
             ui.screenshot(shot_path)
             r.screenshot_saved = time.time()
             r.screenshot_path = shot_path
             print(f"  Screenshot saved  (+{r.screenshot_saved - r.boot_ready:.1f}s from boot)  {shot_path}")
 
-            # Step 8: Hang up
-            print("  Hanging up meeting...")
+            # Step 10: Hang up
+            print("  Hanging up call...")
             ui.end_call()
             r.call_ended = time.time()
             print(f"  Call ended  (+{r.call_ended - r.boot_ready:.1f}s from boot)")
@@ -296,11 +329,25 @@ def _save_debug_screenshot(ui, output_dir: str, round_num: int) -> None:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="MTR camera test: reboot, boot, Teams Rooms main → Meet now → screenshot"
+        description="MTR join-call test: reboot, boot, Teams Rooms main → Join with an ID → in-call screenshot"
     )
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--serial", metavar="SERIAL", help="USB ADB serial number")
-    group.add_argument("--ip", metavar="IP[:PORT]", help="ADB over TCP/IP (default port 5555)")
+    dev_group = parser.add_mutually_exclusive_group(required=True)
+    dev_group.add_argument("--serial", metavar="SERIAL", help="USB ADB serial number")
+    dev_group.add_argument("--ip", metavar="IP[:PORT]", help="ADB over TCP/IP (default port 5555)")
+
+    meet_group = parser.add_mutually_exclusive_group(required=True)
+    meet_group.add_argument("--meeting-id", metavar="ID", help="Teams meeting ID to join")
+    meet_group.add_argument(
+        "--meeting-info-dir", metavar="DIR",
+        help="Directory containing meeting_info.json written by teams_meeting_host.py",
+    )
+    meet_group.add_argument(
+        "--from-host", action="store_true",
+        help="Load meeting info from default path (logs/ next to this script)",
+    )
+
+    parser.add_argument("--passcode", default=None, metavar="CODE", help="Meeting passcode (used with --meeting-id; ignored when loading from host)")
+    parser.add_argument("--meeting-info-timeout", type=int, default=120, metavar="SEC", help="Seconds to wait for meeting_info.json from host (default: 120)")
     parser.add_argument("--iterations", type=int, default=1, metavar="N", help="Number of test rounds (default: 1)")
     parser.add_argument("--output-dir", default=None, metavar="DIR", help="Log output directory (default: logs/ next to this script)")
     parser.add_argument("--boot-timeout", type=int, default=300, metavar="SEC", help="Max seconds to wait for boot (default: 300)")
@@ -315,6 +362,20 @@ def main():
     date_str = datetime.now().strftime("%Y%m%d")
     if args.output_dir is None:
         args.output_dir = str(Path(__file__).parent / "logs" / Path(__file__).stem / date_str)
+
+    # Resolve meeting ID / passcode from host JSON if requested
+    if args.from_host or args.meeting_info_dir:
+        info_dir = None if args.from_host else args.meeting_info_dir
+        print(f"Waiting for meeting info from teams_meeting_host.py"
+              f"{f' ({info_dir})' if info_dir else ''} ...")
+        try:
+            info = MeetingInfo.wait_for_info(info_dir, timeout=args.meeting_info_timeout)
+        except TimeoutError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
+        print(f"Meeting info loaded:\n{info}")
+        args.meeting_id = info.meeting_id
+        args.passcode = info.passcode or None
 
     if args.ip:
         serial = args.ip if ":" in args.ip else f"{args.ip}:5555"
@@ -332,11 +393,14 @@ def main():
         sys.exit(1)
 
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
-    runner = MtrCameraTestRunner(device=device, args=args)
+    runner = MtrJoinCallTestRunner(device=device, args=args)
 
-    print(f"MTR Camera Test  v{VERSION}")
+    print(f"MTR Join-Call Test  v{VERSION}")
     print(f"  Device     : {device.label}")
     print(f"  FW         : {device.barco_fw_version()}")
+    print(f"  Meeting ID : {args.meeting_id}")
+    if args.passcode:
+        print(f"  Passcode   : {args.passcode}")
     print(f"  Iterations : {args.iterations}")
     print(f"  Output dir : {args.output_dir}")
 

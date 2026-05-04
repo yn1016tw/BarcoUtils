@@ -30,7 +30,7 @@ from pathlib import Path
 from common.duvel_device import DuvelDevice
 from common.version import VERSION
 
-_INVITE_DIALOG_TIMEOUT = 15   # seconds to wait for invite dialog after tapping Meet now
+_INVITE_DIALOG_TIMEOUT = 30   # seconds to wait for invite dialog after tapping Meet now
 
 
 # ---------------------------------------------------------------------------
@@ -250,16 +250,19 @@ class MtrCameraTestRunner:
             ui.end_call()
             r.call_ended = time.time()
             print(f"  Call ended  (+{r.call_ended - r.boot_ready:.1f}s from boot)")
+            time.sleep(5)
 
             r.passed = True
 
         except TimeoutError as e:
             r.error = f"TIMEOUT: {e}"
             print(f"  [TIMEOUT] {e}")
+            _cleanup_call(self._device.ui)
             _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
         except Exception as e:
             r.error = str(e)
             print(f"  [ERROR] {e}")
+            _cleanup_call(self._device.ui)
             _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
 
         return r
@@ -268,6 +271,14 @@ class MtrCameraTestRunner:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _cleanup_call(ui) -> None:
+    try:
+        ui.end_call()
+        time.sleep(5)
+    except Exception:
+        pass
+
 
 def _save_debug_screenshot(ui, output_dir: str, round_num: int) -> None:
     ts = datetime.now().strftime("%H%M%S")

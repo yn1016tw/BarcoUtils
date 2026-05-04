@@ -47,6 +47,8 @@ No install step — run directly from the repo root. There are no automated test
 
 **Branch strategy:** work directly on `master` — this is a single-developer utility repo with no CI. Force-push is prohibited; amend only unpushed commits.
 
+**README.md sync:** whenever a code change affects the public API, CLI options, file structure, or behaviour described in `README.md`, update `README.md` in the same commit.
+
 ## Recompiling the ARM64 binary
 
 ```bash

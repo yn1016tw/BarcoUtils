@@ -229,7 +229,7 @@ class TeamsMeetingHost:
                     else:
                         # Race condition: popup may have disappeared between detection
                         # and the click attempt — re-check before declaring failure.
-                        time.sleep(0.5)
+                        time.sleep(1)
                         if not self._ctrl.wait_for_incoming_call(timeout=1):
                             print(f"[{ts}] Call accepted (popup cleared before click confirmed).")
                         else:

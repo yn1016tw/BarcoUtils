@@ -250,6 +250,7 @@ class MtrCameraTestRunner:
             ui.end_call()
             r.call_ended = time.time()
             print(f"  Call ended  (+{r.call_ended - r.boot_ready:.1f}s from boot)")
+            time.sleep(5)
 
             r.passed = True
 

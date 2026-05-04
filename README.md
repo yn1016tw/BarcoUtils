@@ -3,6 +3,17 @@
 Standalone test utilities for Barco Duvel (ClickShare base unit).  
 No dependency on TEnTo or the Wave4 BSP — only `adb` in PATH and Python 3.10+.
 
+UI references are based on Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.071`.
+
+---
+
+## Requirements
+
+- Python 3.10+
+- `adb` in PATH
+- Duvel device accessible via USB or TCP/IP
+- Windows Teams desktop (for `teams_meeting_host.py`): `pip install pywinauto pywin32`
+
 ---
 
 ## Repository Structure
@@ -11,23 +22,31 @@ No dependency on TEnTo or the Wave4 BSP — only `adb` in PATH and Python 3.10+.
 BarcoUtils/
 ├── testcases/
 │   ├── common/
-│   │   ├── duvel_device.py       # DuvelDevice — ADB wrapper (reusable)
-│   │   ├── ui_mtr.py             # MtrUi — ADB-based UI controller for MTR / Teams
-│   │   ├── ui_base.py            # BasePage — shared base class for all page objects
-│   │   ├── ui_main.py            # MainPage — Teams Rooms home screen
-│   │   ├── ui_invite_people.py   # InvitePeoplePage — "Invite people to join you" dialog
-│   │   ├── ui_in_call.py         # InCallPage — active call screen
-│   │   └── version.py            # VERSION string
-│   ├── test_peripheral.py        # Peripheral boot-time test (camera / mic / speaker)
-│   └── test_mtr_camera.py        # MTR camera test (reboot → Teams UI → screenshot)
+│   │   ├── duvel_device.py        # DuvelDevice — ADB wrapper (reusable)
+│   │   ├── ui_mtr.py              # MtrUi — ADB-based UI controller for MTR / Teams
+│   │   ├── ui_base.py             # BasePage — shared base class for all page objects
+│   │   ├── ui_main.py             # MainPage — Teams Rooms home screen
+│   │   ├── ui_invite_people.py    # InvitePeoplePage — "Invite people to join you" dialog
+│   │   ├── ui_in_call.py          # InCallPage — active call screen
+│   │   ├── ui_more_menu.py        # MoreMenuPage — More overlay menu
+│   │   ├── ui_settings.py         # SettingsPage — Settings dialog
+│   │   ├── ui_device_settings.py  # DeviceSettingsPage — Android Device Settings
+│   │   ├── ui_norden_call.py      # NordenCallPage — dial screen
+│   │   ├── ui_join_with_id.py     # JoinWithIdPage — Join with an ID dialog
+│   │   ├── teams_desktop.py       # TeamsDesktopController — Windows Teams desktop automation
+│   │   └── version.py             # VERSION string
+│   ├── test_peripheral.py         # Peripheral boot-time test (camera / mic / speaker)
+│   ├── test_mtr_meet_now.py       # MTR camera test (reboot → Teams UI → Meet now → screenshot)
+│   ├── test_mtr_join_call.py      # MTR join-call test (reboot → join by ID → in-call screenshot)
+│   └── teams_meeting_host.py      # Windows host: create Meet Now meeting, auto-admit from lobby
 ├── data/
-│   └── barco_tone_2s.wav         # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
+│   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
 ├── scripts/
-│   ├── adb_key_switch.bat        # Switch active ADB key between Duvel / Fruitesse
-│   └── duvel_setup.bat           # Interactive Duvel device setup helper
+│   ├── adb_key_switch.bat         # Switch active ADB key between Duvel / Fruitesse
+│   └── duvel_setup.bat            # Interactive Duvel device setup helper
 └── tools/
-    ├── v4l2_stream_test.c        # Minimal V4L2 streaming test (source)
-    └── v4l2_stream_test          # Precompiled static ARM64 binary (Android 26+)
+    ├── v4l2_stream_test.c         # Minimal V4L2 streaming test (source)
+    └── v4l2_stream_test           # Precompiled static ARM64 binary (Android 26+)
 ```
 
 ---
@@ -83,49 +102,24 @@ python testcases/test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --out
 
 ### Output
 
-Console header:
-```
-Peripheral Test  v1.9.1
-  Device     : 10.102.94.110:5555
-  FW         : 04.03.00.master-1649
-  Iterations : 3
-  Tests      : camera speaker mic
-  Output dir : logs
-  [ADB] Connected to 10.102.94.110:5555
-  [ADB] v4l2_stream_test -> /data/local/tmp/v4l2_stream_test
-  [ADB] barco_tone_2s.wav -> /data/local/tmp/barco_tone_2s.wav
-```
-
-Console (per round):
 ```
 [Round 1/3] PASS
   Reboot triggered    : 14:30:00.123
   Boot ready          : 14:30:44.901  (+44.8s)  PASS
   Camera working      : 14:31:05.210  (+20.3s from boot)  PASS  [/dev/video0  Rally Camera]
-  Frame saved         : logs/frames/round01.jpg
+  Frame saved         : logs/files/round01.jpg
   Audio card ready    : 14:31:06.400  (+21.5s from boot)  PASS  [RallyCamera  Rally Camera]
   Speaker working     : 14:31:08.612  (+23.7s from boot)  PASS
   Mic working         : 14:31:11.003  (+26.1s from boot)  PASS  RMS=412
   Total (reboot->mic) : 70.9s
 ```
 
-Summary:
-```
-=== Summary (3/3 PASS) ===
-  Total time    min/avg/max: 68.1s / 70.9s / 73.4s
-  Boot time     min/avg/max: 43.2s / 44.8s / 46.1s
-  Camera ready  min/avg/max: 19.5s / 20.3s / 21.0s
-  Audio card    min/avg/max: 20.8s / 21.5s / 22.3s
-  Speaker ready min/avg/max: 22.1s / 23.7s / 25.0s
-  Mic ready     min/avg/max: 24.9s / 26.1s / 27.5s
-```
-
-Log file: `logs/test_peripheral/YYYYMMDD/YYYYMMDD.log` (appended on each run)  
-Frames: `logs/test_peripheral/YYYYMMDD/files/round01_HHMMSS.jpg`, …
+Log file: `<output-dir>/YYYYMMDD.log`  
+Frames: `<output-dir>/files/round01_HHMMSS.jpg`, …
 
 ---
 
-## testcases/test_mtr_camera.py
+## testcases/test_mtr_meet_now.py
 
 Verifies the Teams Rooms camera flow end-to-end after a full reboot, with per-step timestamps.
 
@@ -145,9 +139,9 @@ Verifies the Teams Rooms camera flow end-to-end after a full reboot, with per-st
 ### Usage
 
 ```bash
-python testcases/test_mtr_camera.py --ip 192.168.1.100
-python testcases/test_mtr_camera.py --serial 1882000501 --iterations 3
-python testcases/test_mtr_camera.py --ip 192.168.1.100 --output-dir C:/logs --fail-fast
+python testcases/test_mtr_meet_now.py --ip 192.168.1.100
+python testcases/test_mtr_meet_now.py --serial 1882000501 --iterations 3
+python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --output-dir C:/logs --fail-fast
 ```
 
 ### CLI options
@@ -173,19 +167,162 @@ python testcases/test_mtr_camera.py --ip 192.168.1.100 --output-dir C:/logs --fa
   Invite dialog visible : 14:30:53.900  (+9.0s from boot)  PASS
   Dialog dismissed      : 14:30:54.300  (+9.4s from boot)  PASS
   Screenshot saved      : 14:30:55.100  (+10.2s from boot)  PASS
-  Screenshot path       : logs/test_mtr_camera/20260429/files/round01_143054.png
+  Screenshot path       : logs/files/round01_143054.png
   Call ended            : 14:30:55.600  (+10.7s from boot)  PASS
   Total (reboot->shot)  : 55.0s
 ```
 
-Log file: `logs/test_mtr_camera/YYYYMMDD/YYYYMMDD.log` (appended on each run)  
-Screenshots: `logs/test_mtr_camera/YYYYMMDD/files/round01_HHMMSS.png`, …
+Log file: `<output-dir>/YYYYMMDD.log`  
+Screenshots: `<output-dir>/files/round01_HHMMSS.png`, …
+
+---
+
+## testcases/test_mtr_join_call.py
+
+Verifies the Teams Rooms join-by-ID flow end-to-end after a full reboot.  
+Designed to run alongside `teams_meeting_host.py` on the Windows PC.
+
+### Test procedure
+
+| Step | Action | Pass condition |
+|------|--------|----------------|
+| 1 | Reboot device | Command accepted |
+| 2 | Wait for boot | `sys.boot_completed` + `bootanim` + `pm list packages` |
+| 3 | Wait for main page | Teams Rooms home screen visible |
+| 4 | Tap "Join with an ID" | Button found and tapped |
+| 5 | Join dialog visible | Join-with-ID form visible |
+| 6 | Enter meeting ID + passcode | Fields filled and confirmed |
+| 7 | Tap "Join Teams meeting" | Join button tapped |
+| 8 | In-call screen visible | Active call screen detected |
+| 9 | Screenshot saved | PNG written to `files/` |
+| 10 | Hang up | End call button tapped |
+
+### Usage
+
+```bash
+# Manual meeting ID
+python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-id 123456789
+python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-id 123456789 --passcode abc123
+
+# Load meeting info from teams_meeting_host.py (default path)
+python testcases/test_mtr_join_call.py --ip 192.168.1.100 --from-host
+
+# Load from custom directory
+python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-info-dir C:/logs
+
+# Stress test
+python testcases/test_mtr_join_call.py --ip 192.168.1.100 --from-host --iterations 5
+```
+
+### CLI options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--serial SERIAL` | — | USB ADB serial number |
+| `--ip IP[:PORT]` | — | ADB over TCP/IP (default port 5555) |
+| `--meeting-id ID` | — | Meeting ID (manual, mutually exclusive with `--from-host` / `--meeting-info-dir`) |
+| `--passcode CODE` | — | Meeting passcode (optional, used with `--meeting-id`) |
+| `--from-host` | — | Load meeting info from default JSON path written by `teams_meeting_host.py` |
+| `--meeting-info-dir DIR` | — | Load meeting info from `DIR/meeting_info.json` |
+| `--meeting-info-timeout SEC` | 120 | Seconds to wait for `meeting_info.json` to appear |
+| `--iterations N` | 1 | Number of test rounds |
+| `--output-dir DIR` | `logs` | Directory for log file and screenshots |
+| `--boot-timeout SEC` | 300 | Max seconds to wait for boot |
+| `--device-timeout SEC` | 120 | Max seconds to wait for Teams Rooms UI |
+| `--fail-fast` | off | Stop after the first failed round |
+
+---
+
+## testcases/teams_meeting_host.py
+
+Windows-side host script. Creates a Meet Now meeting in Teams desktop, writes meeting info to JSON,  
+and automatically admits MTR devices from the lobby.
+
+Requires `pip install pywinauto pywin32`.
+
+### Usage
+
+```bash
+# Start meeting and auto-admit (default)
+python testcases/teams_meeting_host.py
+
+# Custom output directory for meeting_info.json and log file
+python testcases/teams_meeting_host.py --output-dir C:/logs
+
+# Create meeting only, do not accept calls
+python testcases/teams_meeting_host.py --no-auto-accept
+
+# Accept video calls instead of audio-only
+python testcases/teams_meeting_host.py --accept-video
+```
+
+### CLI options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--output-dir DIR` | `logs/` next to script | Directory for `meeting_info.json` and `YYYYMMDD_meeting_host.log` |
+| `--accept-video` | off | Accept calls with video (default: audio only) |
+| `--no-auto-accept` | off | Create meeting and print info, then exit |
+| `--connect-timeout SEC` | 30 | Seconds to wait for Teams to start |
+| `--meeting-timeout SEC` | 30 | Seconds to wait for meeting to be created |
+
+### meeting_info.json
+
+Written to `<output-dir>/meeting_info.json` once the meeting is created.  
+`test_mtr_join_call.py` reads this file via `--from-host` or `--meeting-info-dir`.
+
+```json
+{
+  "meeting_id": "123 456 789 012",
+  "passcode": "abcXYZ",
+  "join_url": "https://teams.microsoft.com/l/meetup-join/...",
+  "created_at": "2026-05-04 14:30:00",
+  "info_file": "C:/logs/meeting_info.json"
+}
+```
+
+### Typical two-machine workflow
+
+**PC (Windows)** — run first:
+```bash
+python testcases/teams_meeting_host.py --output-dir C:/logs
+```
+
+**MTR device** — run once the host is ready:
+```bash
+python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-info-dir C:/logs
+```
+
+The join-call test polls for `meeting_info.json` (up to `--meeting-info-timeout` seconds),  
+so both processes can be started in any order.
+
+---
+
+## common/teams_desktop.py — TeamsDesktopController
+
+pywinauto-based automation for the Windows Teams desktop app.
+
+```python
+from common.teams_desktop import TeamsDesktopController
+
+ctrl = TeamsDesktopController()
+ctrl.connect()                          # attach to Teams; launch if not running
+info = ctrl.create_meeting()            # start Meet Now; returns dict(join_url, meeting_id, passcode)
+ctrl.wait_for_incoming_call(timeout=60)
+ctrl.accept_call()                      # Admit from lobby or accept incoming audio call
+ctrl.end_call()
+```
+
+**Lobby handling**: "Waiting in the lobby" admit/deny buttons are rendered in WebView2 and not  
+accessible via UIA. `accept_call()` detects the lobby popup by its Group element bounding rect  
+and clicks at calibrated fractional coordinates.
 
 ---
 
 ## common/ui_mtr.py — MtrUi
 
-ADB-based UI controller for Microsoft Teams Rooms. Wraps raw ADB input, UI hierarchy queries, and app lifecycle. Page objects are accessed via lazy properties.
+ADB-based UI controller for Microsoft Teams Rooms. Wraps raw ADB input, UI hierarchy queries,  
+and app lifecycle. Page objects are accessed via lazy properties.
 
 ```python
 from common.ui_mtr import MtrUi
@@ -198,8 +335,13 @@ ui.tap(*el["center"])
 # Page objects
 ui.main.is_visible()
 ui.main.click_meet_now()
+ui.main.click_join_with_an_id()
 ui.invite_people.is_visible()
 ui.invite_people.dismiss()
+ui.join_with_id.enter_meeting_id("123456789")
+ui.join_with_id.enter_passcode("abc123")
+ui.join_with_id.click_join()
+ui.in_call.is_visible()
 ui.in_call.hang_up()
 ```
 
@@ -212,8 +354,13 @@ ui.in_call.hang_up()
 | `ui.main` | `MainPage` | `ui_main.py` | Teams Rooms home screen |
 | `ui.invite_people` | `InvitePeoplePage` | `ui_invite_people.py` | "Invite people to join you" dialog |
 | `ui.in_call` | `InCallPage` | `ui_in_call.py` | Active call screen |
+| `ui.more_menu` | `MoreMenuPage` | `ui_more_menu.py` | More overlay menu |
+| `ui.settings` | `SettingsPage` | `ui_settings.py` | Settings dialog |
+| `ui.device_settings` | `DeviceSettingsPage` | `ui_device_settings.py` | Android Device Settings |
+| `ui.norden_call` | `NordenCallPage` | `ui_norden_call.py` | Dial screen |
+| `ui.join_with_id` | `JoinWithIdPage` | `ui_join_with_id.py` | Join with an ID dialog |
 
-All page objects inherit `BasePage` (`ui_base.py`) which provides `__init__(ui)` and `_tap(candidates)`. Element matching tries `resource_id` first, `content_desc` second.
+All page objects inherit `BasePage` (`ui_base.py`) which provides `__init__(ui)` and `_tap(candidates)`.
 
 ---
 
@@ -225,8 +372,8 @@ Reusable `DuvelDevice` class. All ADB interaction lives here — import it in ot
 from common.duvel_device import DuvelDevice
 
 device = DuvelDevice(serial="192.168.1.100:5555", is_ip=True)
-device.connect()                                    # adb connect + push test binary + push tone WAV
-device.barco_fw_version()                                 # ro.barco.build.version
+device.connect()                    # adb connect + push v4l2_stream_test + push tone WAV
+device.barco_fw_version()           # ro.barco.build.version
 device.reboot()
 device.wait_for_boot(timeout=300)
 dev, name = device.wait_for_camera_working(120, frame_save_path="frame.jpg")
@@ -253,21 +400,16 @@ The binary is pushed to `/data/local/tmp/v4l2_stream_test` once at `connect()`.
 `/proc/asound/cards` is readable without root and confirms the kernel has enumerated the audio device.  
 USB-Audio cards (external camera mic/speaker) are preferred over the internal MT8195 SOC audio.
 
-`tinyplay` and `tinycap` require access to `/dev/snd/pcm*` which is owned by `system:audio`. Since `adb shell` runs as the `shell` user (not in the `audio` group), both commands are prefixed with `su root`.
+`tinyplay` and `tinycap` require access to `/dev/snd/pcm*` which is owned by `system:audio`.  
+Since `adb shell` runs as `shell` (not in the `audio` group), both commands are prefixed with `su root`.
 
-### Speaker test
-
-`test_speaker(duration)` plays `data/barco_tone_2s.wav` (pre-pushed at `connect()`) via `tinyplay`. Returns `True` if exit 0.
-
-### Mic test
-
-`test_mic(duration, rms_threshold)` records via `tinycap` and measures RMS. Returns `(passed, rms)`.
+### Mic RMS reference
 
 | RMS range | Meaning |
 |-----------|---------|
 | < 50 | Near silence — hardware not responding |
 | 50–100 | Below default threshold |
-| > 100 (default threshold) | Ambient noise confirmed |
+| > 100 (default) | Ambient noise confirmed — PASS |
 
 ---
 
@@ -287,15 +429,3 @@ To recompile:
 NDK=$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/bin
 $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_stream_test.c
 ```
-
----
-
-## Requirements
-
-- Python 3.10+
-- `adb` in PATH
-- Duvel device accessible via USB or TCP/IP
-
----
-
-See [CHANGELOG.txt](CHANGELOG.txt) for version history.

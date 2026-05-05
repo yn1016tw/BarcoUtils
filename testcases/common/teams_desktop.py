@@ -506,14 +506,27 @@ class TeamsDesktopController:
             return False
 
         call_win.set_focus()
-        time.sleep(0.3)
+        time.sleep(0.5)
 
-        rect = group.rectangle()
         x_frac = self._LOBBY_ADMIT_X_FRAC if action == "admit" else self._LOBBY_DENY_X_FRAC
-        # coords are relative to group's own top-left corner
-        rel_x = int(rect.width() * x_frac)
-        rel_y = int(rect.height() * self._LOBBY_BTN_Y_FRAC)
-        group.click_input(coords=(rel_x, rel_y))
+
+        def _do_click(grp) -> None:
+            rect = grp.rectangle()
+            rel_x = int(rect.width() * x_frac)
+            rel_y = int(rect.height() * self._LOBBY_BTN_Y_FRAC)
+            grp.click_input(coords=(rel_x, rel_y))
+
+        try:
+            _do_click(group)
+        except Exception:
+            # SetCursorPos can fail transiently (window animation / focus change).
+            # Re-read the lobby element and retry once after a short pause.
+            time.sleep(0.5)
+            group = self._lobby_group()
+            if group is None:
+                return True  # popup already gone — admitted concurrently
+            _do_click(group)
+
         return True
 
     def _incoming_call_window(self):

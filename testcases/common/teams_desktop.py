@@ -149,30 +149,23 @@ class TeamsDesktopController:
         """
         self._ensure_connected()
 
-        def _focus(win) -> None:
-            try:
-                win.set_focus()
-            except Exception:
-                pass
-
         # Step 1 — go to Calendar
         main = self._main_window()
-        _focus(main)
+        main.set_focus()
         time.sleep(0.5)
         self._click(main, "Calendar (Ctrl+7)", ctrl_type="Button")
         time.sleep(2)
 
         # Step 2 — click Meet now
         main = self._main_window()
-        _focus(main)
+        main.set_focus()
         time.sleep(0.3)
         self._click(main, "Meet now", ctrl_type="Button")
         time.sleep(2)
 
         # Step 3 — grab link before entering meeting
         _clear_clipboard()
-        main = self._main_window()
-        _focus(main)
+        main.set_focus()
         self._click(main, "Get a link to share", ctrl_type="Button")
         time.sleep(1.5)
         self._click(main, "Copy link", ctrl_type="Button")
@@ -182,8 +175,7 @@ class TeamsDesktopController:
             join_url = ""
 
         # Step 4 — start meeting
-        main = self._main_window()
-        _focus(main)
+        main.set_focus()
         self._click(main, "Start meeting", ctrl_type="Button")
         time.sleep(4)
 
@@ -407,41 +399,32 @@ class TeamsDesktopController:
         raise RuntimeError("Could not find main Teams window")
 
     def _find_main_window(self):
-        """Try to locate the main Teams nav window. Returns window or None.
-
-        Uses title-based Application.connect() (reliable regardless of process name)
-        and immediately materialises the lazy WindowSpecification with wrapper_object()
-        so the returned handle stays valid even when Teams changes the window title
-        while navigating between views.
-        """
-        _patterns = [
+        """Try to locate the main Teams nav window. Returns window or None."""
+        _non_call_patterns = [
             r"Calendar \|.*Microsoft Teams",
             r"Chat \|.*Microsoft Teams",
             r"Activity \|.*Microsoft Teams",
-            r".*\|.*Microsoft Teams",
+            r".*\|.*Microsoft Teams",   # any page | Microsoft Teams
         ]
-        for pattern in _patterns:
+        for pattern in _non_call_patterns:
             try:
                 app = Application(backend="uia").connect(title_re=pattern, timeout=3)
-                # wrapper_object() resolves the lazy spec to an actual COM wrapper now,
-                # so title changes later do not invalidate the returned object.
-                return app.window(title_re=pattern).wrapper_object()
+                return app.window(title_re=pattern)
             except Exception:
                 pass
-        # Fallback: connect by process name (covers hidden/tray windows)
-        for proc in ("ms-teams.exe", "Teams.exe", "msteams.exe"):
-            for visible_only in (True, False):
-                try:
-                    app = Application(backend="uia").connect(path=proc, timeout=3)
-                    for w in app.windows(visible_only=visible_only):
-                        try:
-                            t = w.window_text() or ""
-                            if "Microsoft Teams" in t and "Microsoft Teams meeting" not in t:
-                                return w
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+        # Fallback: connect by process (covers hidden windows) and pick first non-call window
+        for visible_only in (True, False):
+            try:
+                app = Application(backend="uia").connect(path="ms-teams.exe", timeout=3)
+                for w in app.windows(visible_only=visible_only):
+                    try:
+                        t = w.window_text() or ""
+                        if "Microsoft Teams" in t and "Microsoft Teams meeting" not in t:
+                            return w
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         return None
 
     def _call_window(self):

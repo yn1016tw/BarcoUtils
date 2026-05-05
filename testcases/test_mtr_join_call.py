@@ -45,7 +45,7 @@ from common.version import VERSION
 from common.teams_meeting_host import MeetingInfo
 
 _JOIN_PAGE_TIMEOUT = 30   # seconds to wait for join-with-ID dialog after tapping button
-_IN_CALL_TIMEOUT   = 90   # seconds to wait for in-call screen after tapping Join
+_IN_CALL_TIMEOUT   = 60   # seconds to wait for in-call screen after tapping Join
 
 
 # ---------------------------------------------------------------------------

@@ -165,6 +165,7 @@ class TeamsDesktopController:
 
         # Step 3 — grab link before entering meeting
         _clear_clipboard()
+        main = self._main_window()
         main.set_focus()
         self._click(main, "Get a link to share", ctrl_type="Button")
         time.sleep(1.5)
@@ -175,6 +176,7 @@ class TeamsDesktopController:
             join_url = ""
 
         # Step 4 — start meeting
+        main = self._main_window()
         main.set_focus()
         self._click(main, "Start meeting", ctrl_type="Button")
         time.sleep(4)

@@ -149,16 +149,22 @@ class TeamsDesktopController:
         """
         self._ensure_connected()
 
+        def _focus(win) -> None:
+            try:
+                win.set_focus()
+            except Exception:
+                pass
+
         # Step 1 — go to Calendar
         main = self._main_window()
-        main.set_focus()
+        _focus(main)
         time.sleep(0.5)
         self._click(main, "Calendar (Ctrl+7)", ctrl_type="Button")
         time.sleep(2)
 
         # Step 2 — click Meet now
         main = self._main_window()
-        main.set_focus()
+        _focus(main)
         time.sleep(0.3)
         self._click(main, "Meet now", ctrl_type="Button")
         time.sleep(2)
@@ -166,7 +172,7 @@ class TeamsDesktopController:
         # Step 3 — grab link before entering meeting
         _clear_clipboard()
         main = self._main_window()
-        main.set_focus()
+        _focus(main)
         self._click(main, "Get a link to share", ctrl_type="Button")
         time.sleep(1.5)
         self._click(main, "Copy link", ctrl_type="Button")
@@ -177,7 +183,7 @@ class TeamsDesktopController:
 
         # Step 4 — start meeting
         main = self._main_window()
-        main.set_focus()
+        _focus(main)
         self._click(main, "Start meeting", ctrl_type="Button")
         time.sleep(4)
 
@@ -401,32 +407,44 @@ class TeamsDesktopController:
         raise RuntimeError("Could not find main Teams window")
 
     def _find_main_window(self):
-        """Try to locate the main Teams nav window. Returns window or None."""
-        _non_call_patterns = [
-            r"Calendar \|.*Microsoft Teams",
-            r"Chat \|.*Microsoft Teams",
-            r"Activity \|.*Microsoft Teams",
-            r".*\|.*Microsoft Teams",   # any page | Microsoft Teams
-        ]
-        for pattern in _non_call_patterns:
+        """Try to locate the main Teams nav window. Returns window or None.
+
+        Connects by process path to get actual window wrappers (never lazy specs),
+        so the returned handle stays valid even when Teams navigates between views
+        and changes the window title. Prefers the active foreground window.
+        """
+        for proc in ("ms-teams.exe", "Teams.exe"):
             try:
-                app = Application(backend="uia").connect(title_re=pattern, timeout=3)
-                return app.window(title_re=pattern)
+                app = Application(backend="uia").connect(path=proc, timeout=3)
             except Exception:
-                pass
-        # Fallback: connect by process (covers hidden windows) and pick first non-call window
-        for visible_only in (True, False):
-            try:
-                app = Application(backend="uia").connect(path="ms-teams.exe", timeout=3)
+                continue
+
+            # Collect non-call Teams windows; check visible first, then hidden
+            candidates: list = []
+            for visible_only in (True, False):
                 for w in app.windows(visible_only=visible_only):
                     try:
                         t = w.window_text() or ""
                         if "Microsoft Teams" in t and "Microsoft Teams meeting" not in t:
-                            return w
+                            candidates.append(w)
                     except Exception:
                         pass
-            except Exception:
-                pass
+                if candidates:
+                    break  # prefer visible; only include hidden if nothing visible found
+
+            if not candidates:
+                continue
+
+            # Return the foreground window if it is a Teams main window
+            for w in candidates:
+                try:
+                    if w.is_active():
+                        return w
+                except Exception:
+                    pass
+
+            return candidates[0]
+
         return None
 
     def _call_window(self):

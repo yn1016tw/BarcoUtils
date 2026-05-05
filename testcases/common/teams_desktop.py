@@ -409,42 +409,39 @@ class TeamsDesktopController:
     def _find_main_window(self):
         """Try to locate the main Teams nav window. Returns window or None.
 
-        Connects by process path to get actual window wrappers (never lazy specs),
-        so the returned handle stays valid even when Teams navigates between views
-        and changes the window title. Prefers the active foreground window.
+        Uses title-based Application.connect() (reliable regardless of process name)
+        and immediately materialises the lazy WindowSpecification with wrapper_object()
+        so the returned handle stays valid even when Teams changes the window title
+        while navigating between views.
         """
-        for proc in ("ms-teams.exe", "Teams.exe"):
+        _patterns = [
+            r"Calendar \|.*Microsoft Teams",
+            r"Chat \|.*Microsoft Teams",
+            r"Activity \|.*Microsoft Teams",
+            r".*\|.*Microsoft Teams",
+        ]
+        for pattern in _patterns:
             try:
-                app = Application(backend="uia").connect(path=proc, timeout=3)
+                app = Application(backend="uia").connect(title_re=pattern, timeout=3)
+                # wrapper_object() resolves the lazy spec to an actual COM wrapper now,
+                # so title changes later do not invalidate the returned object.
+                return app.window(title_re=pattern).wrapper_object()
             except Exception:
-                continue
-
-            # Collect non-call Teams windows; check visible first, then hidden
-            candidates: list = []
+                pass
+        # Fallback: connect by process name (covers hidden/tray windows)
+        for proc in ("ms-teams.exe", "Teams.exe", "msteams.exe"):
             for visible_only in (True, False):
-                for w in app.windows(visible_only=visible_only):
-                    try:
-                        t = w.window_text() or ""
-                        if "Microsoft Teams" in t and "Microsoft Teams meeting" not in t:
-                            candidates.append(w)
-                    except Exception:
-                        pass
-                if candidates:
-                    break  # prefer visible; only include hidden if nothing visible found
-
-            if not candidates:
-                continue
-
-            # Return the foreground window if it is a Teams main window
-            for w in candidates:
                 try:
-                    if w.is_active():
-                        return w
+                    app = Application(backend="uia").connect(path=proc, timeout=3)
+                    for w in app.windows(visible_only=visible_only):
+                        try:
+                            t = w.window_text() or ""
+                            if "Microsoft Teams" in t and "Microsoft Teams meeting" not in t:
+                                return w
+                        except Exception:
+                            pass
                 except Exception:
                     pass
-
-            return candidates[0]
-
         return None
 
     def _call_window(self):

@@ -203,23 +203,30 @@ class MtrJoinCallTestRunner:
         self._device = device
         self._args = args
 
-    def run_round(self, round_num: int, total_rounds: int) -> TestResult:
+    def run_round(self, round_num: int, total_rounds: int, do_reboot: bool = True) -> TestResult:
         r = TestResult(round_num=round_num, total_rounds=total_rounds)
         print(f"\n{'-' * 60}")
-        print(f"Round {round_num}/{total_rounds} - rebooting device...")
+        if do_reboot:
+            print(f"Round {round_num}/{total_rounds} - rebooting device...")
+        else:
+            print(f"Round {round_num}/{total_rounds} - skipping reboot")
 
         try:
-            # Step 1: Reboot
             r.reboot_start = time.time()
-            self._device.reboot()
 
-            # Step 2: Wait for boot
-            print("  Waiting for boot...")
-            self._device.wait_for_boot(self._args.boot_timeout)
-            r.boot_ready = time.time()
+            if do_reboot:
+                # Step 1: Reboot
+                self._device.reboot()
+
+                # Step 2: Wait for boot
+                print("  Waiting for boot...")
+                self._device.wait_for_boot(self._args.boot_timeout)
+                r.boot_ready = time.time()
+                print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
+            else:
+                r.boot_ready = r.reboot_start
+
             r.barco_fw_version = self._device.barco_fw_version()
-            print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
-
             ui = self._device.ui
 
             # Step 3: Wait for main page
@@ -405,14 +412,16 @@ def main():
     print(f"  Output dir : {args.output_dir}")
 
     results = []
+    do_reboot = True
     try:
         for i in range(1, args.iterations + 1):
-            result = runner.run_round(i, args.iterations)
+            result = runner.run_round(i, args.iterations, do_reboot=do_reboot)
             results.append(result)
             writer.print_round(result)
             if args.fail_fast and not result.passed:
                 print("\n[Stopped: --fail-fast]")
                 break
+            do_reboot = not result.passed
     except KeyboardInterrupt:
         print("\n[Interrupted by user]")
     finally:

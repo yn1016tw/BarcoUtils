@@ -151,21 +151,34 @@ class TeamsDesktopController:
 
         # Step 1 — go to Calendar
         main = self._main_window()
-        main.set_focus()
+        try:
+            main.set_focus()
+        except Exception:
+            pass
         time.sleep(0.5)
-        self._click(main, "Calendar (Ctrl+7)", ctrl_type="Button")
+        # "Calendar (Ctrl+7)" in older Teams; newer Teams may label it "Calendar"
+        if not self._click(main, "Calendar (Ctrl+7)", ctrl_type="Button"):
+            self._click(main, "Calendar", ctrl_type="Button")
         time.sleep(2)
 
         # Step 2 — click Meet now
         main = self._main_window()
-        main.set_focus()
+        try:
+            main.set_focus()
+        except Exception:
+            pass
         time.sleep(0.3)
         self._click(main, "Meet now", ctrl_type="Button")
         time.sleep(2)
 
         # Step 3 — grab link before entering meeting
+        # Refresh main: Teams navigated to a new page after "Meet now", window title changed
+        main = self._main_window()
         _clear_clipboard()
-        main.set_focus()
+        try:
+            main.set_focus()
+        except Exception:
+            pass
         self._click(main, "Get a link to share", ctrl_type="Button")
         time.sleep(1.5)
         self._click(main, "Copy link", ctrl_type="Button")
@@ -175,7 +188,12 @@ class TeamsDesktopController:
             join_url = ""
 
         # Step 4 — start meeting
-        main.set_focus()
+        # Refresh main again: Teams may have updated the page title
+        main = self._main_window()
+        try:
+            main.set_focus()
+        except Exception:
+            pass
         self._click(main, "Start meeting", ctrl_type="Button")
         time.sleep(4)
 
@@ -409,14 +427,17 @@ class TeamsDesktopController:
         for pattern in _non_call_patterns:
             try:
                 app = Application(backend="uia").connect(title_re=pattern, timeout=3)
+                # Return the lazy WindowSpecification (not wrapper_object()) so that
+                # child_window() calls can traverse the WebView2 accessibility tree via
+                # the Application's process context.
                 return app.window(title_re=pattern)
             except Exception:
                 pass
-        # Fallback: connect by process (covers hidden windows) and pick first non-call window
-        for visible_only in (True, False):
+        # Fallback: try known Teams process names (covers hidden / minimised windows)
+        for proc in ("ms-teams.exe", "Teams.exe", "msteams.exe"):
             try:
-                app = Application(backend="uia").connect(path="ms-teams.exe", timeout=3)
-                for w in app.windows(visible_only=visible_only):
+                app = Application(backend="uia").connect(path=proc, timeout=3)
+                for w in app.windows(visible_only=False):
                     try:
                         t = w.window_text() or ""
                         if "Microsoft Teams" in t and "Microsoft Teams meeting" not in t:

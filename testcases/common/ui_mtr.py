@@ -32,6 +32,20 @@ if TYPE_CHECKING:
     from common.ui_device_settings import DeviceSettingsPage
     from common.ui_norden_call import NordenCallPage
     from common.ui_join_with_id import JoinWithIdPage
+    from common.ui_device_setup_wizard import DeviceSetupWizardPage
+    from common.ui_device_setup_language import SetupLanguagePage
+    from common.ui_device_setup_network import SetupNetworkPage
+    from common.ui_device_setup_datetime import SetupDatetimePage
+    from common.ui_device_setup_update import SetupUpdatePage
+    from common.ui_device_setup_xms_cloud import SetupXmsCloudPage
+    from common.ui_device_setup_admin_password import SetupAdminPasswordPage
+    from common.ui_device_setup_confirm import SetupConfirmPage
+    from common.ui_device_setup_terms import SetupTermsPage
+    from common.ui_device_setup_privacy import SetupPrivacyPage
+    from common.ui_device_setup_complete import SetupCompletePage
+    from common.ui_teams_sign_in import TeamsSignInPage
+    from common.ui_teams_sign_in_email import TeamsSignInEmailPage
+    from common.ui_azure_auth_webview import AzureAuthWebViewPage
 
 _MTR_PACKAGE = "com.microsoft.skype.teams.ipphone"
 _POLL_INTERVAL = 1  # seconds between element polls
@@ -61,7 +75,21 @@ class MtrUi:
         self._settings = None         # lazily created by .settings property
         self._device_settings = None  # lazily created by .device_settings property
         self._norden_call = None      # lazily created by .norden_call property
-        self._join_with_id = None     # lazily created by .join_with_id property
+        self._join_with_id = None            # lazily created by .join_with_id property
+        self._device_setup_wizard = None     # lazily created by .device_setup_wizard property
+        self._setup_language = None          # lazily created by .setup_language property
+        self._setup_network = None           # lazily created by .setup_network property
+        self._setup_datetime = None          # lazily created by .setup_datetime property
+        self._setup_update = None            # lazily created by .setup_update property
+        self._setup_xms_cloud = None         # lazily created by .setup_xms_cloud property
+        self._setup_admin_password = None    # lazily created by .setup_admin_password property
+        self._setup_confirm = None           # lazily created by .setup_confirm property
+        self._setup_terms = None             # lazily created by .setup_terms property
+        self._setup_privacy = None           # lazily created by .setup_privacy property
+        self._setup_complete = None          # lazily created by .setup_complete property
+        self._teams_sign_in = None           # lazily created by .teams_sign_in property
+        self._teams_sign_in_email = None     # lazily created by .teams_sign_in_email property
+        self._azure_auth_webview = None      # lazily created by .azure_auth_webview property
 
     @property
     def main(self) -> "MainPage":
@@ -126,6 +154,118 @@ class MtrUi:
             from common.ui_join_with_id import JoinWithIdPage
             self._join_with_id = JoinWithIdPage(self)
         return self._join_with_id
+
+    @property
+    def setup_xms_cloud(self) -> "SetupXmsCloudPage":
+        """Return the SetupXmsCloudPage page object (created on first access)."""
+        if self._setup_xms_cloud is None:
+            from common.ui_device_setup_xms_cloud import SetupXmsCloudPage
+            self._setup_xms_cloud = SetupXmsCloudPage(self)
+        return self._setup_xms_cloud
+
+    @property
+    def setup_admin_password(self) -> "SetupAdminPasswordPage":
+        """Return the SetupAdminPasswordPage page object (created on first access)."""
+        if self._setup_admin_password is None:
+            from common.ui_device_setup_admin_password import SetupAdminPasswordPage
+            self._setup_admin_password = SetupAdminPasswordPage(self)
+        return self._setup_admin_password
+
+    @property
+    def setup_confirm(self) -> "SetupConfirmPage":
+        """Return the SetupConfirmPage page object (created on first access)."""
+        if self._setup_confirm is None:
+            from common.ui_device_setup_confirm import SetupConfirmPage
+            self._setup_confirm = SetupConfirmPage(self)
+        return self._setup_confirm
+
+    @property
+    def setup_terms(self) -> "SetupTermsPage":
+        """Return the SetupTermsPage page object (created on first access)."""
+        if self._setup_terms is None:
+            from common.ui_device_setup_terms import SetupTermsPage
+            self._setup_terms = SetupTermsPage(self)
+        return self._setup_terms
+
+    @property
+    def setup_privacy(self) -> "SetupPrivacyPage":
+        """Return the SetupPrivacyPage page object (created on first access)."""
+        if self._setup_privacy is None:
+            from common.ui_device_setup_privacy import SetupPrivacyPage
+            self._setup_privacy = SetupPrivacyPage(self)
+        return self._setup_privacy
+
+    @property
+    def setup_complete(self) -> "SetupCompletePage":
+        """Return the SetupCompletePage page object (created on first access)."""
+        if self._setup_complete is None:
+            from common.ui_device_setup_complete import SetupCompletePage
+            self._setup_complete = SetupCompletePage(self)
+        return self._setup_complete
+
+    @property
+    def teams_sign_in(self) -> "TeamsSignInPage":
+        """Return the TeamsSignInPage page object (created on first access)."""
+        if self._teams_sign_in is None:
+            from common.ui_teams_sign_in import TeamsSignInPage
+            self._teams_sign_in = TeamsSignInPage(self)
+        return self._teams_sign_in
+
+    @property
+    def teams_sign_in_email(self) -> "TeamsSignInEmailPage":
+        """Return the TeamsSignInEmailPage page object (created on first access)."""
+        if self._teams_sign_in_email is None:
+            from common.ui_teams_sign_in_email import TeamsSignInEmailPage
+            self._teams_sign_in_email = TeamsSignInEmailPage(self)
+        return self._teams_sign_in_email
+
+    @property
+    def azure_auth_webview(self) -> "AzureAuthWebViewPage":
+        """Return the AzureAuthWebViewPage page object (created on first access)."""
+        if self._azure_auth_webview is None:
+            from common.ui_azure_auth_webview import AzureAuthWebViewPage
+            self._azure_auth_webview = AzureAuthWebViewPage(self)
+        return self._azure_auth_webview
+
+    @property
+    def setup_update(self) -> "SetupUpdatePage":
+        """Return the SetupUpdatePage page object (created on first access)."""
+        if self._setup_update is None:
+            from common.ui_device_setup_update import SetupUpdatePage
+            self._setup_update = SetupUpdatePage(self)
+        return self._setup_update
+
+    @property
+    def device_setup_wizard(self) -> "DeviceSetupWizardPage":
+        """Return the DeviceSetupWizardPage page object (created on first access)."""
+        if self._device_setup_wizard is None:
+            from common.ui_device_setup_wizard import DeviceSetupWizardPage
+            self._device_setup_wizard = DeviceSetupWizardPage(self)
+        return self._device_setup_wizard
+
+    @property
+    def setup_language(self) -> "SetupLanguagePage":
+        """Return the SetupLanguagePage page object (created on first access)."""
+        if self._setup_language is None:
+            from common.ui_device_setup_language import SetupLanguagePage
+            self._setup_language = SetupLanguagePage(self)
+        return self._setup_language
+
+    @property
+    def setup_network(self) -> "SetupNetworkPage":
+        """Return the SetupNetworkPage page object (created on first access)."""
+        if self._setup_network is None:
+            from common.ui_device_setup_network import SetupNetworkPage
+            self._setup_network = SetupNetworkPage(self)
+        return self._setup_network
+
+    @property
+    def setup_datetime(self) -> "SetupDatetimePage":
+        """Return the SetupDatetimePage page object (created on first access)."""
+        if self._setup_datetime is None:
+            from common.ui_device_setup_datetime import SetupDatetimePage
+            self._setup_datetime = SetupDatetimePage(self)
+        return self._setup_datetime
 
     # ------------------------------------------------------------------
     # ADB transport (mirrors DuvelDevice pattern)
@@ -198,9 +338,9 @@ class MtrUi:
     def dump_ui(self) -> str:
         """Dump the current UI hierarchy and return raw XML, or '' if dump fails."""
         self._adb_raw(["shell", f"uiautomator dump {_UI_DUMP_REMOTE} >/dev/null 2>&1"], timeout=15)
-        result = self._adb_raw(["shell", "cat", _UI_DUMP_REMOTE], timeout=10)
+        raw = self._adb_bytes(["shell", "cat", _UI_DUMP_REMOTE], timeout=10)
         self._adb_raw(["shell", "rm", "-f", _UI_DUMP_REMOTE], timeout=5)
-        return result.stdout
+        return raw.decode("utf-8", errors="replace") if raw else ""
 
     def find_element(
         self,

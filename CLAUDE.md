@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Language
+
+Always respond and discuss in Traditional Chinese (繁體中文).
+
 ## What this is
 
 Standalone ADB-based test utilities for the Barco Duvel (ClickShare base unit). No dependency on TEnTo or the Wave4 BSP — only requires `adb` in PATH and Python 3.10+.
@@ -70,6 +74,20 @@ common/ui_settings.py       — SettingsPage page object (Settings dialog: org n
 common/ui_device_settings.py — DeviceSettingsPage page object (Android Device Settings: Accessibility, System, About, Admin settings)
 common/ui_norden_call.py    — NordenCallPage page object (dial screen: type name/number, Call button)
 common/ui_join_with_id.py   — JoinWithIdPage page object (Join with an ID dialog: meeting ID, passcode, Join button)
+testcases/common/ui_device_setup_wizard.py   — DeviceSetupWizardPage page object (MDEP wizard entry screen, before setup begins)
+testcases/common/ui_device_setup_language.py — SetupLanguagePage page object (language selection step)
+testcases/common/ui_device_setup_network.py  — SetupNetworkPage page object (network connectivity step)
+testcases/common/ui_device_setup_datetime.py — SetupDatetimePage page object (date/time and timezone step)
+testcases/common/ui_device_setup_terms.py    — SetupTermsPage page object (EULA acceptance step)
+testcases/common/ui_device_setup_privacy.py  — SetupPrivacyPage page object (Microsoft Privacy / diagnostic data step)
+testcases/common/ui_device_setup_admin_password.py — SetupAdminPasswordPage page object (admin password creation step)
+testcases/common/ui_device_setup_confirm.py  — SetupConfirmPage page object (confirm installation summary step)
+testcases/common/ui_device_setup_update.py   — SetupUpdatePage page object (firmware update available step)
+testcases/common/ui_device_setup_xms_cloud.py — SetupXmsCloudPage page object (XMS Cloud enrollment step)
+testcases/common/ui_device_setup_complete.py — SetupCompletePage page object ("Installation complete!" final step)
+testcases/common/ui_teams_sign_in.py         — TeamsSignInPage page object (Teams device-code-flow sign-in screen)
+testcases/common/ui_teams_sign_in_email.py   — TeamsSignInEmailPage page object (Teams on-device email/username entry)
+testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page object (Azure Authenticator MSAL WebView: password entry + device registration steps)
 common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
 testcases/test_mtr_join_call.py — CLI entry point for the 10-step MTR join-call test (reboot → Teams UI → join by ID → screenshot); supports --meeting-id (manual), --from-host (default JSON path), or --meeting-info-dir DIR (custom JSON path) to load meeting info from teams_meeting_host.py
@@ -120,6 +138,20 @@ common/version.py        — VERSION string (bump manually on releases)
 - `device_settings` → `DeviceSettingsPage` — lazy property
 - `norden_call` → `NordenCallPage` — lazy property
 - `join_with_id` → `JoinWithIdPage` — lazy property
+- `device_setup_wizard` → `DeviceSetupWizardPage` — lazy property
+- `setup_language` → `SetupLanguagePage` — lazy property
+- `setup_network` → `SetupNetworkPage` — lazy property
+- `setup_datetime` → `SetupDatetimePage` — lazy property
+- `setup_terms` → `SetupTermsPage` — lazy property
+- `setup_privacy` → `SetupPrivacyPage` — lazy property
+- `setup_admin_password` → `SetupAdminPasswordPage` — lazy property
+- `setup_confirm` → `SetupConfirmPage` — lazy property
+- `setup_update` → `SetupUpdatePage` — lazy property
+- `setup_xms_cloud` → `SetupXmsCloudPage` — lazy property
+- `setup_complete` → `SetupCompletePage` — lazy property
+- `teams_sign_in` → `TeamsSignInPage` — lazy property
+- `teams_sign_in_email` → `TeamsSignInEmailPage` — lazy property
+- `azure_auth_webview` → `AzureAuthWebViewPage` — lazy property
 
 **Page object base** (`common/ui_base.py`): all page objects inherit `BasePage` — provides `__init__(ui)` and `_tap(candidates: list[dict]) -> bool` (tries each kwarg dict against `tap_element` in order).
 
@@ -156,6 +188,77 @@ common/version.py        — VERSION string (bump manually on releases)
 **JoinWithIdPage** (`common/ui_join_with_id.py`, access via `device.ui.join_with_id`):
 - `is_visible()` → bool
 - `enter_meeting_id(meeting_id)` / `enter_passcode(passcode)` → bool; `click_join()` / `click_back()` → bool
+
+**DeviceSetupWizardPage** (`testcases/common/ui_device_setup_wizard.py`, access via `device.ui.device_setup_wizard`):
+- `is_visible()` → bool; `confirm_connection()` → bool
+- `get_title()` / `get_message()` / `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
+
+**SetupLanguagePage** (`testcases/common/ui_device_setup_language.py`, access via `device.ui.setup_language`):
+- `is_visible()` → bool
+- `get_title()` / `get_selected_language()` / `get_ip_address()` / `get_serial_number()` / `get_version()` → str | None
+- `select_language(language)` / `click_continue()` / `click_back()` / `click_accessibility_settings()` → bool
+
+**SetupNetworkPage** (`testcases/common/ui_device_setup_network.py`, access via `device.ui.setup_network`):
+- `is_visible()` → bool; `is_connected()` → bool
+- `get_title()` / `get_connectivity_message()` / `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
+- `click_next()` / `click_settings()` / `click_back()` → bool
+
+**SetupDatetimePage** (`testcases/common/ui_device_setup_datetime.py`, access via `device.ui.setup_datetime`):
+- `is_visible()` → bool; `is_24h_format()` → bool | None
+- `get_title()` / `get_current_time()` / `get_timezone()` / `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
+- `click_timezone()` / `cancel_timezone_picker()` / `toggle_time_format()` / `click_change_time_server()` / `click_next()` / `click_back()` → bool
+- `set_timezone(location, max_scrolls=30)` → bool — scrolls timezone picker and taps matching row
+
+**SetupTermsPage** (`testcases/common/ui_device_setup_terms.py`, access via `device.ui.setup_terms`):
+- `is_visible()` → bool
+- `get_title()` / `get_eula_text()` / `get_disclaimer()` / `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
+- `click_accept()` → bool
+
+**SetupPrivacyPage** (`testcases/common/ui_device_setup_privacy.py`, access via `device.ui.setup_privacy`):
+- `is_visible()` → bool; `is_optional_data_enabled()` → bool | None
+- `get_title()` / `get_subtitle()` / `get_required_data_label()` / `get_required_data_content()` / `get_optional_data_content()` / `get_optional_data_clarification()` / `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
+- `toggle_optional_data()` / `click_learn_more()` / `click_accept()` → bool
+
+**SetupAdminPasswordPage** (`testcases/common/ui_device_setup_admin_password.py`, access via `device.ui.setup_admin_password`):
+- `is_visible()` → bool
+- `get_title()` / `get_password_error()` / `get_password_strength()` → str | None
+- `enter_new_password(password)` / `toggle_new_password_visibility()` / `enter_confirm_password(password)` / `toggle_confirm_password_visibility()` / `click_create_and_continue()` → bool
+
+**SetupConfirmPage** (`testcases/common/ui_device_setup_confirm.py`, access via `device.ui.setup_confirm`):
+- `is_visible()` → bool
+- `get_title()` / `get_setup_status()` / `get_subtitle()` / `get_room_name()` / `get_model_name()` / `get_platform_name()` / `get_serial_number()` / `get_admin_password_status()` / `get_ip_address()` / `get_serial_number_footer()` / `get_version()` / `get_build_type()` → str | None
+- `click_change_password()` / `click_confirm_installation()` → bool
+
+**SetupUpdatePage** (`testcases/common/ui_device_setup_update.py`, access via `device.ui.setup_update`):
+- `is_visible()` → bool
+- `get_title()` / `get_fw_version()` / `get_message()` / `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
+- `click_continue()` → bool
+
+**SetupXmsCloudPage** (`testcases/common/ui_device_setup_xms_cloud.py`, access via `device.ui.setup_xms_cloud`):
+- `is_visible()` → bool
+- `get_title()` / `get_subtitle()` / `get_extra_info()` / `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
+- `click_skip()` / `click_knowledge_base()` → bool
+
+**SetupCompletePage** (`testcases/common/ui_device_setup_complete.py`, access via `device.ui.setup_complete`):
+- `is_visible()` → bool
+- `get_title()` / `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
+- `click_continue()` → bool — taps "Continue to Microsoft Teams"
+
+**TeamsSignInPage** (`testcases/common/ui_teams_sign_in.py`, access via `device.ui.teams_sign_in`):
+- `is_visible()` → bool
+- `get_title()` / `get_tenant_name()` / `get_step1_text()` / `get_step2_text()` / `get_login_code()` → str | None
+- `click_refresh_code()` / `click_sign_in_on_device()` / `click_settings()` → bool
+
+**TeamsSignInEmailPage** (`testcases/common/ui_teams_sign_in_email.py`, access via `device.ui.teams_sign_in_email`):
+- `is_visible()` → bool
+- `get_label()` → str | None
+- `enter_email(email)` / `click_sign_in()` / `click_back()` / `click_settings()` / `click_privacy_cookies()` → bool
+
+**AzureAuthWebViewPage** (`testcases/common/ui_azure_auth_webview.py`, access via `device.ui.azure_auth_webview`):
+- Package: `com.azure.authenticator` — wraps the MSAL HTML WebView; HTML element IDs are exposed as accessibility resource-ids once loaded
+- `is_visible()` → bool; `is_password_page()` / `is_device_registration_page()` → bool — detect current sub-step
+- Password step: `get_display_name()` → str | None; `enter_password(password)` / `click_sign_in()` / `click_back()` / `click_forgot_password()` / `click_sign_in_with_another_account()` / `click_terms_of_use()` / `click_privacy_cookies()` → bool
+- Registration step: `get_heading()` / `get_description()` → str | None; `click_register()` / `click_more_details()` → bool
 
 **TeamsDesktopController** (`common/teams_desktop.py`): pywinauto-based automation for the Windows Teams desktop app. Requires `pip install pywinauto pywin32`.
 - `connect(launch=True, timeout=30)` — attach to running Teams; launch if not running

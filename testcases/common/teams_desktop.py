@@ -169,7 +169,7 @@ class TeamsDesktopController:
             pass
         time.sleep(0.3)
         self._click(main, "Meet now", ctrl_type="Button")
-        time.sleep(2)
+        time.sleep(10)
 
         # Step 3 — grab link before entering meeting
         # Refresh main: Teams navigated to a new page after "Meet now", window title changed

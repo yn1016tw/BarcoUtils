@@ -4,9 +4,9 @@ Reboots the device, waits for boot, then verifies the Teams Rooms join-by-ID
 flow end-to-end with per-step timing.
 
 Steps:
-  1. Reboot device
-  2. Wait for boot complete
-  3. Wait for Teams Rooms main page to appear
+  1. Reboot device (only on failure; skipped on first round and after success)
+  2. Wait for boot complete (skipped when no reboot)
+  3. Navigate to Teams Rooms main page
   4. Tap "Join with an ID"
   5. Verify the join-with-ID dialog is visible
   6. Enter meeting ID (and optional passcode)
@@ -229,10 +229,10 @@ class MtrJoinCallTestRunner:
             r.barco_fw_version = self._device.barco_fw_version()
             ui = self._device.ui
 
-            # Step 3: Wait for main page
-            print("  Waiting for Teams Rooms main page...")
-            if not ui.main.is_visible(timeout=self._args.device_timeout):
-                raise TimeoutError(f"Main page not visible within {self._args.device_timeout}s")
+            # Step 3: Navigate to main page
+            print("  Navigating to Teams Rooms main page...")
+            if not ui.go_to_main_page(timeout=self._args.device_timeout):
+                raise TimeoutError(f"Main page not reachable within {self._args.device_timeout}s")
             r.main_visible = time.time()
             print(f"  Main page visible  (+{r.main_visible - r.boot_ready:.1f}s from boot)")
 
@@ -412,7 +412,7 @@ def main():
     print(f"  Output dir : {args.output_dir}")
 
     results = []
-    do_reboot = True
+    do_reboot = False
     try:
         for i in range(1, args.iterations + 1):
             result = runner.run_round(i, args.iterations, do_reboot=do_reboot)

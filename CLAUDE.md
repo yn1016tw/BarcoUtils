@@ -90,9 +90,10 @@ testcases/common/ui_teams_sign_in_email.py   — TeamsSignInEmailPage page objec
 testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page object (Azure Authenticator MSAL WebView: password entry + device registration steps)
 common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
-testcases/test_mtr_join_call.py — CLI entry point for the 10-step MTR join-call test (reboot → Teams UI → join by ID → screenshot); supports --meeting-id (manual), --from-host (default JSON path), or --meeting-info-dir DIR (custom JSON path) to load meeting info from teams_meeting_host.py
+testcases/test_mtr_join_call.py — CLI entry point for the MTR join-call test (navigate to main → join by ID → screenshot → hang up); reboots only on failure; supports --meeting-id (manual), --from-host (default JSON path), or --meeting-info-dir DIR (custom JSON path) to load meeting info from teams_meeting_host.py
 testcases/test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
-testcases/test_mtr_meet_now.py       — CLI entry point for the 8-step MTR camera test (reboot → Teams UI → screenshot)
+testcases/test_mtr_meet_now.py       — CLI entry point for the MTR camera test (Meet Now → screenshot); reboots only on failure
+testcases/test_mtr_join_with_id.py   — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); reboots only on failure
 tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()
 scripts/                 — Windows helper batch files (ADB key switcher, Duvel device setup)
@@ -133,6 +134,7 @@ common/version.py        — VERSION string (bump manually on releases)
 - `current_activity()` → `"package/activity"` string
 - `launch(package, activity)` / `force_stop(package)`
 - `launch_teams()` / `is_teams_foreground()` / `end_call()` — MTR-specific helpers; `end_call()` delegates to `in_call.hang_up()`
+- `go_to_main_page(timeout=15)` → `bool` — navigate to Teams Rooms home screen from any state (hang up if in-call → BACK up to 5× → launch_teams() fallback)
 - `main` → `MainPage` — lazy property
 - `invite_people` → `InvitePeoplePage` — lazy property
 - `in_call` → `InCallPage` — lazy property

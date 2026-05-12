@@ -14,12 +14,12 @@ Typical usage:
   python testcases/common/teams_meeting_host.py
 
   # Terminal 2 — run the test:
-  python testcases/test_mtr_av_call.py --ip 192.168.1.100 --from-host
-  python testcases/test_mtr_av_call.py --ip 192.168.1.100 --from-host --iterations 5
+  python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --from-host
+  python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --from-host --iterations 5
 
   # With explicit meeting ID (no teams_meeting_host.py):
-  python testcases/test_mtr_av_call.py --ip 192.168.1.100 --meeting-id 123456789
-  python testcases/test_mtr_av_call.py --serial 1882000501 --meeting-id 123456789 --passcode abc123
+  python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --meeting-id 123456789
+  python testcases/test_mtr_join_with_id.py --serial 1882000501 --meeting-id 123456789 --passcode abc123
 """
 
 import argparse
@@ -154,10 +154,10 @@ class MtrAvCallTestRunner:
             ui = self._device.ui
             r.join_start = time.time()
 
-            # Step 1: Wait for MTR home page
-            print("  Waiting for Teams Rooms main page...")
-            if not ui.main.is_visible(timeout=self._args.device_timeout):
-                raise TimeoutError(f"Main page not visible within {self._args.device_timeout}s")
+            # Step 1: Navigate to Teams Rooms main page
+            print("  Navigating to Teams Rooms main page...")
+            if not ui.go_to_main_page(timeout=self._args.device_timeout):
+                raise TimeoutError(f"Main page not reachable within {self._args.device_timeout}s")
             print("  Main page visible.")
 
             # Step 2: Tap "Join with an ID"

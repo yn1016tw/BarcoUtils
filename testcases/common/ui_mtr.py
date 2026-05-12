@@ -490,6 +490,34 @@ class MtrUi:
         """Tap the hang-up / leave button if visible. Returns True if found."""
         return self.in_call.hang_up()
 
+    def go_to_main_page(self, timeout: int = 15) -> bool:
+        """Navigate to the Teams Rooms home screen from any state.
+
+        Returns True if the home screen becomes visible within timeout seconds.
+        Strategy:
+          1. Already visible → return True immediately.
+          2. In-call screen visible → hang_up(), then wait up to 5s.
+          3. Press BACK up to 5 times (1s apart), checking after each press.
+          4. Fallback: launch_teams() (monkey LAUNCHER intent) + wait.
+        """
+        if self.main.is_visible():
+            return True
+
+        if self.in_call.is_visible():
+            self.in_call.hang_up()
+            time.sleep(2)
+            if self.main.is_visible(timeout=5):
+                return True
+
+        for _ in range(5):
+            self.back()
+            time.sleep(1)
+            if self.main.is_visible():
+                return True
+
+        self.launch_teams()
+        return self.main.is_visible(timeout=timeout)
+
 
 # ------------------------------------------------------------------
 # Module-level helpers

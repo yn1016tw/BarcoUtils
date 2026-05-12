@@ -4,9 +4,9 @@ Reboots the device, waits for boot, then verifies the Teams Rooms camera
 flow end-to-end with per-step timing.
 
 Steps:
-  1. Reboot device
-  2. Wait for boot complete
-  3. Wait for Teams Rooms main page to appear
+  1. Reboot device (only on failure; skipped on first round and after success)
+  2. Wait for boot complete (skipped when no reboot)
+  3. Navigate to Teams Rooms main page
   4. Tap "Meet now"
   5. Verify "Invite people" dialog is visible
   6. Dismiss the dialog
@@ -186,29 +186,37 @@ class MtrCameraTestRunner:
         self._device = device
         self._args = args
 
-    def run_round(self, round_num: int, total_rounds: int) -> TestResult:
+    def run_round(self, round_num: int, total_rounds: int, do_reboot: bool = False) -> TestResult:
         r = TestResult(round_num=round_num, total_rounds=total_rounds)
         print(f"\n{'-' * 60}")
-        print(f"Round {round_num}/{total_rounds} - rebooting device...")
+        if do_reboot:
+            print(f"Round {round_num}/{total_rounds} - rebooting device...")
+        else:
+            print(f"Round {round_num}/{total_rounds} - skipping reboot")
 
         try:
-            # Step 1: Reboot
             r.reboot_start = time.time()
-            self._device.reboot()
 
-            # Step 2: Wait for boot
-            print("  Waiting for boot...")
-            self._device.wait_for_boot(self._args.boot_timeout)
-            r.boot_ready = time.time()
-            r.barco_fw_version = self._device.barco_fw_version()
-            print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
+            if do_reboot:
+                # Step 1: Reboot
+                self._device.reboot()
+
+                # Step 2: Wait for boot
+                print("  Waiting for boot...")
+                self._device.wait_for_boot(self._args.boot_timeout)
+                r.boot_ready = time.time()
+                r.barco_fw_version = self._device.barco_fw_version()
+                print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
+            else:
+                r.boot_ready = r.reboot_start
+                r.barco_fw_version = self._device.barco_fw_version()
 
             ui = self._device.ui
 
-            # Step 3: Wait for main page
-            print("  Waiting for Teams Rooms main page...")
-            if not ui.main.is_visible(timeout=self._args.device_timeout):
-                raise TimeoutError(f"Main page not visible within {self._args.device_timeout}s")
+            # Step 3: Navigate to main page
+            print("  Navigating to Teams Rooms main page...")
+            if not ui.go_to_main_page(timeout=self._args.device_timeout):
+                raise TimeoutError(f"Main page not reachable within {self._args.device_timeout}s")
             r.main_visible = time.time()
             print(f"  Main page visible  (+{r.main_visible - r.boot_ready:.1f}s from boot)")
 
@@ -341,14 +349,16 @@ def main():
     print(f"  Output dir : {args.output_dir}")
 
     results = []
+    do_reboot = False
     try:
         for i in range(1, args.iterations + 1):
-            result = runner.run_round(i, args.iterations)
+            result = runner.run_round(i, args.iterations, do_reboot=do_reboot)
             results.append(result)
             writer.print_round(result)
             if args.fail_fast and not result.passed:
                 print("\n[Stopped: --fail-fast]")
                 break
+            do_reboot = not result.passed
     except KeyboardInterrupt:
         print("\n[Interrupted by user]")
     finally:

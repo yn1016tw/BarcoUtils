@@ -4,14 +4,13 @@ Reboots the device, waits for boot, then verifies the Teams Rooms camera
 flow end-to-end with per-step timing.
 
 Steps:
-  1. Reboot device (only on failure; skipped on first round and after success)
-  2. Wait for boot complete (skipped when no reboot)
-  3. Navigate to Teams Rooms main page
-  4. Tap "Meet now"
-  5. Verify "Invite people" dialog is visible
-  6. Dismiss the dialog
-  7. Save a screenshot
-  8. Hang up the meeting
+  1. Navigate to Teams Rooms main page
+  2. Tap "Meet now"
+  3. Verify "Invite people" dialog is visible
+  4. Dismiss the dialog
+  5. Save a screenshot
+  6. Hang up the meeting
+  On exception: reboot and wait for boot before the next round.
 
 Usage:
     python testcases/test_mtr_meet_now.py --ip 192.168.1.100
@@ -186,64 +185,48 @@ class MtrCameraTestRunner:
         self._device = device
         self._args = args
 
-    def run_round(self, round_num: int, total_rounds: int, do_reboot: bool = False) -> TestResult:
+    def run_round(self, round_num: int, total_rounds: int) -> TestResult:
         r = TestResult(round_num=round_num, total_rounds=total_rounds)
         print(f"\n{'-' * 60}")
-        if do_reboot:
-            print(f"Round {round_num}/{total_rounds} - rebooting device...")
-        else:
-            print(f"Round {round_num}/{total_rounds} - skipping reboot")
+        print(f"Round {round_num}/{total_rounds}")
 
         try:
             r.reboot_start = time.time()
-
-            if do_reboot:
-                # Step 1: Reboot
-                self._device.reboot()
-
-                # Step 2: Wait for boot
-                print("  Waiting for boot...")
-                self._device.wait_for_boot(self._args.boot_timeout)
-                r.boot_ready = time.time()
-                r.barco_fw_version = self._device.barco_fw_version()
-                print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
-            else:
-                r.boot_ready = r.reboot_start
-                r.barco_fw_version = self._device.barco_fw_version()
-
+            r.boot_ready = r.reboot_start
+            r.barco_fw_version = self._device.barco_fw_version()
             ui = self._device.ui
 
-            # Step 3: Navigate to main page
+            # Step 1: Navigate to main page
             print("  Navigating to Teams Rooms main page...")
             if not ui.go_to_main_page(timeout=self._args.device_timeout):
                 raise TimeoutError(f"Main page not reachable within {self._args.device_timeout}s")
             r.main_visible = time.time()
-            print(f"  Main page visible  (+{r.main_visible - r.boot_ready:.1f}s from boot)")
+            print(f"  Main page visible  (+{r.main_visible - r.boot_ready:.1f}s)")
 
-            # Step 4: Tap Meet now
+            # Step 2: Tap Meet now
             print("  Tapping 'Meet now'...")
             if not ui.main.click_meet_now():
                 raise RuntimeError("Could not tap 'Meet now' button")
             r.meet_now_tapped = time.time()
-            print(f"  Meet now tapped  (+{r.meet_now_tapped - r.boot_ready:.1f}s from boot)")
+            print(f"  Meet now tapped  (+{r.meet_now_tapped - r.boot_ready:.1f}s)")
 
-            # Step 5: Wait for invite dialog
+            # Step 3: Wait for invite dialog
             print("  Waiting for 'Invite people' dialog...")
             if not ui.invite_people.is_visible(timeout=_INVITE_DIALOG_TIMEOUT):
                 raise TimeoutError(f"Invite dialog not visible within {_INVITE_DIALOG_TIMEOUT}s")
             r.invite_visible = time.time()
-            print(f"  Invite dialog visible  (+{r.invite_visible - r.boot_ready:.1f}s from boot)")
+            print(f"  Invite dialog visible  (+{r.invite_visible - r.boot_ready:.1f}s)")
 
-            # Step 6: Dismiss dialog
+            # Step 4: Dismiss dialog
             print("  Dismissing invite dialog...")
             if not ui.invite_people.dismiss():
                 raise RuntimeError("Could not dismiss invite dialog")
             r.dialog_dismissed = time.time()
-            print(f"  Dialog dismissed  (+{r.dialog_dismissed - r.boot_ready:.1f}s from boot)")
+            print(f"  Dialog dismissed  (+{r.dialog_dismissed - r.boot_ready:.1f}s)")
             if ui.invite_people.is_visible():
                 raise RuntimeError("Invite dialog still visible after dismiss")
 
-            # Step 7: Screenshot
+            # Step 5: Screenshot
             time.sleep(5)
             ts = datetime.now().strftime("%H%M%S")
             shot_path = str(Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}.png")
@@ -251,13 +234,13 @@ class MtrCameraTestRunner:
             ui.screenshot(shot_path)
             r.screenshot_saved = time.time()
             r.screenshot_path = shot_path
-            print(f"  Screenshot saved  (+{r.screenshot_saved - r.boot_ready:.1f}s from boot)  {shot_path}")
+            print(f"  Screenshot saved  (+{r.screenshot_saved - r.boot_ready:.1f}s)  {shot_path}")
 
-            # Step 8: Hang up
+            # Step 6: Hang up
             print("  Hanging up meeting...")
             ui.end_call()
             r.call_ended = time.time()
-            print(f"  Call ended  (+{r.call_ended - r.boot_ready:.1f}s from boot)")
+            print(f"  Call ended  (+{r.call_ended - r.boot_ready:.1f}s)")
             time.sleep(5)
 
             r.passed = True
@@ -267,11 +250,13 @@ class MtrCameraTestRunner:
             print(f"  [TIMEOUT] {e}")
             _cleanup_call(self._device.ui)
             _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
+            _reboot_device(self._device, self._args.boot_timeout)
         except Exception as e:
             r.error = str(e)
             print(f"  [ERROR] {e}")
             _cleanup_call(self._device.ui)
             _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
+            _reboot_device(self._device, self._args.boot_timeout)
 
         return r
 
@@ -286,6 +271,16 @@ def _cleanup_call(ui) -> None:
         time.sleep(5)
     except Exception:
         pass
+
+
+def _reboot_device(device: DuvelDevice, boot_timeout: int) -> None:
+    try:
+        print("  Rebooting device after failure...")
+        device.reboot()
+        device.wait_for_boot(boot_timeout)
+        print("  Boot ready.")
+    except Exception as e:
+        print(f"  [WARN] Reboot failed: {e}")
 
 
 def _save_debug_screenshot(ui, output_dir: str, round_num: int) -> None:
@@ -349,16 +344,14 @@ def main():
     print(f"  Output dir : {args.output_dir}")
 
     results = []
-    do_reboot = False
     try:
         for i in range(1, args.iterations + 1):
-            result = runner.run_round(i, args.iterations, do_reboot=do_reboot)
+            result = runner.run_round(i, args.iterations)
             results.append(result)
             writer.print_round(result)
             if args.fail_fast and not result.passed:
                 print("\n[Stopped: --fail-fast]")
                 break
-            do_reboot = not result.passed
     except KeyboardInterrupt:
         print("\n[Interrupted by user]")
     finally:

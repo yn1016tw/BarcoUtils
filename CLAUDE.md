@@ -90,7 +90,6 @@ testcases/common/ui_teams_sign_in_email.py   — TeamsSignInEmailPage page objec
 testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page object (Azure Authenticator MSAL WebView: password entry + device registration steps)
 common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
-testcases/test_mtr_join_call.py — CLI entry point for the MTR join-call test (navigate to main → join by ID → screenshot → hang up); reboots only on failure; supports --meeting-id (manual), --from-host (default JSON path), or --meeting-info-dir DIR (custom JSON path) to load meeting info from teams_meeting_host.py
 testcases/test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
 testcases/test_mtr_meet_now.py       — CLI entry point for the MTR camera test (Meet Now → screenshot); reboots only on failure
 testcases/test_mtr_join_with_id.py   — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); reboots only on failure

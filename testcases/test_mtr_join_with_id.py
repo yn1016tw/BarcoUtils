@@ -32,7 +32,7 @@ from pathlib import Path
 from common.duvel_device import DuvelDevice
 from common.version import VERSION
 from common.teams_meeting_host import MeetingInfo
-from common.utils import FFMPEG_DEFAULT, screenshot, start_recording, stop_recording
+from common.utils import FFMPEG_DEFAULT, screenshot_for_debug, start_recording, stop_recording
 
 _JOIN_PAGE_TIMEOUT = 30  # seconds to wait for join-with-ID dialog
 _IN_CALL_TIMEOUT   = 60  # seconds to wait for in-call screen after tapping Join
@@ -221,12 +221,12 @@ class MtrAvCallTestRunner:
             r.error = f"TIMEOUT: {e}"
             print(f"  [TIMEOUT] {e}")
             _cleanup(self._device.ui)
-            screenshot(self._device.ui, self._args.output_dir, round_num)
+            screenshot_for_debug(self._device.ui, self._args.output_dir, round_num)
         except Exception as e:
             r.error = str(e)
             print(f"  [ERROR] {e}")
             _cleanup(self._device.ui)
-            screenshot(self._device.ui, self._args.output_dir, round_num)
+            screenshot_for_debug(self._device.ui, self._args.output_dir, round_num)
 
         return r
 

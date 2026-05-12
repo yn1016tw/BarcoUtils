@@ -5,9 +5,9 @@ from pathlib import Path
 FFMPEG_DEFAULT = r"C:\Tools\ffmpeg\bin\ffmpeg.exe"
 
 
-def screenshot(ui, output_dir: str, round_num: int) -> None:
+def screenshot_for_debug(ui, output_dir: str, round_num: int) -> None:
     ts = datetime.now().strftime("%H%M%S")
-    path = str(Path(output_dir) / "files" / f"round{round_num:02d}_{ts}.png")
+    path = str(Path(output_dir) / "files" / f"round{round_num:02d}_{ts}_fail.png")
     try:
         ui.screenshot(path)
         print(f"  Debug screenshot: {path}")

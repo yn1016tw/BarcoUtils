@@ -28,7 +28,7 @@ from pathlib import Path
 
 from common.duvel_device import DuvelDevice
 from common.version import VERSION
-from common.utils import screenshot
+from common.utils import screenshot_for_debug
 
 _INVITE_DIALOG_TIMEOUT = 60   # seconds to wait for invite dialog after tapping Meet now
 
@@ -250,13 +250,13 @@ class MtrCameraTestRunner:
             r.error = f"TIMEOUT: {e}"
             print(f"  [TIMEOUT] {e}")
             _cleanup_call(self._device.ui)
-            screenshot(self._device.ui, self._args.output_dir, round_num)
+            screenshot_for_debug(self._device.ui, self._args.output_dir, round_num)
             _reboot_device(self._device, self._args.boot_timeout)
         except Exception as e:
             r.error = str(e)
             print(f"  [ERROR] {e}")
             _cleanup_call(self._device.ui)
-            screenshot(self._device.ui, self._args.output_dir, round_num)
+            screenshot_for_debug(self._device.ui, self._args.output_dir, round_num)
             _reboot_device(self._device, self._args.boot_timeout)
 
         return r

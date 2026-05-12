@@ -29,8 +29,14 @@ python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 10 --fail-fa
 python testcases/test_mtr_meet_now.py --ip 192.168.1.100
 python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --output-dir C:/logs --iterations 3
 
-# MTR Join-with-ID call test (reboot-on-exception)
+# MTR Join-with-ID call test — join → screenshot → hang up; records desktop with ffmpeg
 python testcases/test_mtr_join_with_id.py --ip 192.168.1.100
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --from-host --iterations 5
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --meeting-id 123456789 --no-record
+
+# MTR dirty disconnect test — join → screenshot → hang up → reboot Duvel; records desktop
+python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --from-host
+python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --meeting-id 123456789 --iterations 5
 
 # MDEP setup wizard + Teams sign-in automation (each step skipped if screen not visible)
 python testcases/test_setup_flow.py --ip 192.168.1.100
@@ -43,7 +49,7 @@ No install step — run directly from the repo root. There are no automated test
 
 ## Version control
 
-**Versioning:** `common/version.py` holds `VERSION` and `VERSION_INFO`. Bump both manually — patch (`1.9.x`) for bug fixes and minor additions, minor (`1.x.0`) for new features or behavioural changes.
+**Versioning:** `testcases/common/version.py` holds `VERSION` and `VERSION_INFO`. Bump both manually — patch (`1.9.x`) for bug fixes and minor additions, minor (`1.x.0`) for new features or behavioural changes.
 
 **Commit message format:**
 - Version bump commits: `bump to vX.Y.Z: <one-line summary of what changed>`
@@ -102,7 +108,8 @@ testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now m
 testcases/common/version.py           — VERSION string (bump manually on releases)
 testcases/test_peripheral.py          — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
 testcases/test_mtr_meet_now.py        — CLI entry point for the MTR camera test (Meet Now → screenshot); reboots only on exception
-testcases/test_mtr_join_with_id.py    — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); reboots only on exception
+testcases/test_mtr_join_with_id.py    — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); records desktop via ffmpeg
+testcases/test_mtr_join_with_id_for_dirty_disconnect.py — same flow but Step 9 reboots Duvel after hang up to simulate dirty disconnect; records desktop via ffmpeg
 testcases/test_setup_flow.py          — CLI entry point for MDEP setup wizard + Teams sign-in automation (14 steps, each skipped if screen not visible)
 tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()

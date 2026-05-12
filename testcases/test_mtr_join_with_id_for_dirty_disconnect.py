@@ -1,0 +1,424 @@
+"""
+MTR Dirty Disconnect Test for Duvel
+Same as test_mtr_join_with_id.py but Step 8 reboots Duvel instead of
+hanging up cleanly — simulates an unexpected disconnection mid-call.
+
+Flow per round:
+  1. Wait for Teams Rooms main page
+  2. Join meeting by ID on Duvel MTR
+  3. Camera phase: wait 15s for stream to stabilize, take screenshot
+  4. Reboot Duvel and wait for boot (simulates dirty disconnect / exception)
+
+Typical usage:
+  # Terminal 1 — create meeting and auto-accept calls:
+  python testcases/common/teams_meeting_host.py
+
+  # Terminal 2 — run the test:
+  python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --from-host
+  python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --from-host --iterations 5
+
+  # With explicit meeting ID (no teams_meeting_host.py):
+  python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --meeting-id 123456789
+  python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --serial 1882000501 --meeting-id 123456789 --passcode abc123
+"""
+
+import argparse
+import subprocess
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+from common.duvel_device import DuvelDevice
+from common.version import VERSION
+from common.teams_desktop import TeamsDesktopController
+from common.teams_meeting_host import MeetingInfo
+
+_JOIN_PAGE_TIMEOUT = 30  # seconds to wait for join-with-ID dialog
+_IN_CALL_TIMEOUT   = 60  # seconds to wait for in-call screen after tapping Join
+_BOOT_TIMEOUT      = 180 # seconds to wait for Duvel to finish booting after reboot
+
+
+# ---------------------------------------------------------------------------
+# TestResult
+# ---------------------------------------------------------------------------
+
+@dataclass
+class TestResult:
+    round_num: int
+    total_rounds: int
+    join_start: float = 0.0
+    in_call_visible: float | None = None
+    camera_screenshot: float | None = None
+    reboot_complete: float | None = None
+    screenshot_path: str | None = None
+    error: str | None = None
+    passed: bool = False
+
+    def in_call_seconds(self) -> float | None:
+        if self.in_call_visible and self.join_start:
+            return self.in_call_visible - self.join_start
+        return None
+
+    def total_seconds(self) -> float | None:
+        if self.reboot_complete and self.join_start:
+            return self.reboot_complete - self.join_start
+        return None
+
+
+# ---------------------------------------------------------------------------
+# ResultWriter
+# ---------------------------------------------------------------------------
+
+class ResultWriter:
+    def __init__(self, total_rounds: int, device_label: str):
+        self._total = total_rounds
+        self._device_label = device_label
+        self._run_start = datetime.now()
+
+    def print_round(self, r: TestResult) -> None:
+        for line in self._format_round_lines(r):
+            print(line)
+
+    def print_summary(self, results: list[TestResult]) -> None:
+        passed = sum(r.passed for r in results)
+        print(f"\n{'=' * 60}")
+        print(f"=== Summary ({passed}/{len(results)} PASS) ===")
+        print(f"{'=' * 60}")
+
+    def save_log(self, results: list[TestResult], output_dir: str) -> None:
+        path = Path(output_dir) / f"{self._run_start.strftime('%Y%m%d')}.log"
+        lines = self._build_log_lines(results)
+        mode = "a" if path.exists() else "w"
+        with open(path, mode, encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        print(f"\n  Log saved: {path}")
+
+    @staticmethod
+    def _ts(t: float | None) -> str:
+        return datetime.fromtimestamp(t).strftime("%H:%M:%S.%f")[:-3] if t else "N/A"
+
+    @staticmethod
+    def _diff(t: float | None, base: float | None, label: str = "") -> str:
+        if t and base:
+            return f"  (+{t - base:.1f}s{' ' + label if label else ''})"
+        return ""
+
+    def _format_round_lines(self, r: TestResult) -> list[str]:
+        status = "PASS" if r.passed else "FAIL"
+        lines = [f"\n[Round {r.round_num}/{self._total}] {status}"]
+        if r.error:
+            lines.append(f"  ERROR: {r.error}")
+        lines.append(f"  Join started          : {self._ts(r.join_start)}")
+        lines.append(f"  In-call visible       : {self._ts(r.in_call_visible)}{self._diff(r.in_call_visible, r.join_start)}")
+        lines.append(f"  Camera screenshot     : {self._ts(r.camera_screenshot)}{self._diff(r.camera_screenshot, r.join_start)}")
+        if r.screenshot_path:
+            lines.append(f"  Screenshot path       : {r.screenshot_path}")
+        lines.append(f"  Reboot complete       : {self._ts(r.reboot_complete)}{self._diff(r.reboot_complete, r.join_start)}")
+        total = r.total_seconds()
+        lines.append(f"  Total                 : {total:.1f}s" if total else "  Total                 : N/A")
+        return lines
+
+    def _build_log_lines(self, results: list[TestResult]) -> list[str]:
+        lines = [
+            "=" * 80,
+            f"Test Run: {self._run_start.strftime('%Y-%m-%d %H:%M:%S')} "
+            f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}",
+            "=" * 80,
+            "",
+        ]
+        for r in results:
+            lines.extend(self._format_round_lines(r))
+            lines.append("")
+        passed = sum(r.passed for r in results)
+        lines.append(f"=== Summary ({passed}/{len(results)} PASS) ===")
+        lines.append("")
+        return lines
+
+
+# ---------------------------------------------------------------------------
+# MtrDirtyDisconnectTestRunner
+# ---------------------------------------------------------------------------
+
+class MtrDirtyDisconnectTestRunner:
+    def __init__(self, device: DuvelDevice, teams: TeamsDesktopController | None, args):
+        self._device = device
+        self._teams = teams
+        self._args = args
+
+    def run_round(self, round_num: int, total_rounds: int) -> TestResult:
+        r = TestResult(round_num=round_num, total_rounds=total_rounds)
+        print(f"\n{'-' * 60}")
+        print(f"Round {round_num}/{total_rounds}")
+
+        try:
+            ui = self._device.ui
+            r.join_start = time.time()
+
+            # Step 1: Navigate to Teams Rooms main page
+            print("  Navigating to Teams Rooms main page...")
+            if not ui.go_to_main_page(timeout=self._args.device_timeout):
+                raise TimeoutError(f"Main page not reachable within {self._args.device_timeout}s")
+            print("  Main page visible.")
+
+            # Step 2: Tap "Join with an ID"
+            print("  Tapping 'Join with an ID'...")
+            if not ui.main.click_join_with_an_id():
+                raise RuntimeError("Could not tap 'Join with an ID' button")
+
+            # Step 3: Wait for join-with-ID dialog
+            print("  Waiting for join-with-ID dialog...")
+            if not ui.join_with_id.is_visible(timeout=_JOIN_PAGE_TIMEOUT):
+                raise TimeoutError(f"Join-with-ID dialog not visible within {_JOIN_PAGE_TIMEOUT}s")
+
+            # Step 4: Enter meeting credentials
+            print(f"  Entering meeting ID: {self._args.meeting_id}")
+            if not ui.join_with_id.enter_meeting_id(self._args.meeting_id):
+                raise RuntimeError("Could not enter meeting ID")
+            if self._args.passcode:
+                print("  Entering passcode...")
+                if not ui.join_with_id.enter_passcode(self._args.passcode):
+                    raise RuntimeError("Could not enter passcode")
+
+            # Step 5: Tap Join
+            print("  Tapping 'Join Teams meeting'...")
+            if not ui.join_with_id.click_join():
+                raise RuntimeError("Could not tap 'Join Teams meeting' button")
+
+            # Step 6: Wait for in-call screen
+            print("  Waiting for in-call screen...")
+            if not ui.in_call.is_visible(timeout=_IN_CALL_TIMEOUT):
+                raise TimeoutError(f"In-call screen not visible within {_IN_CALL_TIMEOUT}s")
+            r.in_call_visible = time.time()
+            title = ui.in_call.get_meeting_title()
+            print(f"  In-call visible  (+{r.in_call_seconds():.1f}s)"
+                  + (f"  title: {title}" if title else ""))
+
+            # Step 7: Camera phase — wait 15s for stream to stabilize, then screenshot
+            print("  Camera phase: waiting 15s for stream to stabilize...")
+            time.sleep(15)
+            ts = datetime.now().strftime("%H%M%S")
+            shot_path = str(
+                Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}_camera.png"
+            )
+            print("  Taking screenshot...")
+            ui.screenshot(shot_path)
+            r.camera_screenshot = time.time()
+            r.screenshot_path = shot_path
+            print(f"  Screenshot saved: {shot_path}")
+
+            # Step 8: Reboot Duvel to simulate dirty disconnect
+            print("  Rebooting Duvel to simulate dirty disconnect...")
+            self._device.reboot()
+            print(f"  Waiting for boot (timeout={_BOOT_TIMEOUT}s)...")
+            self._device.wait_for_boot(timeout=_BOOT_TIMEOUT)
+            r.reboot_complete = time.time()
+            print(f"  Boot complete  (total: {r.total_seconds():.1f}s)")
+            r.passed = True
+
+        except TimeoutError as e:
+            r.error = f"TIMEOUT: {e}"
+            print(f"  [TIMEOUT] {e}")
+            _cleanup(self._teams)
+            _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
+        except Exception as e:
+            r.error = str(e)
+            print(f"  [ERROR] {e}")
+            _cleanup(self._teams)
+            _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
+
+        return r
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _cleanup(teams: TeamsDesktopController | None) -> None:
+    if teams is not None:
+        try:
+            teams.end_call()
+        except Exception:
+            pass
+
+
+def _save_debug_screenshot(ui, output_dir: str, round_num: int) -> None:
+    ts = datetime.now().strftime("%H%M%S")
+    path = str(Path(output_dir) / "files" / f"round{round_num:02d}_{ts}_fail.png")
+    try:
+        ui.screenshot(path)
+        print(f"  Debug screenshot: {path}")
+    except Exception:
+        pass
+
+
+_FFMPEG_DEFAULT = r"C:\Tools\ffmpeg\bin\ffmpeg.exe"
+
+
+def _start_recording(output_dir: str, ffmpeg_path: str) -> subprocess.Popen | None:
+    if not Path(ffmpeg_path).exists():
+        print(f"[WARN] ffmpeg not found at {ffmpeg_path} — screen recording skipped")
+        return None
+    ts = datetime.now().strftime("%H%M%S")
+    out = str(Path(output_dir) / "files" / f"desktop_{ts}.mp4")
+    try:
+        proc = subprocess.Popen(
+            [ffmpeg_path, "-f", "gdigrab", "-i", "desktop", out],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print(f"  Recording desktop → {out}")
+        return proc
+    except Exception as e:
+        print(f"[WARN] Could not start ffmpeg: {e}")
+        return None
+
+
+def _stop_recording(proc: subprocess.Popen | None) -> None:
+    if proc is None:
+        return
+    try:
+        proc.stdin.write(b"q")
+        proc.stdin.flush()
+        proc.wait(timeout=15)
+    except Exception:
+        proc.kill()
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "MTR dirty disconnect test: join meeting on Duvel MTR → camera phase → "
+            "reboot Duvel mid-call to simulate unexpected disconnection. "
+            "Run testcases/common/teams_meeting_host.py in a separate terminal to create the "
+            "meeting and auto-accept calls on the host PC."
+        )
+    )
+    dev_group = parser.add_mutually_exclusive_group(required=True)
+    dev_group.add_argument("--serial", metavar="SERIAL", help="USB ADB serial number")
+    dev_group.add_argument("--ip", metavar="IP[:PORT]", help="ADB over TCP/IP (default port 5555)")
+
+    meet_group = parser.add_mutually_exclusive_group(required=True)
+    meet_group.add_argument("--meeting-id", metavar="ID", help="Teams meeting ID to join")
+    meet_group.add_argument(
+        "--meeting-info-dir", metavar="DIR",
+        help="Directory containing meeting_info.json written by teams_meeting_host.py",
+    )
+    meet_group.add_argument(
+        "--from-host", action="store_true",
+        help="Load meeting info from default path (logs/ next to this script)",
+    )
+
+    parser.add_argument("--passcode", default=None, metavar="CODE",
+                        help="Meeting passcode (used with --meeting-id)")
+    parser.add_argument("--meeting-info-timeout", type=int, default=120, metavar="SEC",
+                        help="Seconds to wait for meeting_info.json from host (default: 120)")
+    parser.add_argument("--iterations", type=int, default=1, metavar="N",
+                        help="Number of test rounds (default: 1)")
+    parser.add_argument("--output-dir", default=None, metavar="DIR",
+                        help="Log output directory (default: logs/ next to this script)")
+    parser.add_argument("--device-timeout", type=int, default=120, metavar="SEC",
+                        help="Max seconds to wait for MTR main page (default: 120)")
+    parser.add_argument("--no-teams", action="store_true",
+                        help="Skip Teams desktop connection — Duvel side only")
+    parser.add_argument("--fail-fast", action="store_true",
+                        help="Stop after the first failed round")
+    parser.add_argument("--no-record", action="store_true",
+                        help="Disable ffmpeg desktop recording")
+    parser.add_argument("--ffmpeg", default=_FFMPEG_DEFAULT, metavar="PATH",
+                        help=f"Path to ffmpeg.exe (default: {_FFMPEG_DEFAULT})")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    date_str = datetime.now().strftime("%Y%m%d")
+    if args.output_dir is None:
+        args.output_dir = str(Path(__file__).parent / "logs" / Path(__file__).stem / date_str)
+
+    # Resolve meeting ID / passcode from host JSON if requested
+    if args.from_host or args.meeting_info_dir:
+        info_dir = None if args.from_host else args.meeting_info_dir
+        print(f"Waiting for meeting info from teams_meeting_host.py"
+              f"{f' ({info_dir})' if info_dir else ''} ...")
+        try:
+            info = MeetingInfo.wait_for_info(info_dir, timeout=args.meeting_info_timeout)
+        except TimeoutError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
+        print(f"Meeting info loaded:\n{info}")
+        args.meeting_id = info.meeting_id
+        args.passcode = info.passcode or None
+
+    # Connect to Duvel device
+    if args.ip:
+        serial = args.ip if ":" in args.ip else f"{args.ip}:5555"
+        device = DuvelDevice(serial=serial, is_ip=True)
+    else:
+        device = DuvelDevice(serial=args.serial, is_ip=False)
+
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    (Path(args.output_dir) / "files").mkdir(parents=True, exist_ok=True)
+
+    try:
+        device.connect()
+    except ConnectionError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
+
+    # Connect to Teams desktop (optional)
+    teams: TeamsDesktopController | None = None
+    if not args.no_teams:
+        print("Connecting to Teams desktop...")
+        try:
+            ctrl = TeamsDesktopController()
+            ctrl.connect(launch=False, timeout=10)
+            teams = ctrl
+            print("Connected to Teams desktop.")
+        except Exception as e:
+            print(f"[WARN] Could not connect to Teams desktop: {e}")
+            print("  Host PC call accept will be skipped. Use --no-teams to suppress this warning.")
+
+    writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
+    runner = MtrDirtyDisconnectTestRunner(device=device, teams=teams, args=args)
+
+    print(f"\nMTR Dirty Disconnect Test  v{VERSION}")
+    print(f"  Device        : {device.label}")
+    print(f"  FW            : {device.barco_fw_version()}")
+    print(f"  Meeting ID    : {args.meeting_id}")
+    if args.passcode:
+        print(f"  Passcode      : {args.passcode}")
+    print(f"  Iterations    : {args.iterations}")
+    print(f"  Host PC       : {'connected' if teams else 'not connected (Duvel side only)'}")
+    print(f"  Output dir    : {args.output_dir}")
+
+    recorder = None if args.no_record else _start_recording(args.output_dir, args.ffmpeg)
+
+    results = []
+    try:
+        for i in range(1, args.iterations + 1):
+            result = runner.run_round(i, args.iterations)
+            results.append(result)
+            writer.print_round(result)
+            if args.fail_fast and not result.passed:
+                print("\n[Stopped: --fail-fast]")
+                break
+    except KeyboardInterrupt:
+        print("\n[Interrupted by user]")
+    finally:
+        _stop_recording(recorder)
+        if results:
+            writer.print_summary(results)
+            writer.save_log(results, args.output_dir)
+        device.disconnect()
+
+
+if __name__ == "__main__":
+    main()

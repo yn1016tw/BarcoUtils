@@ -24,7 +24,6 @@ Typical usage:
 """
 
 import argparse
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -34,6 +33,7 @@ from pathlib import Path
 from common.duvel_device import DuvelDevice
 from common.version import VERSION
 from common.teams_meeting_host import MeetingInfo
+from common.utils import FFMPEG_DEFAULT, screenshot, start_recording, stop_recording
 
 _JOIN_PAGE_TIMEOUT = 30  # seconds to wait for join-with-ID dialog
 _IN_CALL_TIMEOUT   = 60  # seconds to wait for in-call screen after tapping Join
@@ -223,11 +223,11 @@ class MtrDirtyDisconnectTestRunner:
         except TimeoutError as e:
             r.error = f"TIMEOUT: {e}"
             print(f"  [TIMEOUT] {e}")
-            _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
+            screenshot(self._device.ui, self._args.output_dir, round_num)
         except Exception as e:
             r.error = str(e)
             print(f"  [ERROR] {e}")
-            _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
+            screenshot(self._device.ui, self._args.output_dir, round_num)
 
         return r
 
@@ -236,58 +236,6 @@ class MtrDirtyDisconnectTestRunner:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _save_debug_screenshot(ui, output_dir: str, round_num: int) -> None:
-    ts = datetime.now().strftime("%H%M%S")
-    path = str(Path(output_dir) / "files" / f"round{round_num:02d}_{ts}_fail.png")
-    try:
-        ui.screenshot(path)
-        print(f"  Debug screenshot: {path}")
-    except Exception:
-        pass
-
-
-_FFMPEG_DEFAULT = r"C:\Tools\ffmpeg\bin\ffmpeg.exe"
-
-
-def _start_recording(output_dir: str, ffmpeg_path: str) -> subprocess.Popen | None:
-    if not Path(ffmpeg_path).exists():
-        print(f"[WARN] ffmpeg not found at {ffmpeg_path} — screen recording skipped")
-        return None
-    ts = datetime.now().strftime("%H%M%S")
-    out = str(Path(output_dir) / "files" / f"desktop_{ts}.mp4")
-    try:
-        proc = subprocess.Popen(
-            [
-                ffmpeg_path,
-                "-f", "gdigrab",
-                "-framerate", "30",
-                "-i", "desktop",
-                "-c:v", "libx264",
-                "-preset", "veryfast",
-                "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart",
-                out,
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        print(f"  Recording desktop → {out}")
-        return proc
-    except Exception as e:
-        print(f"[WARN] Could not start ffmpeg: {e}")
-        return None
-
-
-def _stop_recording(proc: subprocess.Popen | None) -> None:
-    if proc is None:
-        return
-    try:
-        proc.stdin.write(b"q")
-        proc.stdin.flush()
-        proc.wait(timeout=15)
-    except Exception:
-        proc.kill()
 
 
 # ---------------------------------------------------------------------------
@@ -332,8 +280,8 @@ def parse_args():
                         help="Stop after the first failed round")
     parser.add_argument("--no-record", action="store_true",
                         help="Disable ffmpeg desktop recording")
-    parser.add_argument("--ffmpeg", default=_FFMPEG_DEFAULT, metavar="PATH",
-                        help=f"Path to ffmpeg.exe (default: {_FFMPEG_DEFAULT})")
+    parser.add_argument("--ffmpeg", default=FFMPEG_DEFAULT, metavar="PATH",
+                        help=f"Path to ffmpeg.exe (default: {FFMPEG_DEFAULT})")
     return parser.parse_args()
 
 
@@ -386,7 +334,7 @@ def main():
     print(f"  Iterations    : {args.iterations}")
     print(f"  Output dir    : {args.output_dir}")
 
-    recorder = None if args.no_record else _start_recording(args.output_dir, args.ffmpeg)
+    recorder = None if args.no_record else start_recording(args.output_dir, args.ffmpeg)
 
     results = []
     try:
@@ -400,7 +348,7 @@ def main():
     except KeyboardInterrupt:
         print("\n[Interrupted by user]")
     finally:
-        _stop_recording(recorder)
+        stop_recording(recorder)
         if results:
             writer.print_summary(results)
             writer.save_log(results, args.output_dir)

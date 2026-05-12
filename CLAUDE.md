@@ -105,6 +105,7 @@ testcases/common/ui_teams_sign_in_email.py   — TeamsSignInEmailPage page objec
 testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page object (Azure Authenticator MSAL WebView: password entry + device registration steps)
 testcases/common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
+testcases/common/utils.py             — Shared test utilities: screenshot, start_recording, stop_recording, FFMPEG_DEFAULT
 testcases/common/version.py           — VERSION string (bump manually on releases)
 testcases/test_peripheral.py          — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
 testcases/test_mtr_meet_now.py        — CLI entry point for the MTR camera test (Meet Now → screenshot); reboots only on exception

@@ -28,6 +28,7 @@ from pathlib import Path
 
 from common.duvel_device import DuvelDevice
 from common.version import VERSION
+from common.utils import screenshot
 
 _INVITE_DIALOG_TIMEOUT = 60   # seconds to wait for invite dialog after tapping Meet now
 
@@ -249,13 +250,13 @@ class MtrCameraTestRunner:
             r.error = f"TIMEOUT: {e}"
             print(f"  [TIMEOUT] {e}")
             _cleanup_call(self._device.ui)
-            _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
+            screenshot(self._device.ui, self._args.output_dir, round_num)
             _reboot_device(self._device, self._args.boot_timeout)
         except Exception as e:
             r.error = str(e)
             print(f"  [ERROR] {e}")
             _cleanup_call(self._device.ui)
-            _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
+            screenshot(self._device.ui, self._args.output_dir, round_num)
             _reboot_device(self._device, self._args.boot_timeout)
 
         return r
@@ -282,15 +283,6 @@ def _reboot_device(device: DuvelDevice, boot_timeout: int) -> None:
     except Exception as e:
         print(f"  [WARN] Reboot failed: {e}")
 
-
-def _save_debug_screenshot(ui, output_dir: str, round_num: int) -> None:
-    ts = datetime.now().strftime("%H%M%S")
-    path = str(Path(output_dir) / "files" / f"round{round_num:02d}_{ts}_fail.png")
-    try:
-        ui.screenshot(path)
-        print(f"  Debug screenshot: {path}")
-    except Exception:
-        pass
 
 
 # ---------------------------------------------------------------------------

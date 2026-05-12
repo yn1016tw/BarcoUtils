@@ -257,7 +257,17 @@ def _start_recording(output_dir: str, ffmpeg_path: str) -> subprocess.Popen | No
     out = str(Path(output_dir) / "files" / f"desktop_{ts}.mp4")
     try:
         proc = subprocess.Popen(
-            [ffmpeg_path, "-f", "gdigrab", "-i", "desktop", out],
+            [
+                ffmpeg_path,
+                "-f", "gdigrab",
+                "-framerate", "30",
+                "-i", "desktop",
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                out,
+            ],
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

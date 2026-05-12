@@ -117,6 +117,20 @@ class DuvelDevice:
             "Package manager never responded",
         )
 
+    def wake_up(self) -> None:
+        """Send KEYCODE_WAKEUP to bring the device out of sleep."""
+        self._adb(["shell", "input", "keyevent", "KEYCODE_WAKEUP"])
+
+    def is_sleep_mode(self) -> bool:
+        """Return True if mWakefulness is Asleep and not mid-transition."""
+        output = self._adb_raw(["shell", "dumpsys", "power"]).stdout
+        return "mWakefulness=Asleep" in output and "mWakefulnessChanging=false" in output
+
+    def is_wake_up_mode(self) -> bool:
+        """Return True if mWakefulness is Awake and not mid-transition."""
+        output = self._adb_raw(["shell", "dumpsys", "power"]).stdout
+        return "mWakefulness=Awake" in output and "mWakefulnessChanging=false" in output
+
     # ------------------------------------------------------------------
     # Camera
     # ------------------------------------------------------------------

@@ -107,6 +107,9 @@ common/version.py        — VERSION string (bump manually on releases)
 **DuvelDevice public API** (import in other scripts as needed):
 - `connect()` / `disconnect()`
 - `reboot()` / `wait_for_boot(timeout)`
+- `wake_up()` — send KEYCODE_WAKEUP to bring device out of sleep
+- `is_sleep_mode()` → `bool` — True if `mWakefulness=Asleep`
+- `is_wake_up_mode()` → `bool` — True if `mWakefulness=Awake`
 - `wait_for_camera_working(timeout, frame_save_path)` → `(dev, name)`
 - `wait_for_audio_working(timeout)` → `(short_name, full_name)`
 - `test_speaker(duration)` → `bool`

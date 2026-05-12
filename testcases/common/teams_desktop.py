@@ -506,31 +506,40 @@ class TeamsDesktopController:
 
         The Admit/Deny buttons inside this popup are rendered in WebView2 and are not
         exposed via UIA — use _click_lobby_button() for coordinate-based clicking.
+
+        Strategy: find all Groups that contain 'lobby' text, then return the smallest
+        one (the actual notification popup, not a large containing group).
         """
         call_win = self._call_window()
         if call_win is None:
             return None
+        candidates = []
         for el in call_win.descendants(control_type="Group"):
             try:
                 rect = el.rectangle()
-                # Lobby popup is roughly 280-420 px wide and 70-180 px tall
-                if not (250 < rect.width() < 450 and 60 < rect.height() < 200):
+                # Skip groups that are too small or full-window-sized
+                if rect.width() < 100 or rect.height() < 50:
                     continue
-                # Confirm it contains lobby-related text
+                if rect.width() > 1200 or rect.height() > 600:
+                    continue
                 for text_el in el.descendants(control_type="Text"):
                     try:
                         if "lobby" in (text_el.window_text() or "").lower():
-                            return el
+                            candidates.append((rect.width() * rect.height(), el))
+                            break
                     except Exception:
                         pass
             except Exception:
                 pass
+        if candidates:
+            candidates.sort(key=lambda x: x[0])
+            return candidates[0][1]
         return None
 
     # Admit/Deny button positions relative to the lobby popup Group bounding rect.
-    # Calibrated from live Teams UI: Admit is the right blue button, Deny is left white.
+    # Calibrated from live Teams UI (495x188 popup): Admit is right blue, Deny is left.
     _LOBBY_ADMIT_X_FRAC = 0.73
-    _LOBBY_DENY_X_FRAC  = 0.40
+    _LOBBY_DENY_X_FRAC  = 0.27
     _LOBBY_BTN_Y_FRAC   = 0.82   # buttons are near the bottom of the popup
 
     def _click_lobby_button(self, action: str = "admit") -> bool:

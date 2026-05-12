@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 FFMPEG_DEFAULT = r"C:\Tools\ffmpeg\bin\ffmpeg.exe"
+SCRCPY_DEFAULT = r"C:\Tools\scrcpy-win64-v3.3.3\scrcpy.exe"
 
 
 def screenshot_for_debug(ui, output_dir: str, round_num: int) -> None:
@@ -42,6 +43,32 @@ def start_recording(output_dir: str, ffmpeg_path: str) -> "subprocess.Popen | No
         return proc
     except Exception as e:
         print(f"[WARN] Could not start ffmpeg: {e}")
+        return None
+
+
+def _get_host_resolution() -> "tuple[int, int]":
+    import ctypes
+    user32 = ctypes.windll.user32
+    return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+
+
+def start_ui_with_scrcpy(serial: str, scrcpy_path: str = SCRCPY_DEFAULT) -> "subprocess.Popen | None":
+    if not Path(scrcpy_path).exists():
+        print(f"[WARN] scrcpy not found at {scrcpy_path} — UI mirror skipped")
+        return None
+    sw, sh = _get_host_resolution()
+    w, h = sw // 2, sh // 2
+    cmd = [
+        scrcpy_path, "--serial", serial,
+        "--window-x", "10", "--window-y", "50",
+        "--window-width", str(w), "--window-height", str(h),
+    ]
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"  scrcpy started for {serial}  window={w}x{h} @10,50")
+        return proc
+    except Exception as e:
+        print(f"[WARN] Could not start scrcpy: {e}")
         return None
 
 

@@ -33,7 +33,7 @@ from pathlib import Path
 from common.duvel_device import DuvelDevice
 from common.version import VERSION
 from common.teams_meeting_host import MeetingInfo
-from common.utils import FFMPEG_DEFAULT, screenshot_for_debug, start_recording, stop_recording
+from common.utils import FFMPEG_DEFAULT, screenshot_for_debug, start_recording, stop_recording, start_ui_with_scrcpy
 
 _JOIN_PAGE_TIMEOUT = 30  # seconds to wait for join-with-ID dialog
 _IN_CALL_TIMEOUT   = 60  # seconds to wait for in-call screen after tapping Join
@@ -155,23 +155,26 @@ class MtrDirtyDisconnectTestRunner:
             ui = self._device.ui
             r.join_start = time.time()
 
-            # Step 1: Navigate to Teams Rooms main page
+            # Step 1: Launch scrcpy to mirror device UI
+            start_ui_with_scrcpy(self._device._serial)
+
+            # Step 2: Navigate to Teams Rooms main page
             print("  Navigating to Teams Rooms main page...")
             if not ui.go_to_main_page(timeout=self._args.device_timeout):
                 raise TimeoutError(f"Main page not reachable within {self._args.device_timeout}s")
             print("  Main page visible.")
 
-            # Step 2: Tap "Join with an ID"
+            # Step 3: Tap "Join with an ID"
             print("  Tapping 'Join with an ID'...")
             if not ui.main.click_join_with_an_id():
                 raise RuntimeError("Could not tap 'Join with an ID' button")
 
-            # Step 3: Wait for join-with-ID dialog
+            # Step 4: Wait for join-with-ID dialog
             print("  Waiting for join-with-ID dialog...")
             if not ui.join_with_id.is_visible(timeout=_JOIN_PAGE_TIMEOUT):
                 raise TimeoutError(f"Join-with-ID dialog not visible within {_JOIN_PAGE_TIMEOUT}s")
 
-            # Step 4: Enter meeting credentials
+            # Step 5: Enter meeting credentials
             print(f"  Entering meeting ID: {self._args.meeting_id}")
             if not ui.join_with_id.enter_meeting_id(self._args.meeting_id):
                 raise RuntimeError("Could not enter meeting ID")
@@ -180,12 +183,12 @@ class MtrDirtyDisconnectTestRunner:
                 if not ui.join_with_id.enter_passcode(self._args.passcode):
                     raise RuntimeError("Could not enter passcode")
 
-            # Step 5: Tap Join
+            # Step 6: Tap Join
             print("  Tapping 'Join Teams meeting'...")
             if not ui.join_with_id.click_join():
                 raise RuntimeError("Could not tap 'Join Teams meeting' button")
 
-            # Step 6: Wait for in-call screen
+            # Step 7: Wait for in-call screen
             print("  Waiting for in-call screen...")
             if not ui.in_call.is_visible(timeout=_IN_CALL_TIMEOUT):
                 raise TimeoutError(f"In-call screen not visible within {_IN_CALL_TIMEOUT}s")
@@ -194,7 +197,7 @@ class MtrDirtyDisconnectTestRunner:
             print(f"  In-call visible  (+{r.in_call_seconds():.1f}s)"
                   + (f"  title: {title}" if title else ""))
 
-            # Step 7: Camera phase — wait 15s for stream to stabilize, then screenshot
+            # Step 8: Camera phase — wait 15s for stream to stabilize, then screenshot
             print("  Camera phase: waiting 15s for stream to stabilize...")
             time.sleep(15)
             ts = datetime.now().strftime("%H%M%S")
@@ -207,11 +210,11 @@ class MtrDirtyDisconnectTestRunner:
             r.screenshot_path = shot_path
             print(f"  Screenshot saved: {shot_path}")
 
-            # Step 8: Hang up on Duvel MTR
+            # Step 9: Hang up on Duvel MTR
             print("  Hanging up on Duvel MTR...")
             ui.in_call.hang_up()
 
-            # Step 9: Reboot Duvel to simulate dirty disconnect
+            # Step 10: Reboot Duvel to simulate dirty disconnect
             print("  Rebooting Duvel to simulate dirty disconnect...")
             self._device.reboot()
             print(f"  Waiting for boot (timeout={_BOOT_TIMEOUT}s)...")

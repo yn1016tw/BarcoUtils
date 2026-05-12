@@ -209,12 +209,7 @@ class MtrDirtyDisconnectTestRunner:
 
             # Step 8: Hang up on Duvel MTR
             print("  Hanging up on Duvel MTR...")
-            if not ui.in_call.hang_up():
-                print("  [WARN] hang_up() failed — force-stopping Teams on device")
-                try:
-                    ui.force_stop("com.microsoft.skype.teams.ipphone")
-                except Exception:
-                    pass
+            ui.in_call.hang_up()
 
             # Step 9: Reboot Duvel to simulate dirty disconnect
             print("  Rebooting Duvel to simulate dirty disconnect...")

@@ -198,8 +198,9 @@ class TeamsDesktopController:
         time.sleep(4)
 
         # Step 5 — join now (pre-join screen)
-        call_win = self._wait_for_call_window(timeout=15)
+        call_win = self._wait_for_call_window(timeout=max(30, timeout))
         if call_win is None:
+            self._dump_windows_debug()
             raise RuntimeError("Meeting call window did not appear")
 
         # Retry clicking Join now until Leave button confirms we are in the call
@@ -417,58 +418,77 @@ class TeamsDesktopController:
         raise RuntimeError("Could not find main Teams window")
 
     def _find_main_window(self):
-        """Try to locate the main Teams nav window. Returns window or None."""
+        """Try to locate the main Teams nav window. Returns window or None.
+
+        New Teams (Electron / ms-teams.exe) does not expose windows via
+        Application.connect(title_re=...) or app.windows() reliably.
+        Use Desktop enumeration + handle-based reconnect instead, which
+        gives full WebView2 accessibility tree traversal.
+        """
         _non_call_patterns = [
             r"Calendar \|.*Microsoft Teams",
             r"Chat \|.*Microsoft Teams",
             r"Activity \|.*Microsoft Teams",
-            r".*\|.*Microsoft Teams",   # any page | Microsoft Teams
+            r"Calls \|.*Microsoft Teams",
+            r".*\|.*Microsoft Teams",
         ]
-        for pattern in _non_call_patterns:
-            try:
-                app = Application(backend="uia").connect(title_re=pattern, timeout=3)
-                # Return the lazy WindowSpecification (not wrapper_object()) so that
-                # child_window() calls can traverse the WebView2 accessibility tree via
-                # the Application's process context.
-                return app.window(title_re=pattern)
-            except Exception:
-                pass
-        # Fallback: try known Teams process names (covers hidden / minimised windows)
-        for proc in ("ms-teams.exe", "Teams.exe", "msteams.exe"):
-            try:
-                app = Application(backend="uia").connect(path=proc, timeout=3)
-                for w in app.windows(visible_only=False):
-                    try:
-                        t = w.window_text() or ""
-                        if "Microsoft Teams" in t and "Microsoft Teams meeting" not in t:
-                            return w
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+        try:
+            for w in Desktop(backend="uia").windows():
+                try:
+                    title = w.window_text() or ""
+                    if "Microsoft Teams meeting" in title:
+                        continue
+                    for pat in _non_call_patterns:
+                        if re.search(pat, title):
+                            app = Application(backend="uia").connect(handle=w.handle)
+                            return app.window(handle=w.handle)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         return None
 
     def _call_window(self):
         """Return the active call/meeting window, or None.
 
-        Uses Application.connect() so the returned wrapper can traverse
-        the WebView2 accessibility tree inside Teams.
+        New Teams does not work with Application.connect(title_re=...).
+        Use Desktop enumeration + handle-based reconnect instead.
         """
         _call_patterns = [
             r"Microsoft Teams meeting \| Microsoft Teams",
             r"Meeting with.*\| Microsoft Teams",
+            r"Meet now.*\| Microsoft Teams",
+            r"Join.*meeting.*\| Microsoft Teams",
         ]
-        for pattern in _call_patterns:
-            try:
-                app = Application(backend="uia").connect(title_re=pattern, timeout=2)
-                w = app.window(title_re=pattern)
-                if w.exists():
-                    return w
-            except Exception:
-                pass
+        _call_buttons = ("Join now", "Leave", "Hang up", "Hang Up")
+        try:
+            for w in Desktop(backend="uia").windows():
+                try:
+                    title = w.window_text() or ""
+                    if "Microsoft Teams" not in title:
+                        continue
+                    # Fast path: title matches a known call pattern
+                    for pat in _call_patterns:
+                        if re.search(pat, title):
+                            app = Application(backend="uia").connect(handle=w.handle)
+                            return app.window(handle=w.handle)
+                    # Slow path: look for call-control buttons (pre-join or in-call)
+                    app = Application(backend="uia").connect(handle=w.handle)
+                    w2 = app.window(handle=w.handle)
+                    for btn_label in _call_buttons:
+                        try:
+                            btn = w2.child_window(title=btn_label, control_type="Button")
+                            if btn.exists(timeout=0.3):
+                                return w2
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
         return None
 
-    def _wait_for_call_window(self, timeout: int = 15):
+    def _wait_for_call_window(self, timeout: int = 30):
         """Poll until the call window appears. Returns the window or None."""
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -598,6 +618,20 @@ class TeamsDesktopController:
             pass
 
         return None
+
+    def _dump_windows_debug(self) -> None:
+        """Print all open window titles to help diagnose call window detection failures."""
+        print("[teams] Visible windows at call-window timeout:")
+        try:
+            desktop = Desktop(backend="uia")
+            for w in desktop.windows():
+                try:
+                    title = w.window_text() or "(no title)"
+                    print(f"  {title!r}")
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"  [dump error] {e}")
 
     def dump_incoming_call_info(self) -> None:
         """Print all visible window titles and Teams button names — call this when a call

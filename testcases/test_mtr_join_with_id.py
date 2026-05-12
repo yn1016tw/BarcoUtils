@@ -32,7 +32,6 @@ from pathlib import Path
 
 from common.duvel_device import DuvelDevice
 from common.version import VERSION
-from common.teams_desktop import TeamsDesktopController
 from common.teams_meeting_host import MeetingInfo
 
 _JOIN_PAGE_TIMEOUT = 30  # seconds to wait for join-with-ID dialog
@@ -141,9 +140,8 @@ class ResultWriter:
 # ---------------------------------------------------------------------------
 
 class MtrAvCallTestRunner:
-    def __init__(self, device: DuvelDevice, teams: TeamsDesktopController | None, args):
+    def __init__(self, device: DuvelDevice, args):
         self._device = device
-        self._teams = teams
         self._args = args
 
     def run_round(self, round_num: int, total_rounds: int) -> TestResult:
@@ -222,12 +220,12 @@ class MtrAvCallTestRunner:
         except TimeoutError as e:
             r.error = f"TIMEOUT: {e}"
             print(f"  [TIMEOUT] {e}")
-            _cleanup(self._device.ui, self._teams)
+            _cleanup(self._device.ui)
             _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
         except Exception as e:
             r.error = str(e)
             print(f"  [ERROR] {e}")
-            _cleanup(self._device.ui, self._teams)
+            _cleanup(self._device.ui)
             _save_debug_screenshot(self._device.ui, self._args.output_dir, round_num)
 
         return r
@@ -237,17 +235,12 @@ class MtrAvCallTestRunner:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _cleanup(ui, teams: TeamsDesktopController | None) -> None:
+def _cleanup(ui) -> None:
     try:
         ui.end_call()
         time.sleep(5)
     except Exception:
         pass
-    if teams is not None:
-        try:
-            teams.end_call()
-        except Exception:
-            pass
 
 
 _FFMPEG_DEFAULT = r"C:\Tools\ffmpeg\bin\ffmpeg.exe"
@@ -331,8 +324,6 @@ def parse_args():
                         help="Log output directory (default: logs/ next to this script)")
     parser.add_argument("--device-timeout", type=int, default=120, metavar="SEC",
                         help="Max seconds to wait for MTR main page (default: 120)")
-    parser.add_argument("--no-teams", action="store_true",
-                        help="Skip Teams desktop connection — Duvel side only")
     parser.add_argument("--fail-fast", action="store_true",
                         help="Stop after the first failed round")
     parser.add_argument("--no-record", action="store_true",
@@ -379,21 +370,8 @@ def main():
         print(f"[ERROR] {e}")
         sys.exit(1)
 
-    # Connect to Teams desktop (optional)
-    teams: TeamsDesktopController | None = None
-    if not args.no_teams:
-        print("Connecting to Teams desktop...")
-        try:
-            ctrl = TeamsDesktopController()
-            ctrl.connect(launch=False, timeout=10)
-            teams = ctrl
-            print("Connected to Teams desktop.")
-        except Exception as e:
-            print(f"[WARN] Could not connect to Teams desktop: {e}")
-            print("  Host PC call accept will be skipped. Use --no-teams to suppress this warning.")
-
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
-    runner = MtrAvCallTestRunner(device=device, teams=teams, args=args)
+    runner = MtrAvCallTestRunner(device=device, args=args)
 
     print(f"\nMTR AV Call Test  v{VERSION}")
     print(f"  Device        : {device.label}")
@@ -402,7 +380,6 @@ def main():
     if args.passcode:
         print(f"  Passcode      : {args.passcode}")
     print(f"  Iterations    : {args.iterations}")
-    print(f"  Host PC       : {'connected' if teams else 'not connected (Duvel side only)'}")
     print(f"  Output dir    : {args.output_dir}")
 
     recorder = None if args.no_record else _start_recording(args.output_dir, args.ffmpeg)

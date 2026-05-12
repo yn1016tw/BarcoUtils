@@ -12,24 +12,31 @@ Standalone ADB-based test utilities for the Barco Duvel (ClickShare base unit). 
 
 UI page objects and element references are based on: Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.071`. Resource IDs and UI hierarchy may differ on other versions.
 
-## Running the test
+## Running the tests
+
+All scripts are run from the **repo root**. Python resolves `from common.xxx import` via `testcases/common/` (script directory is added to `sys.path` automatically).
 
 ```bash
-# USB
+# Peripheral stress test (camera / speaker / mic)
 python testcases/test_peripheral.py --serial 1882000501 --iterations 5
-
-# TCP/IP
 python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 3
-
-# With custom output dir
 python testcases/test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
-
-# Selective tests
-python testcases/test_peripheral.py --ip 192.168.1.100 --tests camera
+python testcases/test_peripheral.py --ip 192.168.1.100 --tests camera          # selective
 python testcases/test_peripheral.py --ip 192.168.1.100 --tests speaker mic
-
-# Stop on first failure
 python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 10 --fail-fast
+
+# MTR Meet Now camera test (reboot-on-exception)
+python testcases/test_mtr_meet_now.py --ip 192.168.1.100
+python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --output-dir C:/logs --iterations 3
+
+# MTR Join-with-ID call test (reboot-on-exception)
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100
+
+# MDEP setup wizard + Teams sign-in automation (each step skipped if screen not visible)
+python testcases/test_setup_flow.py --ip 192.168.1.100
+python testcases/test_setup_flow.py --serial 1882000501
+python testcases/test_setup_flow.py --ip 192.168.1.100 \
+    --email user@domain.com --password MyPW --admin-password Admin123!
 ```
 
 No install step — run directly from the repo root. There are no automated tests, linting config, or build system.
@@ -62,18 +69,20 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 
 ## Architecture
 
+All Python source lives under `testcases/` (import root = `testcases/` at runtime).
+
 ```
-common/duvel_device.py      — DuvelDevice class (all ADB logic lives here)
-common/ui_mtr.py            — MtrUi class (ADB-based UI controller for MTR / Teams)
-common/ui_base.py           — BasePage base class shared by all page objects
-common/ui_main.py           — MainPage page object (Teams Rooms home screen buttons)
-common/ui_invite_people.py  — InvitePeoplePage page object ("Invite people to join you" dialog)
-common/ui_in_call.py        — InCallPage page object (active call screen)
-common/ui_more_menu.py      — MoreMenuPage page object (More overlay: Meet now, Call, Share, Whiteboard, Join with an ID, Settings)
-common/ui_settings.py       — SettingsPage page object (Settings dialog: org name, About, Device settings)
-common/ui_device_settings.py — DeviceSettingsPage page object (Android Device Settings: Accessibility, System, About, Admin settings)
-common/ui_norden_call.py    — NordenCallPage page object (dial screen: type name/number, Call button)
-common/ui_join_with_id.py   — JoinWithIdPage page object (Join with an ID dialog: meeting ID, passcode, Join button)
+testcases/common/duvel_device.py      — DuvelDevice class (all ADB logic lives here)
+testcases/common/ui_mtr.py            — MtrUi class (ADB-based UI controller for MTR / Teams)
+testcases/common/ui_base.py           — BasePage base class shared by all page objects
+testcases/common/ui_main.py           — MainPage page object (Teams Rooms home screen buttons)
+testcases/common/ui_invite_people.py  — InvitePeoplePage page object ("Invite people to join you" dialog)
+testcases/common/ui_in_call.py        — InCallPage page object (active call screen)
+testcases/common/ui_more_menu.py      — MoreMenuPage page object (More overlay: Meet now, Call, Share, Whiteboard, Join with an ID, Settings)
+testcases/common/ui_settings.py       — SettingsPage page object (Settings dialog: org name, About, Device settings)
+testcases/common/ui_device_settings.py — DeviceSettingsPage page object (Android Device Settings: Accessibility, System, About, Admin settings)
+testcases/common/ui_norden_call.py    — NordenCallPage page object (dial screen: type name/number, Call button)
+testcases/common/ui_join_with_id.py   — JoinWithIdPage page object (Join with an ID dialog: meeting ID, passcode, Join button)
 testcases/common/ui_device_setup_wizard.py   — DeviceSetupWizardPage page object (MDEP wizard entry screen, before setup begins)
 testcases/common/ui_device_setup_language.py — SetupLanguagePage page object (language selection step)
 testcases/common/ui_device_setup_network.py  — SetupNetworkPage page object (network connectivity step)
@@ -88,15 +97,16 @@ testcases/common/ui_device_setup_complete.py — SetupCompletePage page object (
 testcases/common/ui_teams_sign_in.py         — TeamsSignInPage page object (Teams device-code-flow sign-in screen)
 testcases/common/ui_teams_sign_in_email.py   — TeamsSignInEmailPage page object (Teams on-device email/username entry)
 testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page object (Azure Authenticator MSAL WebView: password entry + device registration steps)
-common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
+testcases/common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
-testcases/test_peripheral.py       — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
-testcases/test_mtr_meet_now.py       — CLI entry point for the MTR camera test (Meet Now → screenshot); reboots only on failure
-testcases/test_mtr_join_with_id.py   — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); reboots only on failure
+testcases/common/version.py           — VERSION string (bump manually on releases)
+testcases/test_peripheral.py          — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
+testcases/test_mtr_meet_now.py        — CLI entry point for the MTR camera test (Meet Now → screenshot); reboots only on exception
+testcases/test_mtr_join_with_id.py    — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); reboots only on exception
+testcases/test_setup_flow.py          — CLI entry point for MDEP setup wizard + Teams sign-in automation (14 steps, each skipped if screen not visible)
 tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()
 scripts/                 — Windows helper batch files (ADB key switcher, Duvel device setup)
-common/version.py        — VERSION string (bump manually on releases)
 ```
 
 **Data flow in testcases/test_peripheral.py:**
@@ -157,39 +167,39 @@ common/version.py        — VERSION string (bump manually on releases)
 - `teams_sign_in_email` → `TeamsSignInEmailPage` — lazy property
 - `azure_auth_webview` → `AzureAuthWebViewPage` — lazy property
 
-**Page object base** (`common/ui_base.py`): all page objects inherit `BasePage` — provides `__init__(ui)` and `_tap(candidates: list[dict]) -> bool` (tries each kwarg dict against `tap_element` in order).
+**Page object base** (`testcases/common/ui_base.py`): all page objects inherit `BasePage` — provides `__init__(ui)` and `_tap(candidates: list[dict]) -> bool` (tries each kwarg dict against `tap_element` in order).
 
-**MainPage** (`common/ui_main.py`, access via `device.ui.main`):
+**MainPage** (`testcases/common/ui_main.py`, access via `device.ui.main`):
 - `is_visible()` → bool
 - `click_meet_now()` / `click_call()` / `click_share()` / `click_join_with_an_id()` / `click_more()` → bool
 
-**InvitePeoplePage** (`common/ui_invite_people.py`, access via `device.ui.invite_people`):
+**InvitePeoplePage** (`testcases/common/ui_invite_people.py`, access via `device.ui.invite_people`):
 - `is_visible()` → bool
 - `dismiss()` / `click_add_participants()` → bool
 - `get_meeting_id()` / `get_passcode()` / `get_dial_in_info()` → str | None
 
-**InCallPage** (`common/ui_in_call.py`, access via `device.ui.in_call`):
+**InCallPage** (`testcases/common/ui_in_call.py`, access via `device.ui.in_call`):
 - `is_visible()` → bool; `get_meeting_title()` → str | None
 - `hang_up()` / `mute()` / `toggle_camera()` / `change_video()` / `show_participants()` / `reactions()` / `share()` / `more_options()` / `change_view()` / `volume_up()` / `volume_down()` → bool
 
-**MoreMenuPage** (`common/ui_more_menu.py`, access via `device.ui.more_menu`):
+**MoreMenuPage** (`testcases/common/ui_more_menu.py`, access via `device.ui.more_menu`):
 - `is_visible()` → bool
 - `click_back()` / `click_meet_now()` / `click_call()` / `click_share()` / `click_whiteboard()` / `click_join_with_an_id()` / `click_settings()` → bool
 
-**SettingsPage** (`common/ui_settings.py`, access via `device.ui.settings`):
+**SettingsPage** (`testcases/common/ui_settings.py`, access via `device.ui.settings`):
 - `is_visible()` → bool
 - `click_back()` → bool; `get_org_name()` → str | None
 - `click_about()` / `click_device_settings()` → bool
 
-**DeviceSettingsPage** (`common/ui_device_settings.py`, access via `device.ui.device_settings`):
+**DeviceSettingsPage** (`testcases/common/ui_device_settings.py`, access via `device.ui.device_settings`):
 - `is_visible()` → bool; `click_exit()` → bool
 - `click_accessibility()` / `click_system()` / `click_about()` / `click_admin_settings()` → bool
 
-**NordenCallPage** (`common/ui_norden_call.py`, access via `device.ui.norden_call`):
+**NordenCallPage** (`testcases/common/ui_norden_call.py`, access via `device.ui.norden_call`):
 - `is_visible()` → bool
 - `type_name_or_number(text)` → bool; `click_call()` / `click_back()` → bool
 
-**JoinWithIdPage** (`common/ui_join_with_id.py`, access via `device.ui.join_with_id`):
+**JoinWithIdPage** (`testcases/common/ui_join_with_id.py`, access via `device.ui.join_with_id`):
 - `is_visible()` → bool
 - `enter_meeting_id(meeting_id)` / `enter_passcode(passcode)` → bool; `click_join()` / `click_back()` → bool
 
@@ -264,7 +274,7 @@ common/version.py        — VERSION string (bump manually on releases)
 - Password step: `get_display_name()` → str | None; `enter_password(password)` / `click_sign_in()` / `click_back()` / `click_forgot_password()` / `click_sign_in_with_another_account()` / `click_terms_of_use()` / `click_privacy_cookies()` → bool
 - Registration step: `get_heading()` / `get_description()` → str | None; `click_register()` / `click_more_details()` → bool
 
-**TeamsDesktopController** (`common/teams_desktop.py`): pywinauto-based automation for the Windows Teams desktop app. Requires `pip install pywinauto pywin32`.
+**TeamsDesktopController** (`testcases/common/teams_desktop.py`): pywinauto-based automation for the Windows Teams desktop app. Requires `pip install pywinauto pywin32`.
 - `connect(launch=True, timeout=30)` — attach to running Teams; launch if not running
 - `create_meeting(timeout=20)` → `str | None` — start Meet Now, copy join link, return URL
 - `wait_for_incoming_call(timeout=60)` → `bool` — poll for incoming call toast

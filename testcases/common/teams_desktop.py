@@ -531,6 +531,21 @@ class TeamsDesktopController:
                         pass
             except Exception:
                 pass
+        # Also check Button elements whose own text contains "lobby" —
+        # Teams occasionally renders the notification card as a Button instead of a Group.
+        for el in call_win.descendants(control_type="Button"):
+            try:
+                if "lobby" not in (el.window_text() or "").lower():
+                    continue
+                rect = el.rectangle()
+                if rect.width() < 100 or rect.height() < 50:
+                    continue
+                if rect.width() > 1200 or rect.height() > 600:
+                    continue
+                candidates.append((rect.width() * rect.height(), el))
+            except Exception:
+                pass
+
         if candidates:
             candidates.sort(key=lambda x: x[0])
             return candidates[0][1]

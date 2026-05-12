@@ -7,7 +7,8 @@ Flow per round:
   1. Wait for Teams Rooms main page
   2. Join meeting by ID on Duvel MTR
   3. Camera phase: wait 15s for stream to stabilize, take screenshot
-  4. Reboot Duvel and wait for boot (simulates dirty disconnect / exception)
+  4. Hang up on Duvel MTR
+  5. Reboot Duvel and wait for boot (simulates dirty disconnect / exception)
 
 Typical usage:
   # Terminal 1 — create meeting and auto-accept calls:
@@ -206,7 +207,16 @@ class MtrDirtyDisconnectTestRunner:
             r.screenshot_path = shot_path
             print(f"  Screenshot saved: {shot_path}")
 
-            # Step 8: Reboot Duvel to simulate dirty disconnect
+            # Step 8: Hang up on Duvel MTR
+            print("  Hanging up on Duvel MTR...")
+            if not ui.in_call.hang_up():
+                print("  [WARN] hang_up() failed — force-stopping Teams on device")
+                try:
+                    ui.force_stop("com.microsoft.skype.teams.ipphone")
+                except Exception:
+                    pass
+
+            # Step 9: Reboot Duvel to simulate dirty disconnect
             print("  Rebooting Duvel to simulate dirty disconnect...")
             self._device.reboot()
             print(f"  Waiting for boot (timeout={_BOOT_TIMEOUT}s)...")

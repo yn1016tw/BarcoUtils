@@ -200,7 +200,7 @@ class MtrAvCallTestRunner:
             time.sleep(15)
             ts = datetime.now().strftime("%H%M%S")
             shot_path = str(
-                Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}_camera.png"
+                Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}_device.png"
             )
             print("  Taking screenshot...")
             ui.screenshot(shot_path)

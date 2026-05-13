@@ -105,7 +105,7 @@ testcases/common/ui_teams_sign_in_email.py   — TeamsSignInEmailPage page objec
 testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page object (Azure Authenticator MSAL WebView: password entry + device registration steps)
 testcases/common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
-testcases/common/utils.py             — Shared test utilities: screenshot, start_recording, stop_recording, FFMPEG_DEFAULT
+testcases/common/utils.py             — Shared test utilities: screenshot_for_debug, screenshot_host_desktop, start_recording, stop_recording, start_ui_with_scrcpy, FFMPEG_DEFAULT, SCRCPY_DEFAULT
 testcases/common/version.py           — VERSION string (bump manually on releases)
 testcases/test_peripheral.py          — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
 testcases/test_mtr_meet_now.py        — CLI entry point for the MTR camera test (Meet Now → screenshot); reboots only on exception
@@ -121,6 +121,15 @@ scripts/                 — Windows helper batch files (ADB key switcher, Duvel
 1. `main()` constructs `DuvelDevice` and calls `connect()` — this pushes `v4l2_stream_test` to `/data/local/tmp/`
 2. `PeripheralTestRunner.run_round()` drives the full reboot → boot → camera → audio → speaker → mic sequence
 3. Timing is captured as Unix timestamps in `TestResult`; `ResultWriter` formats and saves them
+
+**utils.py public API** (`from common.utils import ...`):
+- `FFMPEG_DEFAULT` — default path to ffmpeg.exe (`C:\Tools\ffmpeg\bin\ffmpeg.exe`)
+- `SCRCPY_DEFAULT` — default path to scrcpy.exe (`C:\Tools\scrcpy-win64-v3.3.3\scrcpy.exe`)
+- `screenshot_for_debug(ui, output_dir, round_num)` — ADB screenshot on failure; saves `round01_HHMMSS.png` to `<output_dir>/files/`
+- `screenshot_host_desktop(output_dir, round_num)` → `str | None` — PIL full-desktop capture; saves `round01_HHMMSS_desktop.png` to `<output_dir>/files/`
+- `start_recording(output_dir, ffmpeg_path)` → `Popen | None` — start ffmpeg gdigrab desktop recording to `<output_dir>/files/desktop_HHMMSS.mp4`
+- `stop_recording(proc)` — gracefully stop ffmpeg (sends `q`); kills on timeout
+- `start_ui_with_scrcpy(serial, scrcpy_path)` → `Popen | None` — mirror device screen; window size = host resolution ÷ 2, position x:10, y:50; `serial` may be USB serial or `IP:port`
 
 **DuvelDevice public API** (import in other scripts as needed):
 - `connect()` / `disconnect()`

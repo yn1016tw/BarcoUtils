@@ -33,7 +33,7 @@ from pathlib import Path
 from common.duvel_device import DuvelDevice
 from common.version import VERSION
 from common.teams_meeting_host import MeetingInfo
-from common.utils import FFMPEG_DEFAULT, screenshot_for_debug, start_recording, stop_recording, start_ui_with_scrcpy
+from common.utils import FFMPEG_DEFAULT, screenshot_for_debug, screenshot_host_desktop, start_recording, stop_recording, start_ui_with_scrcpy
 
 _JOIN_PAGE_TIMEOUT = 30  # seconds to wait for join-with-ID dialog
 _IN_CALL_TIMEOUT   = 60  # seconds to wait for in-call screen after tapping Join
@@ -206,6 +206,7 @@ class MtrDirtyDisconnectTestRunner:
             )
             print("  Taking screenshot...")
             ui.screenshot(shot_path)
+            screenshot_host_desktop(self._args.output_dir, round_num)
             r.camera_screenshot = time.time()
             r.screenshot_path = shot_path
             print(f"  Screenshot saved: {shot_path}")

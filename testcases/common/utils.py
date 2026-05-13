@@ -6,6 +6,19 @@ FFMPEG_DEFAULT = r"C:\Tools\ffmpeg\bin\ffmpeg.exe"
 SCRCPY_DEFAULT = r"C:\Tools\scrcpy-win64-v3.3.3\scrcpy.exe"
 
 
+def screenshot_host_desktop(output_dir: str, round_num: int) -> str | None:
+    try:
+        from PIL import ImageGrab
+        ts = datetime.now().strftime("%H%M%S")
+        path = str(Path(output_dir) / "files" / f"round{round_num:02d}_{ts}_desktop.png")
+        ImageGrab.grab().save(path)
+        print(f"  Host desktop screenshot: {path}")
+        return path
+    except Exception as e:
+        print(f"  [WARN] Host desktop screenshot failed: {e}")
+        return None
+
+
 def screenshot_for_debug(ui, output_dir: str, round_num: int) -> None:
     ts = datetime.now().strftime("%H%M%S")
     path = str(Path(output_dir) / "files" / f"round{round_num:02d}_{ts}_fail.png")

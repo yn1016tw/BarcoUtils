@@ -213,6 +213,7 @@ class MtrDirtyDisconnectTestRunner:
             # Step 9: Hang up on Duvel MTR
             print("  Hanging up on Duvel MTR...")
             ui.in_call.hang_up()
+            time.sleep(1)
 
             # Step 10: Reboot Duvel to simulate dirty disconnect
             print("  Rebooting Duvel to simulate dirty disconnect...")

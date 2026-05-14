@@ -112,13 +112,13 @@ testcases/test_mtr_meet_now.py        — CLI entry point for the MTR camera tes
 testcases/test_mtr_join_with_id.py    — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); records desktop via ffmpeg
 testcases/test_mtr_join_with_id_for_dirty_disconnect.py — same flow but Step 9 reboots Duvel after hang up to simulate dirty disconnect; records desktop via ffmpeg
 testcases/test_setup_flow.py          — CLI entry point for MDEP setup wizard + Teams sign-in automation (14 steps, each skipped if screen not visible)
-tools/v4l2_stream_test   — Static ARM64 binary pushed to device at connect() time
-data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed at connect()
+tools/v4l2_stream_test   — Static ARM64 binary; pushed by push_peripheral_resources() (peripheral test only)
+data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed by push_peripheral_resources()
 scripts/                 — Windows helper batch files (ADB key switcher, Duvel device setup)
 ```
 
 **Data flow in testcases/test_peripheral.py:**
-1. `main()` constructs `DuvelDevice` and calls `connect()` — this pushes `v4l2_stream_test` to `/data/local/tmp/`
+1. `main()` constructs `DuvelDevice`, calls `connect()` then `push_peripheral_resources()` — this pushes `v4l2_stream_test` and `barco_tone_2s.wav` to `/data/local/tmp/`
 2. `PeripheralTestRunner.run_round()` drives the full reboot → boot → camera → audio → speaker → mic sequence
 3. Timing is captured as Unix timestamps in `TestResult`; `ResultWriter` formats and saves them
 
@@ -162,28 +162,7 @@ scripts/                 — Windows helper batch files (ADB key switcher, Duvel
 - `launch(package, activity)` / `force_stop(package)`
 - `launch_teams()` / `is_teams_foreground()` / `end_call()` — MTR-specific helpers; `end_call()` delegates to `in_call.hang_up()`
 - `go_to_main_page(timeout=15)` → `bool` — navigate to Teams Rooms home screen from any state (hang up if in-call → BACK up to 5× → launch_teams() fallback)
-- `main` → `MainPage` — lazy property
-- `invite_people` → `InvitePeoplePage` — lazy property
-- `in_call` → `InCallPage` — lazy property
-- `more_menu` → `MoreMenuPage` — lazy property
-- `settings` → `SettingsPage` — lazy property
-- `device_settings` → `DeviceSettingsPage` — lazy property
-- `norden_call` → `NordenCallPage` — lazy property
-- `join_with_id` → `JoinWithIdPage` — lazy property
-- `device_setup_wizard` → `DeviceSetupWizardPage` — lazy property
-- `setup_language` → `SetupLanguagePage` — lazy property
-- `setup_network` → `SetupNetworkPage` — lazy property
-- `setup_datetime` → `SetupDatetimePage` — lazy property
-- `setup_terms` → `SetupTermsPage` — lazy property
-- `setup_privacy` → `SetupPrivacyPage` — lazy property
-- `setup_admin_password` → `SetupAdminPasswordPage` — lazy property
-- `setup_confirm` → `SetupConfirmPage` — lazy property
-- `setup_update` → `SetupUpdatePage` — lazy property
-- `setup_xms_cloud` → `SetupXmsCloudPage` — lazy property
-- `setup_complete` → `SetupCompletePage` — lazy property
-- `teams_sign_in` → `TeamsSignInPage` — lazy property
-- `teams_sign_in_email` → `TeamsSignInEmailPage` — lazy property
-- `azure_auth_webview` → `AzureAuthWebViewPage` — lazy property
+- All page objects accessible as lazy properties (e.g. `ui.main`, `ui.in_call`, `ui.join_with_id`, `ui.more_menu`, `ui.settings`, `ui.device_settings`, `ui.norden_call`, `ui.invite_people`); setup wizard pages follow `ui.setup_*` / `ui.device_setup_wizard`; sign-in pages: `ui.teams_sign_in`, `ui.teams_sign_in_email`, `ui.azure_auth_webview`
 
 **Page object base** (`testcases/common/ui_base.py`): all page objects inherit `BasePage` — provides `__init__(ui)` and `_tap(candidates: list[dict]) -> bool` (tries each kwarg dict against `tap_element` in order).
 

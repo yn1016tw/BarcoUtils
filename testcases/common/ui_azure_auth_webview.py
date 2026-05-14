@@ -22,7 +22,7 @@ Usage:
         page.enter_password("MyPass!")
         page.click_sign_in()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

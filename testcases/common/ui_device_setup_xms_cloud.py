@@ -14,7 +14,7 @@ Usage:
         print(page.get_subtitle())  # "Point your mobile device camera at the QR code..."
         page.click_skip()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

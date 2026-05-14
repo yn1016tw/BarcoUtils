@@ -22,7 +22,7 @@ Typical usage:
   python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --meeting-id 123456789
   python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --serial 1882000501 --meeting-id 123456789 --passcode abc123
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 import argparse

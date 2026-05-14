@@ -4,7 +4,7 @@ Provides reboot, boot-wait, camera, and audio device checks.
 
 Requires `adb` in PATH.
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 import math

@@ -26,7 +26,7 @@ Usage:
     python testcases/test_setup_flow.py --ip 192.168.1.100 \\
         --email user@domain.com --password MyPW --admin-password Admin123!
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 import argparse

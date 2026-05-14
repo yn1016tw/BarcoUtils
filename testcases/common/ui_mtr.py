@@ -14,7 +14,7 @@ Usage:
     ui.tap_element(text="Join")
     ui.screenshot("logs/screen.png")
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

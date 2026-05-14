@@ -13,7 +13,7 @@ Usage:
         print(page.get_connectivity_message())  # "You're connected."
         page.click_next()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

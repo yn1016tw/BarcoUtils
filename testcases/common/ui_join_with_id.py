@@ -13,7 +13,7 @@ Usage:
     device.ui.join_with_id.click_join()
     device.ui.join_with_id.click_back()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

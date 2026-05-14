@@ -1,7 +1,7 @@
 """
 Shared test utilities for BarcoUtils (screenshot, recording, scrcpy helpers).
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 import subprocess

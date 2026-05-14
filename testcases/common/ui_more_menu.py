@@ -16,7 +16,7 @@ Usage:
     device.ui.more_menu.click_join_with_an_id()
     device.ui.more_menu.click_settings()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

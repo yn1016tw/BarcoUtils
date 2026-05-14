@@ -14,7 +14,7 @@ Usage:
         page.enter_confirm_password("MyPass123!")
         page.click_create_and_continue()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

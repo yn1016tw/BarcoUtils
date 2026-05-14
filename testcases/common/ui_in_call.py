@@ -18,7 +18,7 @@ Usage:
     device.ui.in_call.volume_up()
     device.ui.in_call.volume_down()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

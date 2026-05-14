@@ -13,7 +13,7 @@ Usage:
     device.ui.norden_call.click_call()
     device.ui.norden_call.click_back()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

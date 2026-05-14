@@ -13,7 +13,7 @@ Usage:
     ip  = page.get_ip_address()    # "10.102.90.83"
     ver = page.get_version()       # "04.03.00.master-1660"
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

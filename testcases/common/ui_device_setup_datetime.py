@@ -14,7 +14,7 @@ Usage:
         print(page.get_timezone())        # "GMT-00:00 Azores"
         page.click_next()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

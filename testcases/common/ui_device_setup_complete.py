@@ -13,7 +13,7 @@ Usage:
         print(page.get_title())   # "Installation complete!"
         page.click_continue()     # advance to Microsoft Teams
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

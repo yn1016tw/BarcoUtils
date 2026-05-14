@@ -15,7 +15,7 @@ Usage:
     device.ui.device_settings.click_about()
     device.ui.device_settings.click_admin_settings()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

@@ -14,7 +14,7 @@ Usage:
         print(page.get_disclaimer())  # "By clicking accept, you agree to..."
         page.click_accept()
 
-Author: James Yang <yn1016@gmail.com>
+Author: James Yang <james.yang@barco.com>
 """
 
 from __future__ import annotations

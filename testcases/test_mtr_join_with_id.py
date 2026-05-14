@@ -1,13 +1,16 @@
 """
-MTR AV Call Test (Simplified) for Duvel
-Reproduces the multi-peripheral MTR call test flow without USB switching
-or ArUco marker checking — pure flow reproduction for issue triage.
+MTR Join-with-ID Test for Duvel
+
+Joins a Teams meeting by ID on the Duvel MTR, takes a screenshot while
+in-call, then hangs up. Desktop recording via ffmpeg runs in parallel.
+Supports stress testing with configurable iterations.
 
 Flow per round:
-  1. Wait for Teams Rooms main page
-  2. Join meeting by ID on Duvel MTR
-  3. Camera phase: wait 15s for stream to stabilize, take screenshot
-  4. Hang up on Duvel MTR (force-stop Teams if hang_up fails)
+  1. Navigate to Teams Rooms main page
+  2. Tap "Join with an ID" and enter meeting ID / passcode
+  3. Wait for in-call screen
+  4. Wait 15s for stream to stabilize, take device screenshot + desktop screenshot
+  5. Hang up (force-stop Teams if hang_up fails)
 
 Typical usage:
   # Terminal 1 — create meeting and auto-accept calls:
@@ -141,7 +144,7 @@ class ResultWriter:
 # MtrAvCallTestRunner
 # ---------------------------------------------------------------------------
 
-class MtrAvCallTestRunner:
+class MtrJoinWithIdTestRunner:
     def __init__(self, device: DuvelDevice, args):
         self._device = device
         self._args = args
@@ -255,9 +258,9 @@ def _cleanup(ui) -> None:
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
-            "MTR AV call test: join meeting on Duvel MTR → camera/mic/speaker phases → leave. "
+            "MTR join-with-ID test: join a Teams meeting by ID on Duvel MTR → screenshot → hang up. "
             "Run testcases/common/teams_meeting_host.py in a separate terminal to create the "
-            "meeting and auto-accept calls on the host PC."
+            "meeting and auto-accept calls from the host PC."
         )
     )
     dev_group = parser.add_mutually_exclusive_group(required=True)
@@ -332,9 +335,9 @@ def main():
         sys.exit(1)
 
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
-    runner = MtrAvCallTestRunner(device=device, args=args)
+    runner = MtrJoinWithIdTestRunner(device=device, args=args)
 
-    print(f"\nMTR AV Call Test  v{VERSION}")
+    print(f"\nMTR Join-with-ID Test  v{VERSION}")
     print(f"  Device        : {device.label}")
     print(f"  FW            : {device.barco_fw_version()}")
     print(f"  Meeting ID    : {args.meeting_id}")

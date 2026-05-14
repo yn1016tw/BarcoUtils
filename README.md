@@ -98,7 +98,7 @@ python testcases/test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --out
 | `--ip IP[:PORT]` | — | ADB over TCP/IP (default port 5555) |
 | `--iterations N` | 1 | Number of test rounds |
 | `--tests TEST ...` | all | Tests to run: `camera` `speaker` `mic` |
-| `--output-dir DIR` | `logs` | Directory for log file and captured frames |
+| `--output-dir DIR` | auto | Directory for log file and captured frames (default: `logs/test_peripheral/YYYYMMDD/HHMMSS/`) |
 | `--boot-timeout SEC` | 300 | Max seconds to wait for boot |
 | `--device-timeout SEC` | 120 | Max seconds to wait for camera / audio |
 | `--fail-fast` | off | Stop after the first failed round |
@@ -110,14 +110,14 @@ python testcases/test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --out
   Reboot triggered    : 14:30:00.123
   Boot ready          : 14:30:44.901  (+44.8s)  PASS
   Camera working      : 14:31:05.210  (+20.3s from boot)  PASS  [/dev/video0  Rally Camera]
-  Frame saved         : logs/files/round01.jpg
+  Frame saved         : logs/test_peripheral/20260513/143000/files/round01_143005.jpg
   Audio card ready    : 14:31:06.400  (+21.5s from boot)  PASS  [RallyCamera  Rally Camera]
   Speaker working     : 14:31:08.612  (+23.7s from boot)  PASS
   Mic working         : 14:31:11.003  (+26.1s from boot)  PASS  RMS=412
   Total (reboot->mic) : 70.9s
 ```
 
-Log file: `<output-dir>/YYYYMMDD.log`  
+Log: `<output-dir>/logs.txt`  
 Frames: `<output-dir>/files/round01_HHMMSS.jpg`, …
 
 ---
@@ -154,7 +154,7 @@ python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --output-dir C:/logs --
 | `--serial SERIAL` | — | USB ADB serial number |
 | `--ip IP[:PORT]` | — | ADB over TCP/IP (default port 5555) |
 | `--iterations N` | 1 | Number of test rounds |
-| `--output-dir DIR` | `logs` | Directory for log file and screenshots |
+| `--output-dir DIR` | auto | Directory for log file and screenshots (default: `logs/test_mtr_meet_now/YYYYMMDD/HHMMSS/`) |
 | `--boot-timeout SEC` | 300 | Max seconds to wait for boot |
 | `--device-timeout SEC` | 120 | Max seconds to wait for main page |
 | `--fail-fast` | off | Stop after the first failed round |
@@ -170,12 +170,12 @@ python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --output-dir C:/logs --
   Invite dialog visible : 14:30:53.900  (+9.0s from boot)  PASS
   Dialog dismissed      : 14:30:54.300  (+9.4s from boot)  PASS
   Screenshot saved      : 14:30:55.100  (+10.2s from boot)  PASS
-  Screenshot path       : logs/files/round01_143054.png
+  Screenshot path       : logs/test_mtr_meet_now/20260513/143000/files/round01_143054.png
   Call ended            : 14:30:55.600  (+10.7s from boot)  PASS
   Total (reboot->shot)  : 55.0s
 ```
 
-Log file: `<output-dir>/YYYYMMDD.log`  
+Log: `<output-dir>/logs.txt`  
 Screenshots: `<output-dir>/files/round01_HHMMSS.png`, …
 
 ---

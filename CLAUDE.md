@@ -284,4 +284,4 @@ scripts/                 — Windows helper batch files (ADB key switcher, Duvel
 - Audio card detection reads `/proc/asound/cards` (no root required); prefers USB-Audio cards over internal SOC
 - `_adb_raw()` never raises; `_adb()` raises on non-zero exit. Internal polling uses `_poll_until()` with a 2s interval
 - `connect()` must be called before any device operations; for TCP/IP it runs `adb connect`, for USB it verifies presence in `adb devices`
-- Log file is appended to `<output-dir>/YYYYMMDD.txt`; frames go to `<output-dir>/files/round01_HHMMSS.jpg`
+- Default output dir: `logs/<script-stem>/YYYYMMDD/HHMMSS/`; log saved to `logs.txt`, frames/screenshots to `files/`

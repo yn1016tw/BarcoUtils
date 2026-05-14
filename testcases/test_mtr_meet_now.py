@@ -100,7 +100,7 @@ class ResultWriter:
         print(f"{'=' * 60}")
 
     def save_log(self, results: list[TestResult], output_dir: str) -> None:
-        path = Path(output_dir) / f"{self._run_start.strftime('%Y%m%d')}.log"
+        path = Path(output_dir) / "logs.txt"
         lines = self._format_lines(results)
         mode = "a" if path.exists() else "w"
         with open(path, mode, encoding="utf-8") as f:
@@ -309,9 +309,9 @@ def parse_args():
 def main():
     args = parse_args()
 
-    date_str = datetime.now().strftime("%Y%m%d")
+    _now = datetime.now()
     if args.output_dir is None:
-        args.output_dir = str(Path(__file__).parent / "logs" / Path(__file__).stem / date_str)
+        args.output_dir = str(Path(__file__).parent / "logs" / Path(__file__).stem / _now.strftime("%Y%m%d") / _now.strftime("%H%M%S"))
 
     if args.ip:
         serial = args.ip if ":" in args.ip else f"{args.ip}:5555"

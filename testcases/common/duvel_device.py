@@ -63,9 +63,6 @@ class DuvelDevice:
             result = self._adb_raw(["devices"], timeout=10)
             if self._serial not in result.stdout:
                 raise ConnectionError(f"Device {self._serial} not found in adb devices")
-        self._push_stream_test_bin()
-        self._push_tone_wav()
-
     def disconnect(self) -> None:
         if self._is_ip:
             subprocess.run(["adb", "disconnect", self._serial], capture_output=True, timeout=5)
@@ -214,9 +211,15 @@ class DuvelDevice:
         """Remove stale remote frame file before a camera test."""
         self._adb_raw(["shell", f"rm -f /data/local/tmp/v4l2_frame_tmp"], timeout=5)
 
-    def _push_stream_test_bin(self) -> None:
+    def push_peripheral_resources(self) -> None:
+        """Push v4l2_stream_test binary and tone WAV to device. Call before peripheral tests."""
         self._push_file(_STREAM_TEST_BIN_LOCAL, _STREAM_TEST_BIN_REMOTE)
         self._adb_raw(["shell", f"chmod +x {_STREAM_TEST_BIN_REMOTE}"], timeout=5)
+        path = Path(_TONE_WAV_2S_LOCAL)
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._generate_tone_wav(str(path), duration=2)
+        self._push_file(_TONE_WAV_2S_LOCAL, _TONE_WAV_2S_REMOTE)
 
     def _find_working_camera(self, frame_save_path: str | None = None) -> tuple[str, str] | None:
         """Returns (dev_path, camera_name) for the first UVC node that can stream.
@@ -419,14 +422,6 @@ class DuvelDevice:
     # ------------------------------------------------------------------
     # Static helpers
     # ------------------------------------------------------------------
-
-    def _push_tone_wav(self) -> None:
-        """Generate ./data/barco_tone_2s.wav if absent, then push to device once."""
-        path = Path(_TONE_WAV_2S_LOCAL)
-        if not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            self._generate_tone_wav(str(path), duration=2)
-        self._push_file(_TONE_WAV_2S_LOCAL, _TONE_WAV_2S_REMOTE)
 
     @staticmethod
     def _generate_tone_wav(path: str, freq: int = 1000, duration: int = 3,

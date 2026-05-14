@@ -133,6 +133,7 @@ scripts/                 — Windows helper batch files (ADB key switcher, Duvel
 
 **DuvelDevice public API** (import in other scripts as needed):
 - `connect()` / `disconnect()`
+- `push_peripheral_resources()` — push `v4l2_stream_test` binary and `barco_tone_2s.wav` to device; call once after `connect()` in peripheral tests only
 - `reboot()` / `wait_for_boot(timeout)`
 - `wake_up()` — send KEYCODE_WAKEUP to bring device out of sleep
 - `is_sleep_mode()` → `bool` — True if `mWakefulness=Asleep`

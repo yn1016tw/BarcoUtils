@@ -313,6 +313,7 @@ def main():
 
     try:
         device.connect()
+        device.push_peripheral_resources()
     except ConnectionError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)

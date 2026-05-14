@@ -271,34 +271,46 @@
 <!-- ═══════════════════════════════════════════════════════ TENTO -->
 <h2>TEnTo Framework 層的改動（PR #3414）</h2>
 
-<h3>1. <code>config_labels.py</code> — 新增 SWITCHER enum</h3>
+<h3>1. <a href="https://github.com/barcoclickshare/TEnTo/blob/master/TEnTo/configurator/config_labels.py" target="_blank"><code>config_labels.py</code></a> — 新增 SWITCHER enum</h3>
 <pre><code><span class="kw">class</span> <span class="fn">SWITCHER</span>(Const):
-    BUTTON_SWITCHER     = <span class="st">"usb_switcher"</span>        <span class="cm"># 給 button/dongle</span>
-    PERIPHERAL_SWITCHER = <span class="st">"peripheral_switcher"</span>  <span class="cm"># 給 camera/mic/speaker（新增）</span></code></pre>
+    BUTTON_SWITCHER = <span class="st">"usb_switcher"</span>
+    PERIPHERAL_SWITCHER = <span class="st">"peripheral_switcher"</span></code></pre>
 
-<h3>2. <code>configurator_dut.py</code> — <code>he_usb_switcher()</code> 新增 <code>switcher_type</code> 參數</h3>
-<pre><code><span class="cm"># 修改前：固定讀 "usb_switcher"</span>
-<span class="kw">def</span> <span class="fn">he_usb_switcher</span>(self) -> Optional[IUSBSwitcher]:
-    <span class="kw">if not</span> self.cut.check_item_present(<span class="st">"usb_switcher"</span>): ...
+<h3>2. <a href="https://github.com/barcoclickshare/TEnTo/blob/master/TEnTo/configurator/configurator_dut.py" target="_blank"><code>configurator_dut.py</code></a> — <code>he_usb_switcher()</code> 新增 <code>switcher_type</code> 參數</h3>
+<pre><code><span class="cm"># 修改前（PR #3414 之前）：固定讀 "usb_switcher"</span>
+<span class="kw">def</span> <span class="fn">he_usb_switcher</span>(self) -&gt; Optional[IUSBSwitcher]:
+    <span class="kw">if not</span> self.cut.check_item_present(<span class="st">"usb_switcher"</span>):
+        logger.info(<span class="st">"No USB switcher defined in config file"</span>)
+        <span class="kw">return</span>
+    ...
 
-<span class="cm"># 修改後：可指定讀哪個 config 區段</span>
-<span class="kw">def</span> <span class="fn">he_usb_switcher</span>(self, switcher_type=SWITCHER.BUTTON_SWITCHER) -> Optional[IUSBSwitcher]:
-    <span class="kw">if not</span> self.cut.check_item_present(switcher_type): ...</code></pre>
+<span class="cm"># 修改後（現行代碼）：switcher_type 參數決定讀哪個 config 區段</span>
+<span class="kw">def</span> <span class="fn">he_usb_switcher</span>(self, switcher_type=SWITCHER.BUTTON_SWITCHER) -&gt; Optional[he_usb_switcher.IUSBSwitcher]:
+    <span class="cm"># type: () -&gt; he_usb_switcher.IUSBSwitcher</span>
+    <span class="cm">"""</span>
+    <span class="cm">to control the usb switcher</span>
+    <span class="cm">:return: an USBSwitcher object</span>
+    <span class="cm">:rtype: he_usb_switcher.ManualUSBSwitcher | he_usb_switcher.ExtronUSBSwitcher</span>
+    <span class="cm">"""</span>
+    <span class="kw">if not</span> self.cut.check_item_present(switcher_type):
+        logger.info(<span class="st">"No USB switcher defined in config file"</span>)
+        <span class="kw">return</span>
+    ...</code></pre>
 <p>底層實作（<code>ExtronUSBSwitcher</code> / <code>AtenUSBSwitcher</code> / <code>AcronameUsbHub3p</code>）完全相同，差異只在讀哪個 node config 區段，操作哪套物理硬體。</p>
 
-<h3>3. <code>CS_TestClasses_dut.py</code> — base class setUpClass 新增初始化</h3>
-<pre><code><span class="cm"># 舊：只有一個</span>
+<h3>3. <a href="https://github.com/barcoclickshare/TEnTo/blob/master/TEnTo/CS_TestClasses_dut.py" target="_blank"><code>CS_TestClasses_dut.py</code></a> — base class setUpClass 新增初始化</h3>
+<pre><code><span class="cm"># 修改前（PR #3414 之前）：只初始化一個 switcher</span>
 cls.he_usb_switcher = cls.cut.helpers.he_usb_switcher()
 
-<span class="cm"># 新：兩個各自獨立初始化</span>
-cls.he_usb_switcher = cls.cut.helpers.he_usb_switcher()
+<span class="cm"># 修改後（現行代碼）：兩個 switcher 各自獨立初始化</span>
+cls.he_usb_switcher = cls.cut.helpers.he_usb_switcher() <span class="kw">if</span> cls.check_switcher_usage() <span class="kw">else</span> <span class="kw">None</span>
 cls.he_usb_peripheral_switcher = (
     cls.cut.helpers.he_usb_switcher(switcher_type=SWITCHER.PERIPHERAL_SWITCHER)
     <span class="kw">if</span> cls.check_switcher_usage(SWITCHER.PERIPHERAL_SWITCHER)
     <span class="kw">else</span> <span class="kw">None</span>
 )</code></pre>
 
-<h3>4. <code>jenkins_node_labels.py</code> — 新增 <code>USBPeripheralSwitcher</code> Jenkins label</h3>
+<h3>4. <a href="https://github.com/barcoclickshare/TEnTo/blob/master/TEnTo/configurator/jenkins_node_labels.py" target="_blank"><code>jenkins_node_labels.py</code></a> — 新增 <code>USBPeripheralSwitcher</code> Jenkins label</h3>
 <p>新增 Jenkins node label <code>peripheral_switcher</code>，node 啟動時自動驗證：</p>
 <ul style="margin: 6px 0 6px 20px; line-height:1.9;">
   <li>對每個 <code>hosts</code> 裡的 baseunit 建立連線</li>
@@ -306,6 +318,42 @@ cls.he_usb_peripheral_switcher = (
   <li>驗證每個 port 的 config 都有 <code>camera</code> 與 <code>speakerphone</code> key</li>
 </ul>
 <p>只有通過驗證的 node 才會被打上此 label，test job 才能排到該機器。</p>
+<pre><code><span class="kw">class</span> <span class="fn">USBPeripheralSwitcher</span>(ITestableNodeLabel):
+    <span class="kw">def</span> <span class="fn">__new__</span>(cls):
+        <span class="kw">return</span> super().__new__(cls, SWITCHER.PERIPHERAL_SWITCHER)
+
+    <span class="kw">def</span> <span class="fn">validate</span>(self, cut=<span class="kw">None</span>, current_jenkins_labels=<span class="kw">None</span>):
+        self.cut = cut
+        <span class="kw">try</span>:
+            usb_peripheral_switcher = cut.helpers.he_usb_switcher(switcher_type=SWITCHER.PERIPHERAL_SWITCHER)
+            switch_config = self.cut.get_configuration_item_value([SWITCHER.PERIPHERAL_SWITCHER])
+            missing_baseunit_ports = []
+            valid_peripheral_connection_found = <span class="kw">False</span>
+            <span class="kw">for</span> baseunit_identifier <span class="kw">in</span> switch_config.get(<span class="st">"hosts"</span>, []):
+                dut = make_base_unit(self.cut, baseunit_identifier)
+                baseunit_model = dut.model_name
+                valid_peripheral_connection_found_for_baseunit = <span class="kw">False</span>
+                failed_ports_for_baseunit = []
+                usb_peripheral_switcher.disable_all_usb_devices()
+                previous_connections = self._get_number_of_connections(dut, baseunit_model)
+                <span class="kw">for</span> usb_port <span class="kw">in</span> switch_config.get(<span class="st">"port_peripheral"</span>, []):
+                    usb_peripheral_switcher.switch_usb_port(baseunit_model, usb_port)
+                    baseunit_peripheral_present = wait_timeout(
+                        self._validate_number_of_connections_changed,
+                        TimeoutParams(timeout=10, no_spam_sleep=1, ...),
+                        dut, baseunit_model, previous_connections,
+                    )
+                    <span class="kw">if</span> baseunit_peripheral_present:
+                        valid_peripheral_connection_found_for_baseunit = <span class="kw">True</span>
+                    <span class="kw">else</span>:
+                        failed_ports_for_baseunit.append(<span class="fn">f</span><span class="st">"{baseunit_model}:{usb_port}"</span>)
+            <span class="kw">if not</span> valid_peripheral_connection_found:
+                self._set_removed_reason(<span class="st">"No peripheral baseunit pair found on switcher."</span>)
+                <span class="kw">return False</span>
+            <span class="kw">return True</span>
+        <span class="kw">except</span> Exception <span class="kw">as</span> e:
+            self._set_removed_reason(<span class="fn">f</span><span class="st">"Failed to validate label due to exception {e}"</span>)
+            <span class="kw">return False</span></code></pre>
 
 <hr>
 
@@ -335,14 +383,35 @@ cls.he_usb_peripheral_switcher = (
 <!-- ═══════════════════════════════════════════════════════ TESTCASE ARCH -->
 <h2>Echo Folder Testcase 架構（修改後）</h2>
 
-<h3><code>av_echo_peripheral_test.py</code> — W3/W4 ClickShare Button 情境</h3>
+<h3><a href="https://github.com/barcoclickshare/cx_system_tests/blob/master/_personal_tests/echo/av_echo_peripheral_test.py" target="_blank"><code>av_echo_peripheral_test.py</code></a> / <a href="https://github.com/barcoclickshare/cx_system_tests/blob/master/_personal_tests/echo/av_echo_test_base_multi_perif.py" target="_blank"><code>av_echo_test_base_multi_perif.py</code></a> — W3/W4 ClickShare Button 情境</h3>
 <div class="alert alert-info"><strong>✅ 有 Button 操作。</strong> 每切換一個周邊裝置後，呼叫 <code>_init_button_and_app()</code> 重新插拔 Button，讓 USB HID descriptor 更新。</div>
-<pre><code>切換周邊 (peripheral_switcher)
-  └─ _init_button_and_app()
-       ├── 拔掉 Button  (he_usb_switcher / usb_enableswitch)
-       ├── 清理 device manager ClickShare 裝置
-       ├── 重新插入 Button
-       └── 等待 Button reboot 完成</code></pre>
+<pre><code><span class="cm"># av_echo_test_base_multi_perif.py — _enable_specific_peripheral()</span>
+<span class="kw">def</span> <span class="fn">_enable_specific_peripheral</span>(self, port_key):
+    <span class="kw">if</span> self.he_usb_peripheral_switcher <span class="kw">is not None</span>:
+        self.logger.info(<span class="st">"switching off usb ports"</span>)
+        self.he_usb_peripheral_switcher.disable_usb_device(self.peripheral_config[<span class="st">"port_peripheral"</span>])
+        self.logger.info(<span class="st">"switching on port %s"</span>, port_key)
+        self.he_usb_peripheral_switcher.enable_usb_device(port_key)
+    self.logger.info(<span class="st">"waiting for peripheral to boot.."</span>)
+    time.sleep(30)
+    self._init_button_and_app()
+
+<span class="cm"># av_echo_test_base.py — _init_button_and_app()</span>
+<span class="kw">def</span> <span class="fn">_init_button_and_app</span>(cls):
+    <span class="cm"># Terminate this client, after button reboot a brand new client will be started</span>
+    cls._exit_clickshare_client()
+    <span class="cm"># Unplug the button (will be re plugged later on)</span>
+    cls.disable_usb_device(cls.default_button.button_id)
+    wait_false_timeout(cls.default_button.is_content_speaker_present, timeout_param=5)
+    <span class="cm"># Cleanup all ClickShare Button and App Based Conferencing devices from device manager</span>
+    cls.logger.info(AudioTestHelpers.remove_all_clickshare_devices())
+    time.sleep(10)
+    <span class="cm"># Re plug the button (updates USB HID descriptors e.g. mute, volume, ptz)</span>
+    cls.enable_usb_device(cls.default_button.button_id)
+    cls.default_button.wait_for_button_rebooted(timeout=120)
+    wait_timeout(cls.default_button.is_content_speaker_present, timeout_param=5)
+    <span class="cm"># Prepare the clickshare client (needed to be able to start and stop sharing)</span>
+    cls._start_clickshare_client()</code></pre>
 <table>
   <tr><th>Switcher 屬性</th><th>Config Key</th><th>控制對象</th></tr>
   <tr><td><code>he_usb_switcher</code></td><td><code>usb_switcher</code></td><td>ClickShare Button 的 USB port</td></tr>

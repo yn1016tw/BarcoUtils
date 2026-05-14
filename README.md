@@ -40,7 +40,7 @@ BarcoUtils/
 │   ├── test_mtr_meet_now.py       # MTR camera test (reboot → Teams UI → Meet now → screenshot)
 │   └── test_mtr_join_call.py      # MTR join-call test (reboot → join by ID → in-call screenshot)
 ├── data/
-│   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed once at connect)
+│   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed by push_peripheral_resources)
 ├── scripts/
 │   ├── adb_key_switch.bat         # Switch active ADB key between Duvel / Fruitesse
 │   └── duvel_setup.bat            # Interactive Duvel device setup helper
@@ -372,7 +372,8 @@ Reusable `DuvelDevice` class. All ADB interaction lives here — import it in ot
 from common.duvel_device import DuvelDevice
 
 device = DuvelDevice(serial="192.168.1.100:5555", is_ip=True)
-device.connect()                    # adb connect + push v4l2_stream_test + push tone WAV
+device.connect()                    # adb connect / verify device
+device.push_peripheral_resources()  # push v4l2_stream_test + tone WAV (peripheral tests only)
 device.barco_fw_version()           # ro.barco.build.version
 device.reboot()
 device.wait_for_boot(timeout=300)
@@ -393,7 +394,7 @@ device.disconnect()
    - `VIDIOC_STREAMON` → `select()` wait → `VIDIOC_DQBUF`
    - Exit 0 = frame received; exit 1 = timeout (5 s); exit 2 = device error
 
-The binary is pushed to `/data/local/tmp/v4l2_stream_test` once at `connect()`.
+The binary is pushed to `/data/local/tmp/v4l2_stream_test` by `push_peripheral_resources()`, called once before the test loop in `test_peripheral.py`.
 
 ### Audio check detail
 

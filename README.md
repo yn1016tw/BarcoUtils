@@ -12,6 +12,9 @@ UI references are based on Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.07
 - Python 3.10+
 - `adb` in PATH
 - Duvel device accessible via USB or TCP/IP
+- **ffmpeg** — required for desktop recording (`test_mtr_join_with_id.py`, dirty disconnect test). Default path: `C:\Tools\ffmpeg\bin\ffmpeg.exe`
+- **scrcpy** — required for device screen mirroring. Default path: `C:\Tools\scrcpy-win64-v3.3.3\scrcpy.exe`
+- If installed elsewhere, update `FFMPEG_DEFAULT` / `SCRCPY_DEFAULT` at the top of `testcases/common/utils.py`. ffmpeg path can also be overridden per-run with `--ffmpeg PATH` on the join-with-ID and dirty-disconnect tests.
 - Windows Teams desktop (for `testcases/common/teams_meeting_host.py`): `pip install pywinauto pywin32`
 
 ---

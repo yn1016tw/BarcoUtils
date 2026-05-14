@@ -14,6 +14,8 @@ Usage:
         print(page.get_subtitle())    # "Microsoft puts you in control of your privacy..."
         page.toggle_optional_data()   # enable optional diagnostic data
         page.click_accept()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

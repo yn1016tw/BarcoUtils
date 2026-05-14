@@ -13,6 +13,8 @@ Usage:
         print(page.get_selected_language())  # "English"
         page.select_language("English")
         page.click_continue()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

@@ -11,6 +11,8 @@ Usage:
     device.ui.main.click_share()
     device.ui.main.click_join_with_an_id()
     device.ui.main.click_more()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

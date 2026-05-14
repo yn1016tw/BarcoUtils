@@ -11,6 +11,8 @@ Usage:
     device.ui.invite_people.get_meeting_id()   # "349 124 040 953 242"
     device.ui.invite_people.get_passcode()     # "wY2yd2L3"
     device.ui.invite_people.get_dial_in_info() # "+32 2 897 92 05(Toll)\nConference ID: 969 327 92#"
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

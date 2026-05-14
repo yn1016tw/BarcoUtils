@@ -20,6 +20,8 @@ Typical usage:
   # With explicit meeting ID (no teams_meeting_host.py):
   python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --meeting-id 123456789
   python testcases/test_mtr_join_with_id.py --serial 1882000501 --meeting-id 123456789 --passcode abc123
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 import argparse

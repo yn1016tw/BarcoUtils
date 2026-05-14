@@ -12,6 +12,8 @@ Usage:
     device.ui.settings.get_org_name()      # e.g. "barcomxdev"
     device.ui.settings.click_about()
     device.ui.settings.click_device_settings()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

@@ -1,3 +1,9 @@
+"""
+BasePage — shared base class for all BarcoUtils page objects.
+
+Author: James Yang <yn1016@gmail.com>
+"""
+
 from __future__ import annotations
 
 import time

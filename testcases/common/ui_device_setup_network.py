@@ -12,6 +12,8 @@ Usage:
     if page.is_visible():
         print(page.get_connectivity_message())  # "You're connected."
         page.click_next()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

@@ -12,6 +12,8 @@ Usage:
     device.ui.join_with_id.enter_passcode("abc123")
     device.ui.join_with_id.click_join()
     device.ui.join_with_id.click_back()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

@@ -13,6 +13,8 @@ Usage:
         page.enter_new_password("MyPass123!")
         page.enter_confirm_password("MyPass123!")
         page.click_create_and_continue()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

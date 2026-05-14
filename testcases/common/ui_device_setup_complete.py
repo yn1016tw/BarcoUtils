@@ -12,6 +12,8 @@ Usage:
     if page.is_visible():
         print(page.get_title())   # "Installation complete!"
         page.click_continue()     # advance to Microsoft Teams
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

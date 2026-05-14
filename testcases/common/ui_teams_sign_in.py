@@ -14,6 +14,8 @@ Usage:
         print(f"Go to microsoft.com/devicelogin and enter: {code}")
         page.click_refresh_code()         # generate a new code
         page.click_sign_in_on_device()    # switch to on-device sign-in flow
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

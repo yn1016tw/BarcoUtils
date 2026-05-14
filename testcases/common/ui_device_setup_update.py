@@ -14,6 +14,8 @@ Usage:
         print(page.get_fw_version())      # "Firmware Version 04.03.00.master-1660"
         print(page.get_message())         # "Your device is running the latest version..."
         page.click_continue()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

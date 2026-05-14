@@ -1,3 +1,9 @@
+"""
+Shared test utilities for BarcoUtils (screenshot, recording, scrcpy helpers).
+
+Author: James Yang <yn1016@gmail.com>
+"""
+
 import subprocess
 from datetime import datetime
 from pathlib import Path

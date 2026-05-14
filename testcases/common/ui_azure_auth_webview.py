@@ -21,6 +21,8 @@ Usage:
         print(page.get_display_name())   # "user@contoso.com"
         page.enter_password("MyPass!")
         page.click_sign_in()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

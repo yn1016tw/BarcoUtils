@@ -23,6 +23,8 @@ Usage:
     python testcases/common/teams_meeting_host.py --output-dir C:/logs
     python testcases/common/teams_meeting_host.py --accept-video
     python testcases/common/teams_meeting_host.py --no-auto-accept  # create meeting only
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

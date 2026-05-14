@@ -12,6 +12,8 @@ Usage:
     device.ui.norden_call.type_name_or_number("Alice")
     device.ui.norden_call.click_call()
     device.ui.norden_call.click_back()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

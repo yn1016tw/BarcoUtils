@@ -16,6 +16,8 @@ Usage:
     python testcases/test_mtr_meet_now.py --ip 192.168.1.100
     python testcases/test_mtr_meet_now.py --serial 1882000501
     python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --output-dir C:/logs --iterations 3
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 import argparse

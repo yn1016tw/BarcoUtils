@@ -13,6 +13,8 @@ Usage:
         print(page.get_title())     # "Scan QR Code to continue"
         print(page.get_subtitle())  # "Point your mobile device camera at the QR code..."
         page.click_skip()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

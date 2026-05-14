@@ -13,6 +13,8 @@ Usage:
         print(page.get_current_time())    # "2:39 AM, May 7, 2026"
         print(page.get_timezone())        # "GMT-00:00 Azores"
         page.click_next()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

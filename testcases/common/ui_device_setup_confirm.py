@@ -13,6 +13,8 @@ Usage:
         print(page.get_setup_status())   # "Setup complete with XMS cloud"
         print(page.get_room_name())      # "ClickShare-1882000501"
         page.click_confirm_installation()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

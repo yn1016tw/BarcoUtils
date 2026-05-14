@@ -10,6 +10,8 @@ Usage:
     python testcases/test_peripheral.py --serial 1882000501 --iterations 5
     python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 3
     python testcases/test_peripheral.py --ip 192.168.1.100:5555 --iterations 1 --output-dir C:/logs
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 import argparse

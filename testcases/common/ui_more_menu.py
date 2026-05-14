@@ -15,6 +15,8 @@ Usage:
     device.ui.more_menu.click_whiteboard()
     device.ui.more_menu.click_join_with_an_id()
     device.ui.more_menu.click_settings()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

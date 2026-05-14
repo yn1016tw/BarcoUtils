@@ -13,6 +13,8 @@ Usage:
     ctrl.wait_for_incoming_call(timeout=60)
     ctrl.accept_call()
     ctrl.end_call()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

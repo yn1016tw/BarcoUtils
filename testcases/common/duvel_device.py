@@ -3,6 +3,8 @@ DuvelDevice — ADB wrapper for Barco Duvel base unit.
 Provides reboot, boot-wait, camera, and audio device checks.
 
 Requires `adb` in PATH.
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 import math

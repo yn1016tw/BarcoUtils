@@ -13,6 +13,8 @@ Usage:
         print(page.get_title())       # "Terms & Conditions"
         print(page.get_disclaimer())  # "By clicking accept, you agree to..."
         page.click_accept()
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

@@ -13,6 +13,8 @@ Usage:
     ui.wait_for_element(timeout=15, text="Join")
     ui.tap_element(text="Join")
     ui.screenshot("logs/screen.png")
+
+Author: James Yang <yn1016@gmail.com>
 """
 
 from __future__ import annotations

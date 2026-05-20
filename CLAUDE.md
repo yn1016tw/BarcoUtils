@@ -271,7 +271,8 @@ scripts/                 — Windows helper batch files (ADB key switcher, Duvel
 - Password step: `get_display_name()` → str | None; `enter_password(password)` / `click_sign_in()` / `click_back()` / `click_forgot_password()` / `click_sign_in_with_another_account()` / `click_terms_of_use()` / `click_privacy_cookies()` → bool
 - Registration step: `get_heading()` / `get_description()` → str | None; `click_register()` / `click_more_details()` → bool
 
-**TeamsDesktopController** (`testcases/common/teams_desktop.py`): pywinauto-based automation for the Windows Teams desktop app. Requires `pip install pywinauto pywin32`.
+**TeamsDesktopController** (`testcases/common/teams_desktop.py`): pywinauto-based automation for the Windows Teams desktop app. Requires `pip install pywinauto pywin32 psutil`.
+- `get_version()` → `str | None` — return running Teams version (e.g. `'26106.1911.4707.3286'`); static method, Teams must be running, requires psutil
 - `connect(launch=True, timeout=30)` — attach to running Teams; launch if not running
 - `create_meeting(timeout=20)` → `str | None` — start Meet Now, copy join link, return URL
 - `wait_for_incoming_call(timeout=60)` → `bool` — poll for incoming call toast

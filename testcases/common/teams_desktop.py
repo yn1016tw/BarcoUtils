@@ -33,6 +33,12 @@ except ImportError:
     _WIN32 = False
 
 try:
+    import psutil
+    _PSUTIL = True
+except ImportError:
+    _PSUTIL = False
+
+try:
     from pywinauto import Application, Desktop
     from pywinauto.keyboard import send_keys
     _PYWINAUTO = True
@@ -99,6 +105,26 @@ class TeamsDesktopController:
         if not _PYWINAUTO:
             raise ImportError("pywinauto is required: pip install pywinauto pywin32")
         self._app: Optional[Application] = None
+
+    # ------------------------------------------------------------------
+    # Version
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_version() -> str | None:
+        """Return the running Teams version (e.g. '26106.1911.4707.3286'), or None.
+
+        Reads the version from the ms-teams.exe path reported by the OS —
+        requires Teams to be running and psutil to be installed.
+        """
+        if not _PSUTIL:
+            raise ImportError("psutil is required: pip install psutil")
+        for proc in psutil.process_iter(["name", "exe"]):
+            if proc.info["name"] == "ms-teams.exe":
+                m = re.search(r"MSTeams_(\d+\.\d+\.\d+\.\d+)", proc.info["exe"] or "")
+                if m:
+                    return m.group(1)
+        return None
 
     # ------------------------------------------------------------------
     # Connection

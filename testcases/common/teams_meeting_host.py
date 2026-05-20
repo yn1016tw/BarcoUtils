@@ -45,8 +45,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from common.logger import Logger
 from common.teams_desktop import TeamsDesktopController
 
-# Default JSON path (testcases/logs/)
-_DEFAULT_INFO_FILE = Path(__file__).parent.parent / "logs" / "meeting_info.json"
+# Default output folder and JSON path (testcases/logs/teams_meeting_host/)
+_DEFAULT_INFO_FILE = Path(__file__).parent.parent / "logs" / "teams_meeting_host" / "meeting_info.json"
 
 # How often to poll for incoming calls
 _ACCEPT_POLL_INTERVAL = 1.0
@@ -163,7 +163,8 @@ class TeamsMeetingHost:
         """
         self._logger.info("Connecting to Teams...")
         self._ctrl.connect(launch=True, timeout=connect_timeout)
-        self._logger.info("Connected.")
+        version = TeamsDesktopController.get_version()
+        self._logger.info("Connected.  Teams %s", version or "(version unknown)")
 
         self._logger.info("Starting Meet Now meeting...")
         # create_meeting() returns dict: {meeting_id, passcode, join_url}

@@ -105,6 +105,7 @@ testcases/common/ui_teams_sign_in_email.py   — TeamsSignInEmailPage page objec
 testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page object (Azure Authenticator MSAL WebView: password entry + device registration steps)
 testcases/common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
+testcases/common/logger.py            — Logger class: write timestamped messages to stdout and {output_dir}/logs.txt simultaneously; methods: info/warning/error/debug
 testcases/common/utils.py             — Shared test utilities: screenshot_for_debug, screenshot_host_desktop, start_recording, stop_recording, start_ui_with_scrcpy, FFMPEG_DEFAULT, SCRCPY_DEFAULT
 testcases/common/version.py           — VERSION string (bump manually on releases)
 testcases/test_peripheral.py          — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
@@ -121,6 +122,10 @@ scripts/                 — Windows helper batch files (ADB key switcher, Duvel
 1. `main()` constructs `DuvelDevice`, calls `connect()` then `push_peripheral_resources()` — this pushes `v4l2_stream_test` and `barco_tone_2s.wav` to `/data/local/tmp/`
 2. `PeripheralTestRunner.run_round()` drives the full reboot → boot → camera → audio → speaker → mic sequence
 3. Timing is captured as Unix timestamps in `TestResult`; `ResultWriter` formats and saves them
+
+**Logger** (`testcases/common/logger.py`, `from common.logger import Logger`):
+- `Logger(output_dir, name="barcoutils")` — creates logger that writes to stdout and `{output_dir}/logs.txt` (append mode); format: `HH:MM:SS  LEVEL    message`
+- `info(msg)` / `warning(msg)` / `error(msg)` / `debug(msg)` — log at the corresponding level
 
 **utils.py public API** (`from common.utils import ...`):
 - `FFMPEG_DEFAULT` — default path to ffmpeg.exe (`C:\Tools\ffmpeg\bin\ffmpeg.exe`)

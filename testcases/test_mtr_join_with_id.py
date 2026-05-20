@@ -35,6 +35,7 @@ from datetime import datetime
 from pathlib import Path
 
 from common.duvel_device import DuvelDevice
+from common.logger import Logger
 from common.version import VERSION
 from common.teams_meeting_host import MeetingInfo
 from common.utils import FFMPEG_DEFAULT, screenshot_for_debug, screenshot_host_desktop, start_recording, stop_recording, start_ui_with_scrcpy
@@ -75,28 +76,21 @@ class TestResult:
 # ---------------------------------------------------------------------------
 
 class ResultWriter:
-    def __init__(self, total_rounds: int, device_label: str):
+    def __init__(self, total_rounds: int, device_label: str, logger: Logger):
         self._total = total_rounds
         self._device_label = device_label
+        self._logger = logger
         self._run_start = datetime.now()
 
     def print_round(self, r: TestResult) -> None:
         for line in self._format_round_lines(r):
-            print(line)
+            self._logger.info(line)
 
     def print_summary(self, results: list[TestResult]) -> None:
         passed = sum(r.passed for r in results)
-        print(f"\n{'=' * 60}")
-        print(f"=== Summary ({passed}/{len(results)} PASS) ===")
-        print(f"{'=' * 60}")
-
-    def save_log(self, results: list[TestResult], output_dir: str) -> None:
-        path = Path(output_dir) / "logs.txt"
-        lines = self._build_log_lines(results)
-        mode = "a" if path.exists() else "w"
-        with open(path, mode, encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
-        print(f"\n  Log saved: {path}")
+        self._logger.info("=" * 60)
+        self._logger.info(f"Summary ({passed}/{len(results)} PASS)")
+        self._logger.info("=" * 60)
 
     @staticmethod
     def _ts(t: float | None) -> str:
@@ -110,7 +104,7 @@ class ResultWriter:
 
     def _format_round_lines(self, r: TestResult) -> list[str]:
         status = "PASS" if r.passed else "FAIL"
-        lines = [f"\n[Round {r.round_num}/{self._total}] {status}"]
+        lines = [f"[Round {r.round_num}/{self._total}] {status}"]
         if r.error:
             lines.append(f"  ERROR: {r.error}")
         lines.append(f"  Join started          : {self._ts(r.join_start)}")
@@ -123,114 +117,101 @@ class ResultWriter:
         lines.append(f"  Total                 : {total:.1f}s" if total else "  Total                 : N/A")
         return lines
 
-    def _build_log_lines(self, results: list[TestResult]) -> list[str]:
-        lines = [
-            "=" * 80,
-            f"Test Run: {self._run_start.strftime('%Y-%m-%d %H:%M:%S')} "
-            f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}",
-            "=" * 80,
-            "",
-        ]
-        for r in results:
-            lines.extend(self._format_round_lines(r))
-            lines.append("")
-        passed = sum(r.passed for r in results)
-        lines.append(f"=== Summary ({passed}/{len(results)} PASS) ===")
-        lines.append("")
-        return lines
-
 
 # ---------------------------------------------------------------------------
 # MtrAvCallTestRunner
 # ---------------------------------------------------------------------------
 
 class MtrJoinWithIdTestRunner:
-    def __init__(self, device: DuvelDevice, args):
+    def __init__(self, device: DuvelDevice, args, logger: Logger):
         self._device = device
         self._args = args
+        self._logger = logger
 
     def run_round(self, round_num: int, total_rounds: int) -> TestResult:
         r = TestResult(round_num=round_num, total_rounds=total_rounds)
-        print(f"\n{'-' * 60}")
-        print(f"Round {round_num}/{total_rounds}")
+        self._logger.info("-" * 60)
+        self._logger.info(f"Round {round_num}/{total_rounds}")
 
         try:
             ui = self._device.ui
             r.join_start = time.time()
 
             # Step 1: Navigate to Teams Rooms main page
-            print("  Navigating to Teams Rooms main page...")
+            self._logger.info("Navigating to Teams Rooms main page...")
             if not ui.go_to_main_page(timeout=self._args.device_timeout):
                 raise TimeoutError(f"Main page not reachable within {self._args.device_timeout}s")
-            print("  Main page visible.")
+            self._logger.info("Main page visible.")
 
             # Step 2: Tap "Join with an ID"
-            print("  Tapping 'Join with an ID'...")
+            self._logger.info("Tapping 'Join with an ID'...")
             if not ui.main.click_join_with_an_id():
                 raise RuntimeError("Could not tap 'Join with an ID' button")
 
             # Step 3: Wait for join-with-ID dialog
-            print("  Waiting for join-with-ID dialog...")
+            self._logger.info("Waiting for join-with-ID dialog...")
             if not ui.join_with_id.is_visible(timeout=_JOIN_PAGE_TIMEOUT):
                 raise TimeoutError(f"Join-with-ID dialog not visible within {_JOIN_PAGE_TIMEOUT}s")
 
             # Step 4: Enter meeting credentials
-            print(f"  Entering meeting ID: {self._args.meeting_id}")
+            self._logger.info(f"Entering meeting ID: {self._args.meeting_id}")
             if not ui.join_with_id.enter_meeting_id(self._args.meeting_id):
                 raise RuntimeError("Could not enter meeting ID")
             if self._args.passcode:
-                print("  Entering passcode...")
+                self._logger.info("Entering passcode...")
                 if not ui.join_with_id.enter_passcode(self._args.passcode):
                     raise RuntimeError("Could not enter passcode")
 
             # Step 5: Tap Join
-            print("  Tapping 'Join Teams meeting'...")
+            self._logger.info("Tapping 'Join Teams meeting'...")
             if not ui.join_with_id.click_join():
                 raise RuntimeError("Could not tap 'Join Teams meeting' button")
 
             # Step 6: Wait for in-call screen
-            print("  Waiting for in-call screen...")
+            self._logger.info("Waiting for in-call screen...")
             if not ui.in_call.is_visible(timeout=_IN_CALL_TIMEOUT):
                 raise TimeoutError(f"In-call screen not visible within {_IN_CALL_TIMEOUT}s")
             r.in_call_visible = time.time()
             title = ui.in_call.get_meeting_title()
-            print(f"  In-call visible  (+{r.in_call_seconds():.1f}s)"
-                  + (f"  title: {title}" if title else ""))
+            self._logger.info(
+                f"In-call visible  (+{r.in_call_seconds():.1f}s)"
+                + (f"  title: {title}" if title else "")
+            )
 
             # Step 7: Camera phase — wait 15s for stream to stabilize, then screenshot
-            print("  Camera phase: waiting 15s for stream to stabilize...")
+            self._logger.info("Camera phase: waiting 15s for stream to stabilize...")
             time.sleep(15)
             ts = datetime.now().strftime("%H%M%S")
             shot_path = str(
                 Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}_device.png"
             )
-            print("  Taking screenshot...")
+            self._logger.info("Taking screenshot...")
             ui.screenshot(shot_path)
             screenshot_host_desktop(self._args.output_dir, round_num)
             r.camera_screenshot = time.time()
             r.screenshot_path = shot_path
-            print(f"  Screenshot saved: {shot_path}")
+            self._logger.info(f"Screenshot saved: {shot_path}")
 
             # Step 8: Hang up on Duvel MTR
-            print("  Hanging up on Duvel MTR...")
+            self._logger.info("Hanging up on Duvel MTR...")
             if not ui.in_call.hang_up():
-                print("  [WARN] hang_up() failed — force-stopping Teams on device")
+                self._logger.warning("hang_up() failed — force-stopping Teams on device")
                 try:
                     ui.force_stop("com.microsoft.skype.teams.ipphone")
                 except Exception:
                     pass
             r.call_ended = time.time()
-            print(f"  Call ended  (total: {r.total_seconds():.1f}s)")
+            self._logger.info(f"Call ended  (total: {r.total_seconds():.1f}s)")
             r.passed = True
 
         except TimeoutError as e:
             r.error = f"TIMEOUT: {e}"
-            print(f"  [TIMEOUT] {e}")
+            self._logger.error("TIMEOUT: %s", e)
             _cleanup(self._device.ui)
             screenshot_for_debug(self._device.ui, self._args.output_dir, round_num)
         except Exception as e:
             r.error = str(e)
-            print(f"  [ERROR] {e}")
+            self._logger.error("ERROR: %s", e)
             _cleanup(self._device.ui)
             screenshot_for_debug(self._device.ui, self._args.output_dir, round_num)
 
@@ -304,17 +285,24 @@ def main():
     if args.output_dir is None:
         args.output_dir = str(Path(__file__).parent / "logs" / Path(__file__).stem / _now.strftime("%Y%m%d") / _now.strftime("%H%M%S"))
 
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    (Path(args.output_dir) / "files").mkdir(parents=True, exist_ok=True)
+
+    logger = Logger(args.output_dir)
+
     # Resolve meeting ID / passcode from host JSON if requested
     if args.from_host or args.meeting_info_dir:
         info_dir = None if args.from_host else args.meeting_info_dir
-        print(f"Waiting for meeting info from teams_meeting_host.py"
-              f"{f' ({info_dir})' if info_dir else ''} ...")
+        logger.info(
+            f"Waiting for meeting info from teams_meeting_host.py"
+            f"{f' ({info_dir})' if info_dir else ''} ..."
+        )
         try:
             info = MeetingInfo.wait_for_info(info_dir, timeout=args.meeting_info_timeout)
         except TimeoutError as e:
-            print(f"[ERROR] {e}")
+            logger.error(str(e))
             sys.exit(1)
-        print(f"Meeting info loaded:\n{info}")
+        logger.info(f"Meeting info loaded:\n{info}")
         args.meeting_id = info.meeting_id
         args.passcode = info.passcode or None
 
@@ -325,26 +313,23 @@ def main():
     else:
         device = DuvelDevice(serial=args.serial, is_ip=False)
 
-    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    (Path(args.output_dir) / "files").mkdir(parents=True, exist_ok=True)
-
     try:
         device.connect()
     except ConnectionError as e:
-        print(f"[ERROR] {e}")
+        logger.error(str(e))
         sys.exit(1)
 
-    writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
-    runner = MtrJoinWithIdTestRunner(device=device, args=args)
+    writer = ResultWriter(total_rounds=args.iterations, device_label=device.label, logger=logger)
+    runner = MtrJoinWithIdTestRunner(device=device, args=args, logger=logger)
 
-    print(f"\nMTR Join-with-ID Test  v{VERSION}")
-    print(f"  Device        : {device.label}")
-    print(f"  FW            : {device.barco_fw_version()}")
-    print(f"  Meeting ID    : {args.meeting_id}")
+    logger.info(f"MTR Join-with-ID Test  v{VERSION}")
+    logger.info(f"  Device        : {device.label}")
+    logger.info(f"  FW            : {device.barco_fw_version()}")
+    logger.info(f"  Meeting ID    : {args.meeting_id}")
     if args.passcode:
-        print(f"  Passcode      : {args.passcode}")
-    print(f"  Iterations    : {args.iterations}")
-    print(f"  Output dir    : {args.output_dir}")
+        logger.info(f"  Passcode      : {args.passcode}")
+    logger.info(f"  Iterations    : {args.iterations}")
+    logger.info(f"  Output dir    : {args.output_dir}")
 
     start_ui_with_scrcpy(device._serial)
     recorder = None if args.no_record else start_recording(args.output_dir, args.ffmpeg)
@@ -356,15 +341,14 @@ def main():
             results.append(result)
             writer.print_round(result)
             if args.fail_fast and not result.passed:
-                print("\n[Stopped: --fail-fast]")
+                logger.info("[Stopped: --fail-fast]")
                 break
     except KeyboardInterrupt:
-        print("\n[Interrupted by user]")
+        logger.info("[Interrupted by user]")
     finally:
         stop_recording(recorder)
         if results:
             writer.print_summary(results)
-            writer.save_log(results, args.output_dir)
         device.disconnect()
 
 

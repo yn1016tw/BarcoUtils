@@ -124,8 +124,8 @@ scripts/                 — Windows helper batch files (ADB key switcher, Duvel
 3. Timing is captured as Unix timestamps in `TestResult`; `ResultWriter` formats and saves them
 
 **Logger** (`testcases/common/logger.py`, `from common.logger import Logger`):
-- `Logger(output_dir, name="barcoutils")` — creates logger that writes to stdout and `{output_dir}/logs.txt` (append mode); format: `HH:MM:SS  LEVEL    message`
-- `info(msg)` / `warning(msg)` / `error(msg)` / `debug(msg)` — log at the corresponding level
+- `Logger(output_dir, name="barcoutils", filename="logs.txt")` — creates logger that writes to stdout and `{output_dir}/{filename}` (append mode); format: `HH:MM:SS  LEVEL    message`
+- `info(msg, *args)` / `warning(msg, *args)` / `error(msg, *args)` / `debug(msg, *args)` — log at the corresponding level; supports `%`-style format args
 
 **utils.py public API** (`from common.utils import ...`):
 - `FFMPEG_DEFAULT` — default path to ffmpeg.exe (`C:\Tools\ffmpeg\bin\ffmpeg.exe`)

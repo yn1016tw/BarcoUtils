@@ -319,6 +319,9 @@ def main():
         logger.error(str(e))
         sys.exit(1)
 
+    start_ui_with_scrcpy(device._serial)
+    recorder = None if args.no_record else start_recording(args.output_dir, args.ffmpeg)
+
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label, logger=logger)
     runner = MtrJoinWithIdTestRunner(device=device, args=args, logger=logger)
 
@@ -330,9 +333,6 @@ def main():
         logger.info(f"  Passcode      : {args.passcode}")
     logger.info(f"  Iterations    : {args.iterations}")
     logger.info(f"  Output dir    : {args.output_dir}")
-
-    start_ui_with_scrcpy(device._serial)
-    recorder = None if args.no_record else start_recording(args.output_dir, args.ffmpeg)
 
     results = []
     try:

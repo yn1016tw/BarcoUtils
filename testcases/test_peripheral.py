@@ -23,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 
 from common.duvel_device import DuvelDevice, _STREAM_TEST_BIN_REMOTE, _TONE_WAV_2S_REMOTE
+from common.logger import Logger
 from common.version import VERSION
 
 
@@ -87,30 +88,23 @@ class TestResult:
 # ---------------------------------------------------------------------------
 
 class ResultWriter:
-    def __init__(self, total_rounds: int, device_label: str):
+    def __init__(self, total_rounds: int, device_label: str, logger: Logger):
         self._total = total_rounds
         self._device_label = device_label
+        self._logger = logger
         self._run_start = datetime.now()
 
     def print_round(self, r: TestResult) -> None:
         for line in self._format_round_lines(r):
-            print(line)
+            self._logger.info(line)
 
     def print_summary(self, results: list[TestResult]) -> None:
         passed = sum(r.passed for r in results)
-        print(f"\n{'=' * 60}")
-        print(f"=== Summary ({passed}/{len(results)} PASS) ===")
+        self._logger.info("=" * 60)
+        self._logger.info(f"Summary ({passed}/{len(results)} PASS)")
         for line in self._format_summary_lines(results):
-            print(line)
-        print(f"{'=' * 60}")
-
-    def save_log(self, results: list[TestResult], output_dir: str) -> None:
-        path = Path(output_dir) / "logs.txt"
-        lines = self._format_lines(results)
-        mode = "a" if path.exists() else "w"
-        with open(path, mode, encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
-        print(f"\n  Log saved: {path}")
+            self._logger.info(line)
+        self._logger.info("=" * 60)
 
     # ------------------------------------------------------------------
     # Formatting helpers
@@ -128,7 +122,7 @@ class ResultWriter:
 
     def _format_round_lines(self, r: TestResult) -> list[str]:
         status = "PASS" if r.passed else "FAIL"
-        lines = [f"\n[Round {r.round_num}/{self._total}] {status}"]
+        lines = [f"[Round {r.round_num}/{self._total}] {status}"]
         if r.error:
             lines.append(f"  ERROR: {r.error}")
 
@@ -174,60 +168,35 @@ class ResultWriter:
             line("Mic ready     min/avg/max", [r.mic_seconds() for r in results]),
         ]
 
-    def _format_lines(self, results: list[TestResult]) -> list[str]:
-        lines = [
-            "=" * 80,
-            f"Test Run: {self._run_start.strftime('%Y-%m-%d %H:%M:%S')} "
-            f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}"
-            + (f" | FW: {results[0].barco_fw_version}" if results and results[0].barco_fw_version else ""),
-            "=" * 80,
-            "",
-        ]
-        for r in results:
-            lines.extend(self._format_round_lines(r))
-            lines.append("")
-
-        passed = sum(r.passed for r in results)
-        lines.append(f"=== Summary ({passed}/{len(results)} PASS) ===")
-        lines.extend(self._format_summary_lines(results))
-        lines.append("")
-        return lines
-
-
 # ---------------------------------------------------------------------------
 # PeripheralTestRunner
 # ---------------------------------------------------------------------------
 
 class PeripheralTestRunner:
-    def __init__(self, device: DuvelDevice, args):
+    def __init__(self, device: DuvelDevice, args, logger: Logger):
         self._device = device
         self._args = args
-
-    def run(self) -> list[TestResult]:
-        results = []
-        for i in range(1, self._args.iterations + 1):
-            results.append(self.run_round(i, self._args.iterations))
-        return results
+        self._logger = logger
 
     def run_round(self, round_num: int, total_rounds: int) -> TestResult:
         r = TestResult(round_num=round_num, total_rounds=total_rounds)
-        print(f"\n{'-' * 60}")
-        print(f"Round {round_num}/{total_rounds} - rebooting device...")
+        self._logger.info("-" * 60)
+        self._logger.info(f"Round {round_num}/{total_rounds} - rebooting device...")
 
         try:
             r.reboot_start = time.time()
             self._device.reboot()
 
-            print("  Waiting for boot...")
+            self._logger.info("Waiting for boot...")
             self._device.wait_for_boot(self._args.boot_timeout)
             r.boot_ready = time.time()
             r.barco_fw_version = self._device.barco_fw_version()
-            print(f"  Boot ready  (+{r.boot_seconds():.1f}s)")
+            self._logger.info(f"Boot ready  (+{r.boot_seconds():.1f}s)")
 
             tests = set(self._args.tests)
 
             if "camera" in tests:
-                print("  Waiting for camera (streaming test)...")
+                self._logger.info("Waiting for camera (streaming test)...")
                 ts = datetime.now().strftime("%H%M%S")
                 frame_path = str(Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}.jpg")
                 self._device.clear_camera_tmp()
@@ -235,28 +204,28 @@ class PeripheralTestRunner:
                 r.camera_device, r.camera_name = self._device.wait_for_camera_working(self._args.device_timeout, frame_path)
                 r.camera_ready = time.time()
                 r.camera_frame = frame_path
-                print(f"  Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
-                print(f"  Frame saved     : {frame_path}")
+                self._logger.info(f"Camera working  {r.camera_device}  {r.camera_name}  (+{r.camera_seconds():.1f}s from boot)")
+                self._logger.info(f"Frame saved     : {frame_path}")
 
             if tests & {"speaker", "mic"}:
-                print("  Waiting for audio card (/proc/asound/cards check)...")
+                self._logger.info("Waiting for audio card (/proc/asound/cards check)...")
                 r.audio_card, r.audio_name = self._device.wait_for_audio_working(self._args.device_timeout)
                 r.audio_ready = time.time()
-                print(f"  Audio card ready  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
+                self._logger.info(f"Audio card ready  [{r.audio_card}]  {r.audio_name}  (+{r.audio_seconds():.1f}s from boot)")
 
             if "speaker" in tests:
-                print("  Testing speaker (tinyplay 1kHz tone)...")
+                self._logger.info("Testing speaker (tinyplay 1kHz tone)...")
                 speaker_ok = self._device.test_speaker(duration=2)
                 r.speaker_ready = time.time()
-                print(f"  Speaker {'OK' if speaker_ok else 'FAIL'}  (+{r.speaker_seconds():.1f}s from boot)")
+                self._logger.info(f"Speaker {'OK' if speaker_ok else 'FAIL'}  (+{r.speaker_seconds():.1f}s from boot)")
                 if not speaker_ok:
                     raise RuntimeError("Speaker playback failed (tinyplay returned non-zero)")
 
             if "mic" in tests:
-                print("  Testing mic (tinycap RMS check)...")
+                self._logger.info("Testing mic (tinycap RMS check)...")
                 mic_ok, r.mic_rms = self._device.test_mic(duration=2)
                 r.mic_ready = time.time()
-                print(f"  Mic {'OK' if mic_ok else 'FAIL'}  RMS={r.mic_rms:.0f}  (+{r.mic_seconds():.1f}s from boot)")
+                self._logger.info(f"Mic {'OK' if mic_ok else 'FAIL'}  RMS={r.mic_rms:.0f}  (+{r.mic_seconds():.1f}s from boot)")
                 if not mic_ok:
                     raise RuntimeError(f"Mic recording too quiet (RMS={r.mic_rms:.0f} below threshold)")
 
@@ -264,10 +233,10 @@ class PeripheralTestRunner:
 
         except TimeoutError as e:
             r.error = f"TIMEOUT: {e}"
-            print(f"  [TIMEOUT] {e}")
+            self._logger.error("TIMEOUT: %s", e)
         except Exception as e:
             r.error = str(e)
-            print(f"  [ERROR] {e}")
+            self._logger.error("ERROR: %s", e)
 
         return r
 
@@ -307,28 +276,30 @@ def main():
     else:
         device = DuvelDevice(serial=args.serial, is_ip=False)
 
-    writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
-    runner = PeripheralTestRunner(device=device, args=args)
-
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     (Path(args.output_dir) / "files").mkdir(parents=True, exist_ok=True)
+
+    logger = Logger(args.output_dir)
 
     try:
         device.connect()
         device.push_peripheral_resources()
     except ConnectionError as e:
-        print(f"[ERROR] {e}")
+        logger.error("ERROR: %s", e)
         sys.exit(1)
 
-    print(f"Peripheral Test  v{VERSION}")
-    print(f"  Device     : {device.label}")
-    print(f"  FW         : {device.barco_fw_version()}")
-    print(f"  Iterations : {args.iterations}")
-    print(f"  Tests      : {' '.join(args.tests)}")
-    print(f"  Output dir : {args.output_dir}")
-    print(f"  [ADB] {'Connected to' if args.ip else 'USB device'} {device.label}")
-    print(f"  [ADB] v4l2_stream_test -> {_STREAM_TEST_BIN_REMOTE}")
-    print(f"  [ADB] barco_tone_2s.wav -> {_TONE_WAV_2S_REMOTE}")
+    writer = ResultWriter(total_rounds=args.iterations, device_label=device.label, logger=logger)
+    runner = PeripheralTestRunner(device=device, args=args, logger=logger)
+
+    logger.info(f"Peripheral Test  v{VERSION}")
+    logger.info(f"  Device     : {device.label}")
+    logger.info(f"  FW         : {device.barco_fw_version()}")
+    logger.info(f"  Iterations : {args.iterations}")
+    logger.info(f"  Tests      : {' '.join(args.tests)}")
+    logger.info(f"  Output dir : {args.output_dir}")
+    logger.info(f"  [ADB] {'Connected to' if args.ip else 'USB device'} {device.label}")
+    logger.info(f"  [ADB] v4l2_stream_test -> {_STREAM_TEST_BIN_REMOTE}")
+    logger.info(f"  [ADB] barco_tone_2s.wav -> {_TONE_WAV_2S_REMOTE}")
 
     results = []
     try:
@@ -337,14 +308,13 @@ def main():
             results.append(result)
             writer.print_round(result)
             if args.fail_fast and not result.passed:
-                print("\n[Stopped: --fail-fast]")
+                logger.info("[Stopped: --fail-fast]")
                 break
     except KeyboardInterrupt:
-        print("\n[Interrupted by user]")
+        logger.info("[Interrupted by user]")
     finally:
         if results:
             writer.print_summary(results)
-            writer.save_log(results, args.output_dir)
         device.disconnect()
 
 

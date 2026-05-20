@@ -314,6 +314,8 @@ def main():
         logger.error(str(e))
         sys.exit(1)
 
+    recorder = None if args.no_record else start_recording(args.output_dir, args.ffmpeg)
+
     writer = ResultWriter(total_rounds=args.iterations, device_label=device.label, logger=logger)
     runner = MtrDirtyDisconnectTestRunner(device=device, args=args, logger=logger)
 
@@ -325,8 +327,6 @@ def main():
         logger.info(f"  Passcode      : {args.passcode}")
     logger.info(f"  Iterations    : {args.iterations}")
     logger.info(f"  Output dir    : {args.output_dir}")
-
-    recorder = None if args.no_record else start_recording(args.output_dir, args.ffmpeg)
 
     results = []
     try:

@@ -164,7 +164,7 @@ class TeamsMeetingHost:
         self._logger.info("Connecting to Teams...")
         self._ctrl.connect(launch=True, timeout=connect_timeout)
         version = TeamsDesktopController.get_version()
-        self._logger.info("Connected.  Teams %s", version or "(version unknown)")
+        self._logger.info("Connected.  Teams Version: %s", version or "(version unknown)")
 
         self._logger.info("Starting Meet Now meeting...")
         # create_meeting() returns dict: {meeting_id, passcode, join_url}

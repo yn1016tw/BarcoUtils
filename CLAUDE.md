@@ -121,7 +121,7 @@ scripts/                 — Windows helper batch files (ADB key switcher, Duvel
 **Data flow in testcases/test_peripheral.py:**
 1. `main()` constructs `DuvelDevice`, calls `connect()` then `push_peripheral_resources()` — this pushes `v4l2_stream_test` and `barco_tone_2s.wav` to `/data/local/tmp/`
 2. `PeripheralTestRunner.run_round()` drives the full reboot → boot → camera → audio → speaker → mic sequence
-3. Timing is captured as Unix timestamps in `TestResult`; `ResultWriter` formats and saves them
+3. Timing is captured as Unix timestamps in `TestResult`; `ResultWriter` formats and logs them via `Logger`
 
 **Logger** (`testcases/common/logger.py`, `from common.logger import Logger`):
 - `Logger(output_dir, name="barcoutils", filename="logs.txt")` — creates logger that writes to stdout and `{output_dir}/{filename}` (append mode); format: `HH:MM:SS  LEVEL    message`

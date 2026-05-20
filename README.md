@@ -25,25 +25,41 @@ UI references are based on Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.07
 BarcoUtils/
 ├── testcases/
 │   ├── common/
-│   │   ├── duvel_device.py        # DuvelDevice — ADB wrapper (reusable)
-│   │   ├── ui_mtr.py              # MtrUi — ADB-based UI controller for MTR / Teams
-│   │   ├── ui_base.py             # BasePage — shared base class for all page objects
-│   │   ├── ui_main.py             # MainPage — Teams Rooms home screen
-│   │   ├── ui_invite_people.py    # InvitePeoplePage — "Invite people to join you" dialog
-│   │   ├── ui_in_call.py          # InCallPage — active call screen
-│   │   ├── ui_more_menu.py        # MoreMenuPage — More overlay menu
-│   │   ├── ui_settings.py         # SettingsPage — Settings dialog
-│   │   ├── ui_device_settings.py  # DeviceSettingsPage — Android Device Settings
-│   │   ├── ui_norden_call.py      # NordenCallPage — dial screen
-│   │   ├── ui_join_with_id.py     # JoinWithIdPage — Join with an ID dialog
-│   │   ├── teams_desktop.py       # TeamsDesktopController — Windows Teams desktop automation
-│   │   ├── teams_meeting_host.py  # Windows host: create Meet Now meeting, auto-accept calls
-│   │   ├── logger.py              # Logger — write timestamped messages to stdout + file
-│   │   └── version.py             # VERSION string
-│   ├── test_peripheral.py                          # Peripheral boot-time test (camera / mic / speaker)
-│   ├── test_mtr_meet_now.py                        # MTR Meet Now test (Teams UI → Meet now → screenshot)
-│   ├── test_mtr_join_with_id.py                    # MTR join-with-ID test (join by ID → screenshot → hang up)
-│   └── test_mtr_join_with_id_for_dirty_disconnect.py  # same flow but reboots Duvel after hang up
+│   │   ├── duvel_device.py               # DuvelDevice — ADB wrapper (reusable)
+│   │   ├── ui_mtr.py                     # MtrUi — ADB-based UI controller for MTR / Teams
+│   │   ├── ui_base.py                    # BasePage — shared base class for all page objects
+│   │   ├── ui_main.py                    # MainPage — Teams Rooms home screen
+│   │   ├── ui_invite_people.py           # InvitePeoplePage — "Invite people to join you" dialog
+│   │   ├── ui_in_call.py                 # InCallPage — active call screen
+│   │   ├── ui_more_menu.py               # MoreMenuPage — More overlay menu
+│   │   ├── ui_settings.py                # SettingsPage — Settings dialog
+│   │   ├── ui_device_settings.py         # DeviceSettingsPage — Android Device Settings
+│   │   ├── ui_norden_call.py             # NordenCallPage — dial screen
+│   │   ├── ui_join_with_id.py            # JoinWithIdPage — Join with an ID dialog
+│   │   ├── ui_device_setup_wizard.py     # DeviceSetupWizardPage — MDEP wizard entry screen
+│   │   ├── ui_device_setup_language.py   # SetupLanguagePage — language selection step
+│   │   ├── ui_device_setup_network.py    # SetupNetworkPage — network connectivity step
+│   │   ├── ui_device_setup_datetime.py   # SetupDatetimePage — date/time and timezone step
+│   │   ├── ui_device_setup_terms.py      # SetupTermsPage — EULA acceptance step
+│   │   ├── ui_device_setup_privacy.py    # SetupPrivacyPage — Microsoft Privacy step
+│   │   ├── ui_device_setup_admin_password.py # SetupAdminPasswordPage — admin password creation
+│   │   ├── ui_device_setup_confirm.py    # SetupConfirmPage — confirm installation summary
+│   │   ├── ui_device_setup_update.py     # SetupUpdatePage — firmware update available step
+│   │   ├── ui_device_setup_xms_cloud.py  # SetupXmsCloudPage — XMS Cloud enrollment step
+│   │   ├── ui_device_setup_complete.py   # SetupCompletePage — "Installation complete!" final step
+│   │   ├── ui_teams_sign_in.py           # TeamsSignInPage — Teams device-code-flow sign-in
+│   │   ├── ui_teams_sign_in_email.py     # TeamsSignInEmailPage — Teams on-device email entry
+│   │   ├── ui_azure_auth_webview.py      # AzureAuthWebViewPage — Azure MSAL WebView (password + registration)
+│   │   ├── teams_desktop.py              # TeamsDesktopController — Windows Teams desktop automation
+│   │   ├── teams_meeting_host.py         # Windows host: create Meet Now meeting, auto-accept calls
+│   │   ├── logger.py                     # Logger — write timestamped messages to stdout + file
+│   │   ├── utils.py                      # Shared utilities: screenshot, recording, scrcpy helpers
+│   │   └── version.py                    # VERSION string
+│   ├── test_peripheral.py                              # Peripheral boot-time test (camera / mic / speaker)
+│   ├── test_mtr_meet_now.py                            # MTR Meet Now test (Teams UI → Meet now → screenshot)
+│   ├── test_mtr_join_with_id.py                        # MTR join-with-ID test (join by ID → screenshot → hang up)
+│   ├── test_mtr_join_with_id_for_dirty_disconnect.py   # same flow but reboots Duvel after hang up
+│   └── test_setup_flow.py                              # MDEP setup wizard + Teams sign-in automation
 ├── data/
 │   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed by push_peripheral_resources)
 ├── scripts/
@@ -59,7 +75,7 @@ BarcoUtils/
 ## testcases/test_peripheral.py
 
 Measures how long after reboot it takes for the camera (UVC), microphone, and speaker to become ready.  
-Supports stress testing (configurable iterations), selective test execution, and logs results to a dated file.
+Supports stress testing (configurable iterations), selective test execution, and logs results to `<output-dir>/logs.txt`.
 
 ### What it tests
 
@@ -163,7 +179,7 @@ python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --output-dir C:/logs --
 ### Output
 
 ```
-14:30:00  INFO     MTR Meet Now Test  v1.14.28
+14:30:00  INFO     MTR Meet Now Test  v1.14.30
 14:30:00  INFO     ------------------------------------------------------------
 14:30:00  INFO     Round 1/1
 14:30:00  INFO     Navigating to Teams Rooms main page...

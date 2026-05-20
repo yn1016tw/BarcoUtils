@@ -19,10 +19,21 @@ python testcases/test_peripheral.py --ip 192.168.1.100 --tests speaker mic --fai
 
 # MTR Meet Now test (Teams Rooms camera end-to-end)
 python testcases/test_mtr_meet_now.py --ip 192.168.1.100
+python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --iterations 3
 
-# MTR Join Call test (requires teams_meeting_host.py on Windows PC)
-python testcases/test_mtr_join_call.py --ip 192.168.1.100 --from-host
-python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-id 123456789
+# MTR Join-with-ID call test (join → screenshot → hang up; records desktop)
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --from-host
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --meeting-id 123456789
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --from-host --iterations 5 --no-record
+
+# MTR dirty disconnect test (same as join-with-ID but reboots Duvel after hang up)
+python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --from-host
+python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --meeting-id 123456789 --iterations 5
+
+# MDEP setup wizard + Teams sign-in automation
+python testcases/test_setup_flow.py --ip 192.168.1.100
+python testcases/test_setup_flow.py --ip 192.168.1.100 \
+    --email user@domain.com --password MyPW --admin-password Admin123!
 
 # Windows host (PC side — creates Meet Now meeting, admits from lobby)
 python testcases/common/teams_meeting_host.py --output-dir C:/logs
@@ -35,16 +46,38 @@ There is no test suite runner, no linter config, and no build system.
 ## Architecture
 
 ```
-testcases/common/duvel_device.py   ← DuvelDevice: all ADB logic (camera, audio, boot)
-testcases/common/ui_mtr.py         ← MtrUi: ADB input + UI hierarchy + lazy page properties
-testcases/common/ui_base.py        ← BasePage: base class for all page objects
-testcases/common/ui_*.py           ← Page objects (one file per screen)
-testcases/common/teams_desktop.py  ← TeamsDesktopController: pywinauto Windows Teams automation
+testcases/common/duvel_device.py      ← DuvelDevice: all ADB logic (camera, audio, boot). No UI.
+testcases/common/ui_mtr.py            ← MtrUi: ADB input + UI hierarchy + lazy page properties
+testcases/common/ui_base.py           ← BasePage: base class for all page objects
+testcases/common/utils.py             ← Shared utilities: screenshot, recording, scrcpy helpers
+testcases/common/ui_main.py           ← MainPage (Teams Rooms home screen)
+testcases/common/ui_invite_people.py  ← InvitePeoplePage ("Invite people to join you" dialog)
+testcases/common/ui_in_call.py        ← InCallPage (active call screen)
+testcases/common/ui_more_menu.py      ← MoreMenuPage (More overlay)
+testcases/common/ui_settings.py       ← SettingsPage
+testcases/common/ui_device_settings.py ← DeviceSettingsPage (Android Device Settings)
+testcases/common/ui_norden_call.py    ← NordenCallPage (dial screen)
+testcases/common/ui_join_with_id.py   ← JoinWithIdPage (Join with an ID dialog)
+testcases/common/ui_device_setup_wizard.py    ← DeviceSetupWizardPage (wizard entry)
+testcases/common/ui_device_setup_language.py  ← SetupLanguagePage
+testcases/common/ui_device_setup_network.py   ← SetupNetworkPage
+testcases/common/ui_device_setup_datetime.py  ← SetupDatetimePage
+testcases/common/ui_device_setup_terms.py     ← SetupTermsPage
+testcases/common/ui_device_setup_privacy.py   ← SetupPrivacyPage
+testcases/common/ui_device_setup_admin_password.py ← SetupAdminPasswordPage
+testcases/common/ui_device_setup_confirm.py   ← SetupConfirmPage
+testcases/common/ui_device_setup_update.py    ← SetupUpdatePage
+testcases/common/ui_device_setup_xms_cloud.py ← SetupXmsCloudPage
+testcases/common/ui_device_setup_complete.py  ← SetupCompletePage
+testcases/common/ui_teams_sign_in.py          ← TeamsSignInPage (device-code-flow)
+testcases/common/ui_teams_sign_in_email.py    ← TeamsSignInEmailPage
+testcases/common/ui_azure_auth_webview.py     ← AzureAuthWebViewPage (MSAL WebView)
+testcases/common/teams_desktop.py     ← TeamsDesktopController: pywinauto Windows Teams automation
 testcases/common/teams_meeting_host.py ← Windows host: create meeting, admit from lobby
-testcases/common/version.py        ← VERSION string (bump manually)
-testcases/test_*.py                ← CLI entry points
-tools/v4l2_stream_test             ← Static ARM64 binary pushed to device at connect()
-data/barco_tone_2s.wav             ← 1 kHz tone pushed to device at connect()
+testcases/common/version.py           ← VERSION string (bump manually)
+testcases/test_*.py                   ← CLI entry points
+testcases/tools/v4l2_stream_test      ← Static ARM64 binary pushed to device at connect()
+testcases/data/barco_tone_2s.wav      ← 1 kHz tone pushed to device at connect()
 ```
 
 **Import convention:** test scripts in `testcases/` import as `from common.foo import Bar`  
@@ -56,6 +89,8 @@ data/barco_tone_2s.wav             ← 1 kHz tone pushed to device at connect()
    Accessed as `device.ui` (lazy property on `DuvelDevice`).
 3. Page objects (`BasePage` subclasses) — one per screen, accessed as lazy properties on `MtrUi`  
    (e.g. `device.ui.main`, `device.ui.in_call`, `device.ui.join_with_id`).
+
+**Default output directory:** `logs/<script-stem>/YYYYMMDD/HHMMSS/` — logs to `logs.txt`, screenshots/frames to `files/`.
 
 ---
 
@@ -110,10 +145,27 @@ class MainPage(BasePage):
 
 Resource IDs use the MTR package prefix: `com.microsoft.skype.teams.ipphone:id/<id>`.
 
+`go_to_main_page(timeout=15)` → `bool` — navigate to Teams home from any state: hang up if in-call → press BACK up to 5× → fallback `launch_teams()`.
+
+Setup wizard page objects are accessed via `ui.setup_*` / `ui.device_setup_wizard`.  
+Sign-in pages: `ui.teams_sign_in`, `ui.teams_sign_in_email`, `ui.azure_auth_webview`.
+
+### utils.py (testcases/common/utils.py)
+
+- `FFMPEG_DEFAULT` — `C:\Tools\ffmpeg\bin\ffmpeg.exe`
+- `SCRCPY_DEFAULT` — `C:\Tools\scrcpy-win64-v3.3.3\scrcpy.exe`
+- `screenshot_for_debug(ui, output_dir, round_num)` — ADB screenshot on failure
+- `screenshot_host_desktop(output_dir, round_num)` → `str | None` — PIL full-desktop capture
+- `start_recording(output_dir, ffmpeg_path)` → `Popen | None` — ffmpeg gdigrab to `files/desktop_HHMMSS.mp4`
+- `stop_recording(proc)` — send `q` to ffmpeg; kill on timeout
+- `start_ui_with_scrcpy(serial, scrcpy_path)` → `Popen | None` — mirror device screen
+
 ### TeamsDesktopController (Windows only)
 
 The Teams lobby "Waiting in the lobby" admit button is in WebView2 and not UIA-accessible.  
 `accept_call()` locates it by the Group element bounding rect and clicks at calibrated fractional coordinates — do not replace with element-based automation.
+
+Windows-only dependency: `pip install pywinauto pywin32 psutil`
 
 ### Recompiling the ARM64 binary
 

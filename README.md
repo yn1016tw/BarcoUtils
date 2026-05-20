@@ -15,7 +15,7 @@ UI references are based on Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.07
 - **ffmpeg** — required for desktop recording (`test_mtr_join_with_id.py`, dirty disconnect test). Default path: `C:\Tools\ffmpeg\bin\ffmpeg.exe`
 - **scrcpy** — required for device screen mirroring. Default path: `C:\Tools\scrcpy-win64-v3.3.3\scrcpy.exe`
 - If installed elsewhere, update `FFMPEG_DEFAULT` / `SCRCPY_DEFAULT` at the top of `testcases/common/utils.py`. ffmpeg path can also be overridden per-run with `--ffmpeg PATH` on the join-with-ID and dirty-disconnect tests.
-- Windows Teams desktop (for `testcases/common/teams_meeting_host.py`): `pip install pywinauto pywin32 psutil`
+- Windows Teams desktop (for `testcases/common/teams_meeting_host.py`): `pip install pywinauto pywin32 psutil` (psutil required for `get_version()`)
 
 ---
 
@@ -37,11 +37,13 @@ BarcoUtils/
 │   │   ├── ui_norden_call.py      # NordenCallPage — dial screen
 │   │   ├── ui_join_with_id.py     # JoinWithIdPage — Join with an ID dialog
 │   │   ├── teams_desktop.py       # TeamsDesktopController — Windows Teams desktop automation
-│   │   ├── teams_meeting_host.py  # Windows host: create Meet Now meeting, auto-admit from lobby
+│   │   ├── teams_meeting_host.py  # Windows host: create Meet Now meeting, auto-accept calls
+│   │   ├── logger.py              # Logger — write timestamped messages to stdout + file
 │   │   └── version.py             # VERSION string
-│   ├── test_peripheral.py         # Peripheral boot-time test (camera / mic / speaker)
-│   ├── test_mtr_meet_now.py       # MTR camera test (reboot → Teams UI → Meet now → screenshot)
-│   └── test_mtr_join_call.py      # MTR join-call test (reboot → join by ID → in-call screenshot)
+│   ├── test_peripheral.py                          # Peripheral boot-time test (camera / mic / speaker)
+│   ├── test_mtr_meet_now.py                        # MTR Meet Now test (Teams UI → Meet now → screenshot)
+│   ├── test_mtr_join_with_id.py                    # MTR join-with-ID test (join by ID → screenshot → hang up)
+│   └── test_mtr_join_with_id_for_dirty_disconnect.py  # same flow but reboots Duvel after hang up
 ├── data/
 │   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed by push_peripheral_resources)
 ├── scripts/
@@ -124,20 +126,19 @@ Frames: `<output-dir>/files/round01_HHMMSS.jpg`, …
 
 ## testcases/test_mtr_meet_now.py
 
-Verifies the Teams Rooms camera flow end-to-end after a full reboot, with per-step timestamps.
+Verifies the Teams Rooms Meet Now flow end-to-end with per-step timestamps.  
+On exception, reboots the device before the next round.
 
 ### Test procedure
 
 | Step | Action | Pass condition |
 |------|--------|----------------|
-| 1 | Reboot device | Command accepted |
-| 2 | Wait for boot | `sys.boot_completed` + `bootanim` + `pm list packages` |
-| 3 | Wait for main page | `meetnow_btn` visible in UI hierarchy |
-| 4 | Tap "Meet now" | Button found and tapped |
-| 5 | Invite dialog visible | `invite_button` or "Invite people to join you" text found |
-| 6 | Dismiss dialog | Dismiss (X) button found and tapped |
-| 7 | Screenshot saved | PNG written to `files/` |
-| 8 | Hang up | End call button found and tapped |
+| 1 | Navigate to main page | `meetnow_btn` visible in UI hierarchy |
+| 2 | Tap "Meet now" | Button found and tapped |
+| 3 | Invite dialog visible | `invite_button` or "Invite people to join you" text found |
+| 4 | Dismiss dialog | Dismiss (X) button found and tapped |
+| 5 | Screenshot saved | PNG written to `files/` |
+| 6 | Hang up | End call button found and tapped |
 
 ### Usage
 
@@ -162,17 +163,21 @@ python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --output-dir C:/logs --
 ### Output
 
 ```
-[Round 1/1] PASS
-  Reboot triggered      : 14:30:00.123
-  Boot ready            : 14:30:44.901  (+44.8s)  PASS
-  Main page visible     : 14:30:52.210  (+7.3s from boot)  PASS
-  Meet now tapped       : 14:30:52.650  (+7.7s from boot)  PASS
-  Invite dialog visible : 14:30:53.900  (+9.0s from boot)  PASS
-  Dialog dismissed      : 14:30:54.300  (+9.4s from boot)  PASS
-  Screenshot saved      : 14:30:55.100  (+10.2s from boot)  PASS
-  Screenshot path       : logs/test_mtr_meet_now/20260513/143000/files/round01_143054.png
-  Call ended            : 14:30:55.600  (+10.7s from boot)  PASS
-  Total (reboot->shot)  : 55.0s
+14:30:00  INFO     MTR Meet Now Test  v1.14.28
+14:30:00  INFO     ------------------------------------------------------------
+14:30:00  INFO     Round 1/1
+14:30:00  INFO     Navigating to Teams Rooms main page...
+14:30:07  INFO     Main page visible  (+7.3s)
+14:30:07  INFO     Tapping 'Meet now'...
+14:30:08  INFO     Meet now tapped  (+7.7s)
+14:30:09  INFO     Invite dialog visible  (+9.0s)
+14:30:09  INFO     Dialog dismissed  (+9.4s)
+14:30:15  INFO     Screenshot saved  (+10.2s)  files/round01_143015.png
+14:30:16  INFO     Call ended  (+10.7s)
+14:30:16  INFO     [Round 1/1] PASS
+14:30:16  INFO       Total (reboot->shot)  : 16.2s
+14:30:16  INFO     ============================================================
+14:30:16  INFO     Summary (1/1 PASS)
 ```
 
 Log: `<output-dir>/logs.txt`  
@@ -180,41 +185,43 @@ Screenshots: `<output-dir>/files/round01_HHMMSS.png`, …
 
 ---
 
-## testcases/test_mtr_join_call.py
+## testcases/test_mtr_join_with_id.py
 
-Verifies the Teams Rooms join-by-ID flow end-to-end after a full reboot.  
-Designed to run alongside `testcases/common/teams_meeting_host.py` on the Windows PC.
+Verifies the Teams Rooms join-by-ID flow end-to-end.  
+Designed to run alongside `testcases/common/teams_meeting_host.py` on the Windows PC.  
+Desktop video is recorded via ffmpeg throughout the test.
 
 ### Test procedure
 
 | Step | Action | Pass condition |
 |------|--------|----------------|
-| 1 | Reboot device | Command accepted |
-| 2 | Wait for boot | `sys.boot_completed` + `bootanim` + `pm list packages` |
-| 3 | Wait for main page | Teams Rooms home screen visible |
-| 4 | Tap "Join with an ID" | Button found and tapped |
-| 5 | Join dialog visible | Join-with-ID form visible |
-| 6 | Enter meeting ID + passcode | Fields filled and confirmed |
-| 7 | Tap "Join Teams meeting" | Join button tapped |
-| 8 | In-call screen visible | Active call screen detected |
-| 9 | Screenshot saved | PNG written to `files/` |
-| 10 | Hang up | End call button tapped |
+| 1 | Navigate to main page | Teams Rooms home screen visible |
+| 2 | Tap "Join with an ID" | Button found and tapped |
+| 3 | Join dialog visible | Join-with-ID form visible |
+| 4 | Enter meeting ID + passcode | Fields filled and confirmed |
+| 5 | Tap "Join Teams meeting" | Join button tapped |
+| 6 | In-call screen visible | Active call screen detected |
+| 7 | Wait 15s, take screenshot | PNG written to `files/` |
+| 8 | Hang up | End call button tapped (force-stop if needed) |
 
 ### Usage
 
 ```bash
 # Manual meeting ID
-python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-id 123456789
-python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-id 123456789 --passcode abc123
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --meeting-id 123456789
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --meeting-id 123456789 --passcode abc123
 
 # Load meeting info from teams_meeting_host.py (default path)
-python testcases/test_mtr_join_call.py --ip 192.168.1.100 --from-host
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --from-host
 
 # Load from custom directory
-python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-info-dir C:/logs
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --meeting-info-dir C:/logs
 
 # Stress test
-python testcases/test_mtr_join_call.py --ip 192.168.1.100 --from-host --iterations 5
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --from-host --iterations 5
+
+# Skip desktop recording
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --meeting-id 123456789 --no-record
 ```
 
 ### CLI options
@@ -229,24 +236,38 @@ python testcases/test_mtr_join_call.py --ip 192.168.1.100 --from-host --iteratio
 | `--meeting-info-dir DIR` | — | Load meeting info from `DIR/meeting_info.json` |
 | `--meeting-info-timeout SEC` | 120 | Seconds to wait for `meeting_info.json` to appear |
 | `--iterations N` | 1 | Number of test rounds |
-| `--output-dir DIR` | `logs` | Directory for log file and screenshots |
-| `--boot-timeout SEC` | 300 | Max seconds to wait for boot |
+| `--output-dir DIR` | auto | Directory for log file and screenshots (default: `logs/test_mtr_join_with_id/YYYYMMDD/HHMMSS/`) |
 | `--device-timeout SEC` | 120 | Max seconds to wait for Teams Rooms UI |
 | `--fail-fast` | off | Stop after the first failed round |
+| `--no-record` | off | Disable ffmpeg desktop recording |
+| `--ffmpeg PATH` | `C:\Tools\ffmpeg\bin\ffmpeg.exe` | Path to ffmpeg.exe |
+
+---
+
+## testcases/test_mtr_join_with_id_for_dirty_disconnect.py
+
+Same flow as `test_mtr_join_with_id.py` but reboots Duvel after hanging up to simulate a dirty disconnect.
+
+### Usage
+
+```bash
+python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --from-host
+python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --meeting-id 123456789 --iterations 5
+```
 
 ---
 
 ## testcases/common/teams_meeting_host.py
 
-Windows-side host script. Creates a Meet Now meeting in Teams desktop, writes meeting info to JSON,  
-and automatically admits MTR devices from the lobby.
+Windows-side host script. Creates a Meet Now meeting in Teams desktop, logs the Teams version,
+writes meeting info to JSON, and automatically accepts incoming calls.
 
-Requires `pip install pywinauto pywin32`.
+Requires `pip install pywinauto pywin32 psutil`.
 
 ### Usage
 
 ```bash
-# Start meeting and auto-admit (default)
+# Start meeting and auto-accept calls (default)
 python testcases/common/teams_meeting_host.py
 
 # Custom output directory for meeting_info.json and log file
@@ -263,16 +284,20 @@ python testcases/common/teams_meeting_host.py --accept-video
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--output-dir DIR` | `logs/` next to script | Directory for `meeting_info.json` and `YYYYMMDD_meeting_host.log` |
+| `--output-dir DIR` | `logs/teams_meeting_host/` | Directory for `meeting_info.json` and `YYYYMMDD_meeting_host.log` |
 | `--accept-video` | off | Accept calls with video (default: audio only) |
 | `--no-auto-accept` | off | Create meeting and print info, then exit |
 | `--connect-timeout SEC` | 30 | Seconds to wait for Teams to start |
 | `--meeting-timeout SEC` | 30 | Seconds to wait for meeting to be created |
 
-### meeting_info.json
+### Output files
 
-Written to `<output-dir>/meeting_info.json` once the meeting is created.  
-`test_mtr_join_call.py` reads this file via `--from-host` or `--meeting-info-dir`.
+Default location: `testcases/logs/teams_meeting_host/`
+
+| File | Description |
+|------|-------------|
+| `YYYYMMDD_meeting_host.log` | Timestamped log (stdout + file via Logger) |
+| `meeting_info.json` | Meeting ID, passcode, join URL written after meeting is created |
 
 ```json
 {
@@ -288,15 +313,15 @@ Written to `<output-dir>/meeting_info.json` once the meeting is created.
 
 **PC (Windows)** — run first:
 ```bash
-python testcases/common/teams_meeting_host.py --output-dir C:/logs
+python testcases/common/teams_meeting_host.py
 ```
 
 **MTR device** — run once the host is ready:
 ```bash
-python testcases/test_mtr_join_call.py --ip 192.168.1.100 --meeting-info-dir C:/logs
+python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --from-host
 ```
 
-The join-call test polls for `meeting_info.json` (up to `--meeting-info-timeout` seconds),  
+The join-with-ID test polls for `meeting_info.json` (up to `--meeting-info-timeout` seconds),  
 so both processes can be started in any order.
 
 ---

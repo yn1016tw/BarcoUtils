@@ -1,7 +1,7 @@
 """
-MTR Camera Test for Duvel
-Reboots the device, waits for boot, then verifies the Teams Rooms camera
-flow end-to-end with per-step timing.
+MTR Meet Now Test for Duvel
+Navigates to the Teams Rooms main page, taps Meet Now, and verifies the
+meet-now flow end-to-end with per-step timing.
 
 Steps:
   1. Navigate to Teams Rooms main page
@@ -29,6 +29,7 @@ from datetime import datetime
 from pathlib import Path
 
 from common.duvel_device import DuvelDevice
+from common.logger import Logger
 from common.version import VERSION
 from common.utils import screenshot_for_debug
 
@@ -82,30 +83,23 @@ class TestResult:
 # ---------------------------------------------------------------------------
 
 class ResultWriter:
-    def __init__(self, total_rounds: int, device_label: str):
+    def __init__(self, total_rounds: int, device_label: str, logger: Logger):
         self._total = total_rounds
         self._device_label = device_label
+        self._logger = logger
         self._run_start = datetime.now()
 
     def print_round(self, r: TestResult) -> None:
         for line in self._format_round_lines(r):
-            print(line)
+            self._logger.info(line)
 
     def print_summary(self, results: list[TestResult]) -> None:
         passed = sum(r.passed for r in results)
-        print(f"\n{'=' * 60}")
-        print(f"=== Summary ({passed}/{len(results)} PASS) ===")
+        self._logger.info("=" * 60)
+        self._logger.info(f"Summary ({passed}/{len(results)} PASS)")
         for line in self._format_summary_lines(results):
-            print(line)
-        print(f"{'=' * 60}")
-
-    def save_log(self, results: list[TestResult], output_dir: str) -> None:
-        path = Path(output_dir) / "logs.txt"
-        lines = self._format_lines(results)
-        mode = "a" if path.exists() else "w"
-        with open(path, mode, encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
-        print(f"\n  Log saved: {path}")
+            self._logger.info(line)
+        self._logger.info("=" * 60)
 
     @staticmethod
     def _ts(t: float | None) -> str:
@@ -119,7 +113,7 @@ class ResultWriter:
 
     def _format_round_lines(self, r: TestResult) -> list[str]:
         status = "PASS" if r.passed else "FAIL"
-        lines = [f"\n[Round {r.round_num}/{self._total}] {status}"]
+        lines = [f"[Round {r.round_num}/{self._total}] {status}"]
         if r.error:
             lines.append(f"  ERROR: {r.error}")
 
@@ -159,39 +153,21 @@ class ResultWriter:
             line("Invite dialog min/avg/max", [r.invite_seconds() for r in results]),
         ]
 
-    def _format_lines(self, results: list[TestResult]) -> list[str]:
-        lines = [
-            "=" * 80,
-            f"Test Run: {self._run_start.strftime('%Y-%m-%d %H:%M:%S')} "
-            f"| Device: {self._device_label} | Iterations: {self._total} | v{VERSION}"
-            + (f" | FW: {results[0].barco_fw_version}" if results and results[0].barco_fw_version else ""),
-            "=" * 80,
-            "",
-        ]
-        for r in results:
-            lines.extend(self._format_round_lines(r))
-            lines.append("")
-
-        passed = sum(r.passed for r in results)
-        lines.append(f"=== Summary ({passed}/{len(results)} PASS) ===")
-        lines.extend(self._format_summary_lines(results))
-        lines.append("")
-        return lines
-
 
 # ---------------------------------------------------------------------------
-# MtrCameraTestRunner
+# MtrMeetNowTestRunner
 # ---------------------------------------------------------------------------
 
-class MtrCameraTestRunner:
-    def __init__(self, device: DuvelDevice, args):
+class MtrMeetNowTestRunner:
+    def __init__(self, device: DuvelDevice, args, logger: Logger):
         self._device = device
         self._args = args
+        self._logger = logger
 
     def run_round(self, round_num: int, total_rounds: int) -> TestResult:
         r = TestResult(round_num=round_num, total_rounds=total_rounds)
-        print(f"\n{'-' * 60}")
-        print(f"Round {round_num}/{total_rounds}")
+        self._logger.info("-" * 60)
+        self._logger.info(f"Round {round_num}/{total_rounds}")
 
         try:
             r.reboot_start = time.time()
@@ -200,32 +176,32 @@ class MtrCameraTestRunner:
             ui = self._device.ui
 
             # Step 1: Navigate to main page
-            print("  Navigating to Teams Rooms main page...")
+            self._logger.info("Navigating to Teams Rooms main page...")
             if not ui.go_to_main_page(timeout=self._args.device_timeout):
                 raise TimeoutError(f"Main page not reachable within {self._args.device_timeout}s")
             r.main_visible = time.time()
-            print(f"  Main page visible  (+{r.main_visible - r.boot_ready:.1f}s)")
+            self._logger.info(f"Main page visible  (+{r.main_visible - r.boot_ready:.1f}s)")
 
             # Step 2: Tap Meet now
-            print("  Tapping 'Meet now'...")
+            self._logger.info("Tapping 'Meet now'...")
             if not ui.main.click_meet_now():
                 raise RuntimeError("Could not tap 'Meet now' button")
             r.meet_now_tapped = time.time()
-            print(f"  Meet now tapped  (+{r.meet_now_tapped - r.boot_ready:.1f}s)")
+            self._logger.info(f"Meet now tapped  (+{r.meet_now_tapped - r.boot_ready:.1f}s)")
 
             # Step 3: Wait for invite dialog
-            print("  Waiting for 'Invite people' dialog...")
+            self._logger.info("Waiting for 'Invite people' dialog...")
             if not ui.invite_people.is_visible(timeout=_INVITE_DIALOG_TIMEOUT):
                 raise TimeoutError(f"Invite dialog not visible within {_INVITE_DIALOG_TIMEOUT}s")
             r.invite_visible = time.time()
-            print(f"  Invite dialog visible  (+{r.invite_visible - r.boot_ready:.1f}s)")
+            self._logger.info(f"Invite dialog visible  (+{r.invite_visible - r.boot_ready:.1f}s)")
 
             # Step 4: Dismiss dialog
-            print("  Dismissing invite dialog...")
+            self._logger.info("Dismissing invite dialog...")
             if not ui.invite_people.dismiss():
                 raise RuntimeError("Could not dismiss invite dialog")
             r.dialog_dismissed = time.time()
-            print(f"  Dialog dismissed  (+{r.dialog_dismissed - r.boot_ready:.1f}s)")
+            self._logger.info(f"Dialog dismissed  (+{r.dialog_dismissed - r.boot_ready:.1f}s)")
             if ui.invite_people.is_visible():
                 raise RuntimeError("Invite dialog still visible after dismiss")
 
@@ -233,33 +209,33 @@ class MtrCameraTestRunner:
             time.sleep(5)
             ts = datetime.now().strftime("%H%M%S")
             shot_path = str(Path(self._args.output_dir) / "files" / f"round{round_num:02d}_{ts}.png")
-            print(f"  Saving screenshot...")
+            self._logger.info("Taking screenshot...")
             ui.screenshot(shot_path)
             r.screenshot_saved = time.time()
             r.screenshot_path = shot_path
-            print(f"  Screenshot saved  (+{r.screenshot_saved - r.boot_ready:.1f}s)  {shot_path}")
+            self._logger.info(f"Screenshot saved  (+{r.screenshot_saved - r.boot_ready:.1f}s)  {shot_path}")
 
             # Step 6: Hang up
-            print("  Hanging up meeting...")
+            self._logger.info("Hanging up meeting...")
             ui.end_call()
             r.call_ended = time.time()
-            print(f"  Call ended  (+{r.call_ended - r.boot_ready:.1f}s)")
+            self._logger.info(f"Call ended  (+{r.call_ended - r.boot_ready:.1f}s)")
             time.sleep(5)
 
             r.passed = True
 
         except TimeoutError as e:
             r.error = f"TIMEOUT: {e}"
-            print(f"  [TIMEOUT] {e}")
+            self._logger.error("TIMEOUT: %s", e)
             _cleanup_call(self._device.ui)
             screenshot_for_debug(self._device.ui, self._args.output_dir, round_num)
-            _reboot_device(self._device, self._args.boot_timeout)
+            _reboot_device(self._device, self._args.boot_timeout, self._logger)
         except Exception as e:
             r.error = str(e)
-            print(f"  [ERROR] {e}")
+            self._logger.error("ERROR: %s", e)
             _cleanup_call(self._device.ui)
             screenshot_for_debug(self._device.ui, self._args.output_dir, round_num)
-            _reboot_device(self._device, self._args.boot_timeout)
+            _reboot_device(self._device, self._args.boot_timeout, self._logger)
 
         return r
 
@@ -276,15 +252,14 @@ def _cleanup_call(ui) -> None:
         pass
 
 
-def _reboot_device(device: DuvelDevice, boot_timeout: int) -> None:
+def _reboot_device(device: DuvelDevice, boot_timeout: int, logger: Logger) -> None:
     try:
-        print("  Rebooting device after failure...")
+        logger.info("Rebooting device after failure...")
         device.reboot()
         device.wait_for_boot(boot_timeout)
-        print("  Boot ready.")
+        logger.info("Boot ready.")
     except Exception as e:
-        print(f"  [WARN] Reboot failed: {e}")
-
+        logger.warning("Reboot failed: %s", e)
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +268,7 @@ def _reboot_device(device: DuvelDevice, boot_timeout: int) -> None:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="MTR meet-now test: reboot, boot, Teams Rooms main → Meet now → screenshot"
+        description="MTR Meet Now test: navigate to Teams Rooms main → Meet now → screenshot"
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--serial", metavar="SERIAL", help="USB ADB serial number")
@@ -322,20 +297,22 @@ def main():
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     (Path(args.output_dir) / "files").mkdir(parents=True, exist_ok=True)
 
+    logger = Logger(args.output_dir)
+
     try:
         device.connect()
     except ConnectionError as e:
-        print(f"[ERROR] {e}")
+        logger.error(str(e))
         sys.exit(1)
 
-    writer = ResultWriter(total_rounds=args.iterations, device_label=device.label)
-    runner = MtrCameraTestRunner(device=device, args=args)
+    writer = ResultWriter(total_rounds=args.iterations, device_label=device.label, logger=logger)
+    runner = MtrMeetNowTestRunner(device=device, args=args, logger=logger)
 
-    print(f"MTR Camera Test  v{VERSION}")
-    print(f"  Device     : {device.label}")
-    print(f"  FW         : {device.barco_fw_version()}")
-    print(f"  Iterations : {args.iterations}")
-    print(f"  Output dir : {args.output_dir}")
+    logger.info(f"MTR Meet Now Test  v{VERSION}")
+    logger.info(f"  Device     : {device.label}")
+    logger.info(f"  FW         : {device.barco_fw_version()}")
+    logger.info(f"  Iterations : {args.iterations}")
+    logger.info(f"  Output dir : {args.output_dir}")
 
     results = []
     try:
@@ -344,14 +321,13 @@ def main():
             results.append(result)
             writer.print_round(result)
             if args.fail_fast and not result.passed:
-                print("\n[Stopped: --fail-fast]")
+                logger.info("[Stopped: --fail-fast]")
                 break
     except KeyboardInterrupt:
-        print("\n[Interrupted by user]")
+        logger.info("[Interrupted by user]")
     finally:
         if results:
             writer.print_summary(results)
-            writer.save_log(results, args.output_dir)
         device.disconnect()
 
 

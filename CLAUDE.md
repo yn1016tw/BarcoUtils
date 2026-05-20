@@ -25,7 +25,7 @@ python testcases/test_peripheral.py --ip 192.168.1.100 --tests camera          #
 python testcases/test_peripheral.py --ip 192.168.1.100 --tests speaker mic
 python testcases/test_peripheral.py --ip 192.168.1.100 --iterations 10 --fail-fast
 
-# MTR Meet Now camera test (reboot-on-exception)
+# MTR Meet Now test (reboot-on-exception)
 python testcases/test_mtr_meet_now.py --ip 192.168.1.100
 python testcases/test_mtr_meet_now.py --ip 192.168.1.100 --output-dir C:/logs --iterations 3
 
@@ -104,12 +104,12 @@ testcases/common/ui_teams_sign_in.py         — TeamsSignInPage page object (Te
 testcases/common/ui_teams_sign_in_email.py   — TeamsSignInEmailPage page object (Teams on-device email/username entry)
 testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page object (Azure Authenticator MSAL WebView: password entry + device registration steps)
 testcases/common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
-testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, extract meeting ID/passcode, auto-accept incoming calls; writes meeting_info.json
+testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, log Teams version, auto-accept incoming calls; writes meeting_info.json to logs/teams_meeting_host/ by default
 testcases/common/logger.py            — Logger class: write timestamped messages to stdout and {output_dir}/logs.txt simultaneously; methods: info/warning/error/debug
 testcases/common/utils.py             — Shared test utilities: screenshot_for_debug, screenshot_host_desktop, start_recording, stop_recording, start_ui_with_scrcpy, FFMPEG_DEFAULT, SCRCPY_DEFAULT
 testcases/common/version.py           — VERSION string (bump manually on releases)
 testcases/test_peripheral.py          — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
-testcases/test_mtr_meet_now.py        — CLI entry point for the MTR camera test (Meet Now → screenshot); reboots only on exception
+testcases/test_mtr_meet_now.py        — CLI entry point for the MTR Meet Now test (navigate to main → Meet Now → screenshot); reboots only on exception
 testcases/test_mtr_join_with_id.py    — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); records desktop via ffmpeg
 testcases/test_mtr_join_with_id_for_dirty_disconnect.py — same flow but Step 9 reboots Duvel after hang up to simulate dirty disconnect; records desktop via ffmpeg
 testcases/test_setup_flow.py          — CLI entry point for MDEP setup wizard + Teams sign-in automation (14 steps, each skipped if screen not visible)
@@ -290,4 +290,4 @@ scripts/                 — Windows helper batch files (ADB key switcher, Duvel
 - Audio card detection reads `/proc/asound/cards` (no root required); prefers USB-Audio cards over internal SOC
 - `_adb_raw()` never raises; `_adb()` raises on non-zero exit. Internal polling uses `_poll_until()` with a 2s interval
 - `connect()` must be called before any device operations; for TCP/IP it runs `adb connect`, for USB it verifies presence in `adb devices`
-- Default output dir: `logs/<script-stem>/YYYYMMDD/HHMMSS/`; log saved to `logs.txt`, frames/screenshots to `files/`
+- Default output dir: `logs/<script-stem>/YYYYMMDD/HHMMSS/`; log saved to `logs.txt`, frames/screenshots to `files/`; exception: `teams_meeting_host.py` uses `logs/teams_meeting_host/` and writes `YYYYMMDD_meeting_host.log`

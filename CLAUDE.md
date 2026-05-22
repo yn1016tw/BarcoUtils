@@ -115,7 +115,10 @@ testcases/test_mtr_join_with_id_for_dirty_disconnect.py — same flow but Step 9
 testcases/test_setup_flow.py          — CLI entry point for MDEP setup wizard + Teams sign-in automation (14 steps, each skipped if screen not visible)
 tools/v4l2_stream_test   — Static ARM64 binary; pushed by push_peripheral_resources() (peripheral test only)
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed by push_peripheral_resources()
-scripts/                 — Windows helper batch files (ADB key switcher, Duvel device setup)
+scripts/                 — Windows helper batch files (ADB key switcher, Duvel device setup, ethernet control)
+scripts/adb_key_switch.bat  — Switch active ADB vendor key between Duvel / Fruitesse
+scripts/duvel_setup.bat     — Interactive Duvel device provisioning (manufacturing mode, SN, certificate, SSID)
+scripts/wave4_tool.bat      — Interactive menu: ethernet up/down, network info, Barco APK version listing
 ```
 
 **Data flow in testcases/test_peripheral.py:**

@@ -64,7 +64,8 @@ BarcoUtils/
 │   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed by push_peripheral_resources)
 ├── scripts/
 │   ├── adb_key_switch.bat         # Switch active ADB key between Duvel / Fruitesse
-│   └── duvel_setup.bat            # Interactive Duvel device setup helper
+│   ├── duvel_setup.bat            # Interactive Duvel device setup helper
+│   └── wave4_tool.bat             # Interactive menu to control ethernet (up/down) via ADB
 └── tools/
     ├── v4l2_stream_test.c         # Minimal V4L2 streaming test (source)
     └── v4l2_stream_test           # Precompiled static ARM64 binary (Android 26+)
@@ -458,6 +459,38 @@ Since `adb shell` runs as `shell` (not in the `audio` group), both commands are 
 | < 50 | Near silence — hardware not responding |
 | 50–100 | Below default threshold |
 | > 100 (default) | Ambient noise confirmed — PASS |
+
+---
+
+## scripts/
+
+Windows batch scripts for device management tasks.
+
+### wave4_tool.bat
+
+Interactive menu for controlling the Duvel ethernet interface via ADB.
+
+```
+scripts\wave4_tool.bat
+```
+
+**Menu options:**
+- Connect by IP address or USB serial
+- Ethernet UP — `ip link set eth0 up`
+- Ethernet DOWN — `ip link set eth0 down`
+- Show eth0 status and IP address
+- Show all network interfaces
+- Show all IP addresses
+
+Automatically runs `adb root` before ethernet up/down commands (requires debug or test build).
+
+### adb_key_switch.bat
+
+Switches the active ADB vendor key between Duvel and Fruitesse devices.
+
+### duvel_setup.bat
+
+Interactive helper for Wave4 Duvel device provisioning (manufacturing mode, serial number, certificate, SSID).
 
 ---
 

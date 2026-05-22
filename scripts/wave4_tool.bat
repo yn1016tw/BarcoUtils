@@ -77,7 +77,8 @@ echo  [2] Ethernet DOWN (ip link set eth0 down)
 echo  [3] Show eth0 status
 echo  [4] Show all network interfaces
 echo  [5] Show IP addresses
-echo  [6] Reconnect / change target
+echo  [6] List Barco APK versions
+echo  [7] Reconnect / change target
 echo  [0] Exit
 echo.
 echo ============================================================
@@ -88,7 +89,8 @@ if "%CHOICE%"=="2" goto ETH_DOWN
 if "%CHOICE%"=="3" goto ETH_STATUS
 if "%CHOICE%"=="4" goto SHOW_IFACES
 if "%CHOICE%"=="5" goto SHOW_IPS
-if "%CHOICE%"=="6" goto CONNECT_MENU
+if "%CHOICE%"=="6" goto LIST_BARCO_APKS
+if "%CHOICE%"=="7" goto CONNECT_MENU
 if "%CHOICE%"=="0" goto EXIT
 echo Invalid option.
 timeout /t 2 >nul
@@ -149,6 +151,33 @@ echo.
 echo [5] IP addresses:
 echo ------------------------------------------------------------
 adb %ADB_S% shell ip addr show
+echo.
+pause
+goto MAIN_MENU
+
+:LIST_BARCO_APKS
+echo.
+echo [6] Barco APK versions:
+echo ------------------------------------------------------------
+echo.
+
+:: Key APKs: friendly name, package name
+set "APKS=mdep-settings-apk:com.android.settings network-manager-apk:com.barco.clickshare.networkmanager compositor-apk:com.barco.clickshare.compositor display-manager-apk:com.barco.clickshare.displaymanager standby-manager-apk:com.barco.clickshare.standbymanager switcher-apk:com.barco.clickshare.switcher configuration-manager-apk:com.barco.clickshare.configurationmanager button-manager-apk:com.barco.clickshare.buttonmanager rd-camera-apk:com.barco.clickshare.rdcamera rd-speakerphone-apk:com.barco.clickshare.rdspeakerphone ui-composer-apk:com.barco.clickshare.uicomposer rest-api-apk:com.barco.clickshare.restapi production-api-apk:com.barco.clickshare.productionapi iot-agent-apk:com.barco.clickshare.iotagent telemetry-service-apk:com.barco.clickshare.telemetryservice firmware-updater-apk:com.barco.clickshare.firmwareupdater led-manager-apk:com.barco.clickshare.ledmanager ingest-service-apk:com.barco.clickshare.ingestservice feature-flags-apk:com.barco.clickshare.featureflags.app up-source-provider-apk:com.barco.clickshare.upsourceprovider"
+
+for %%A in (%APKS%) do (
+    for /f "tokens=1,2 delims=:" %%N in ("%%A") do (
+        set "PKG=%%O"
+        set "VER="
+        for /f "tokens=2 delims==" %%V in ('adb %ADB_S% shell "dumpsys package %%O | grep versionName" 2^>nul') do (
+            set "VER=%%V"
+        )
+        if defined VER (
+            echo   %%N  !VER!
+        ) else (
+            echo   %%N  [not installed]
+        )
+    )
+)
 echo.
 pause
 goto MAIN_MENU

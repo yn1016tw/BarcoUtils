@@ -161,23 +161,39 @@ echo [6] Barco APK versions:
 echo ------------------------------------------------------------
 echo.
 
-:: Key APKs: friendly name, package name
-set "APKS=mdep-settings-apk:com.android.settings network-manager-apk:com.barco.clickshare.networkmanager compositor-apk:com.barco.clickshare.compositor display-manager-apk:com.barco.clickshare.displaymanager standby-manager-apk:com.barco.clickshare.standbymanager switcher-apk:com.barco.clickshare.switcher configuration-manager-apk:com.barco.clickshare.configurationmanager button-manager-apk:com.barco.clickshare.buttonmanager rd-camera-apk:com.barco.clickshare.rdcamera rd-speakerphone-apk:com.barco.clickshare.rdspeakerphone ui-composer-apk:com.barco.clickshare.uicomposer rest-api-apk:com.barco.clickshare.restapi production-api-apk:com.barco.clickshare.productionapi iot-agent-apk:com.barco.clickshare.iotagent telemetry-service-apk:com.barco.clickshare.telemetryservice firmware-updater-apk:com.barco.clickshare.firmwareupdater led-manager-apk:com.barco.clickshare.ledmanager ingest-service-apk:com.barco.clickshare.ingestservice feature-flags-apk:com.barco.clickshare.featureflags.app up-source-provider-apk:com.barco.clickshare.upsourceprovider"
+powershell -NoProfile -Command ^
+  "$adbS = '%ADB_TARGET%'; if ($adbS) { $adbS = \"-s $adbS\" }; " ^
+  "$apks = @(" ^
+  "  @('mdep-settings-apk',           'com.android.settings')," ^
+  "  @('network-manager-apk',         'com.barco.clickshare.networkmanager')," ^
+  "  @('compositor-apk',              'com.barco.clickshare.compositor')," ^
+  "  @('display-manager-apk',         'com.barco.clickshare.displaymanager')," ^
+  "  @('standby-manager-apk',         'com.barco.clickshare.standbymanager')," ^
+  "  @('switcher-apk',                'com.barco.clickshare.switcher')," ^
+  "  @('configuration-manager-apk',   'com.barco.clickshare.configurationmanager')," ^
+  "  @('button-manager-apk',          'com.barco.clickshare.buttonmanager')," ^
+  "  @('rd-camera-apk',               'com.barco.clickshare.rdcamera')," ^
+  "  @('rd-speakerphone-apk',         'com.barco.clickshare.rdspeakerphone')," ^
+  "  @('ui-composer-apk',             'com.barco.clickshare.uicomposer')," ^
+  "  @('rest-api-apk',                'com.barco.clickshare.restapi')," ^
+  "  @('production-api-apk',          'com.barco.clickshare.productionapi')," ^
+  "  @('iot-agent-apk',               'com.barco.clickshare.iotagent')," ^
+  "  @('telemetry-service-apk',       'com.barco.clickshare.telemetryservice')," ^
+  "  @('firmware-updater-apk',        'com.barco.clickshare.firmwareupdater')," ^
+  "  @('led-manager-apk',             'com.barco.clickshare.ledmanager')," ^
+  "  @('ingest-service-apk',          'com.barco.clickshare.ingestservice')," ^
+  "  @('feature-flags-apk',           'com.barco.clickshare.featureflags.app')," ^
+  "  @('up-source-provider-apk',      'com.barco.clickshare.upsourceprovider')" ^
+  "); " ^
+  "Write-Host ('  {0,-35} {1,-10} {2}' -f 'APK Name','Version','Package'); " ^
+  "Write-Host ('  ' + '-'*35 + ' ' + '-'*10 + ' ' + '-'*40); " ^
+  "foreach ($a in $apks) { " ^
+  "  $name = $a[0]; $pkg = $a[1]; " ^
+  "  $raw = (Invoke-Expression \"adb $adbS shell 'dumpsys package $pkg ^| grep versionName' 2>`$null\") -join ''; " ^
+  "  $ver = if ($raw -match 'versionName=(.+)') { $Matches[1].Trim() } else { '[not installed]' }; " ^
+  "  Write-Host ('  {0,-35} {1,-10} {2}' -f $name, $ver, $pkg) " ^
+  "}"
 
-for %%A in (%APKS%) do (
-    for /f "tokens=1,2 delims=:" %%N in ("%%A") do (
-        set "PKG=%%O"
-        set "VER="
-        for /f "tokens=2 delims==" %%V in ('adb %ADB_S% shell "dumpsys package %%O | grep versionName" 2^>nul') do (
-            set "VER=%%V"
-        )
-        if defined VER (
-            echo   %%N  !VER!
-        ) else (
-            echo   %%N  [not installed]
-        )
-    )
-)
 echo.
 pause
 goto MAIN_MENU

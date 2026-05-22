@@ -161,38 +161,45 @@ echo [6] Barco APK versions:
 echo ------------------------------------------------------------
 echo.
 
-powershell -NoProfile -Command ^
-  "$adbS = '%ADB_TARGET%'; if ($adbS) { $adbS = \"-s $adbS\" }; " ^
-  "$apks = @(" ^
-  "  @('mdep-settings-apk',           'com.android.settings')," ^
-  "  @('network-manager-apk',         'com.barco.clickshare.networkmanager')," ^
-  "  @('compositor-apk',              'com.barco.clickshare.compositor')," ^
-  "  @('display-manager-apk',         'com.barco.clickshare.displaymanager')," ^
-  "  @('standby-manager-apk',         'com.barco.clickshare.standbymanager')," ^
-  "  @('switcher-apk',                'com.barco.clickshare.switcher')," ^
-  "  @('configuration-manager-apk',   'com.barco.clickshare.configurationmanager')," ^
-  "  @('button-manager-apk',          'com.barco.clickshare.buttonmanager')," ^
-  "  @('rd-camera-apk',               'com.barco.clickshare.rdcamera')," ^
-  "  @('rd-speakerphone-apk',         'com.barco.clickshare.rdspeakerphone')," ^
-  "  @('ui-composer-apk',             'com.barco.clickshare.uicomposer')," ^
-  "  @('rest-api-apk',                'com.barco.clickshare.restapi')," ^
-  "  @('production-api-apk',          'com.barco.clickshare.productionapi')," ^
-  "  @('iot-agent-apk',               'com.barco.clickshare.iotagent')," ^
-  "  @('telemetry-service-apk',       'com.barco.clickshare.telemetryservice')," ^
-  "  @('firmware-updater-apk',        'com.barco.clickshare.firmwareupdater')," ^
-  "  @('led-manager-apk',             'com.barco.clickshare.ledmanager')," ^
-  "  @('ingest-service-apk',          'com.barco.clickshare.ingestservice')," ^
-  "  @('feature-flags-apk',           'com.barco.clickshare.featureflags.app')," ^
-  "  @('up-source-provider-apk',      'com.barco.clickshare.upsourceprovider')" ^
-  "); " ^
-  "Write-Host ('  {0,-35} {1,-10} {2}' -f 'APK Name','Version','Package'); " ^
-  "Write-Host ('  ' + '-'*35 + ' ' + '-'*10 + ' ' + '-'*40); " ^
-  "foreach ($a in $apks) { " ^
-  "  $name = $a[0]; $pkg = $a[1]; " ^
-  "  $raw = (Invoke-Expression \"adb $adbS shell 'dumpsys package $pkg ^| grep versionName' 2>`$null\") -join ''; " ^
-  "  $ver = if ($raw -match 'versionName=(.+)') { $Matches[1].Trim() } else { '[not installed]' }; " ^
-  "  Write-Host ('  {0,-35} {1,-10} {2}' -f $name, $ver, $pkg) " ^
-  "}"
+:: Write PowerShell script to temp file then execute
+set "PS1=%TEMP%\barco_apk_list.ps1"
+(
+  echo $adbS = "%ADB_TARGET%"
+  echo if ^($adbS^) { $adbS = "-s $adbS" }
+  echo $apks = @^(
+  echo   ,@^('mdep-settings-apk',           'com.android.settings'^)
+  echo   ,@^('network-manager-apk',         'com.barco.clickshare.networkmanager'^)
+  echo   ,@^('compositor-apk',              'com.barco.clickshare.compositor'^)
+  echo   ,@^('display-manager-apk',         'com.barco.clickshare.displaymanager'^)
+  echo   ,@^('standby-manager-apk',         'com.barco.clickshare.standbymanager'^)
+  echo   ,@^('switcher-apk',                'com.barco.clickshare.switcher'^)
+  echo   ,@^('configuration-manager-apk',   'com.barco.clickshare.configurationmanager'^)
+  echo   ,@^('button-manager-apk',          'com.barco.clickshare.buttonmanager'^)
+  echo   ,@^('rd-camera-apk',               'com.barco.clickshare.rdcamera'^)
+  echo   ,@^('rd-speakerphone-apk',         'com.barco.clickshare.rdspeakerphone'^)
+  echo   ,@^('ui-composer-apk',             'com.barco.clickshare.uicomposer'^)
+  echo   ,@^('rest-api-apk',                'com.barco.clickshare.restapi'^)
+  echo   ,@^('production-api-apk',          'com.barco.clickshare.productionapi'^)
+  echo   ,@^('iot-agent-apk',               'com.barco.clickshare.iotagent'^)
+  echo   ,@^('telemetry-service-apk',       'com.barco.clickshare.telemetryservice'^)
+  echo   ,@^('firmware-updater-apk',        'com.barco.clickshare.firmwareupdater'^)
+  echo   ,@^('led-manager-apk',             'com.barco.clickshare.ledmanager'^)
+  echo   ,@^('ingest-service-apk',          'com.barco.clickshare.ingestservice'^)
+  echo   ,@^('feature-flags-apk',           'com.barco.clickshare.featureflags.app'^)
+  echo   ,@^('up-source-provider-apk',      'com.barco.clickshare.upsourceprovider'^)
+  echo ^)
+  echo Write-Host ^('  {0,-35} {1,-12} {2}' -f 'APK Name','Version','Package'^)
+  echo Write-Host ^('  ' + '-'*35 + ' ' + '-'*12 + ' ' + '-'*40^)
+  echo foreach ^($a in $apks^) {
+  echo   $name = $a[0]; $pkg = $a[1]
+  echo   $raw = ^(adb $adbS shell "dumpsys package $pkg ^| grep versionName" 2^>$null^) -join ''
+  echo   $ver = if ^($raw -match 'versionName=^(.+^)'^) { $Matches[1].Trim^(^) } else { '[not installed]' }
+  echo   Write-Host ^('  {0,-35} {1,-12} {2}' -f $name, $ver, $pkg^)
+  echo }
+) > "%PS1%"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
+del "%PS1%" >nul 2>&1
 
 echo.
 pause

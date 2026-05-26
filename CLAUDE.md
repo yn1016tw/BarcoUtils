@@ -229,7 +229,8 @@ scripts/record_tool.ps1     — Screen recording tool: detects displays via Wind
 **SetupNetworkPage** (`testcases/common/ui_device_setup_network.py`, access via `device.ui.setup_network`):
 - `is_visible()` → bool; `is_connected()` → bool
 - `get_title()` / `get_connectivity_message()` / `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
-- `click_next()` / `click_settings()` / `click_back()` → bool
+- `get_online_title()` / `get_online_message()` / `get_limited_message()` → str | None — FW ≥1858 new layout fields
+- `click_next()` / `click_settings()` / `click_more_information()` / `click_back()` → bool
 
 **SetupDatetimePage** (`testcases/common/ui_device_setup_datetime.py`, access via `device.ui.setup_datetime`):
 - `is_visible()` → bool; `is_24h_format()` → bool | None

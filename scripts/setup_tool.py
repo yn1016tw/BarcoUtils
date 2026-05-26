@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "testcases"))
 from common.duvel_device import DuvelDevice  # noqa: E402
 
 # ── timeouts ──────────────────────────────────────────────────────────────────
-_POLL_INTERVAL   = 2    # seconds between page polls
+_POLL_INTERVAL   = 1    # seconds between page polls
 _FLOW_TIMEOUT    = 600  # 10 min total budget
 _NETWORK_TIMEOUT = 60   # wait for network connectivity
 

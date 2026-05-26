@@ -7,6 +7,8 @@ set "PASSWORD=Devel_25"
 set "ADMIN_PW=Admin@123"
 set "LANGUAGE=English"
 set "TIMEZONE=Taipei"
+set "DEV_SN=1882000501"
+set "DEV_IP="
 
 :CONNECT_MENU
 cls
@@ -15,7 +17,7 @@ echo          Duvel Setup Tool
 echo ============================================================
 echo.
 echo  [1] Connect by IP address
-echo  [2] Connect by USB serial
+echo  [2] Connect by USB serial  (default: %DEV_SN%)
 echo  [0] Exit
 echo.
 echo ============================================================
@@ -36,7 +38,8 @@ goto RUN
 
 :CONNECT_SERIAL
 echo.
-set /p "DEV_SN=Enter USB serial number: "
+set /p "INPUT_SN=Serial number [%DEV_SN%]: "
+if not "%INPUT_SN%"=="" set "DEV_SN=%INPUT_SN%"
 set "CONN_ARG=--serial %DEV_SN%"
 goto RUN
 

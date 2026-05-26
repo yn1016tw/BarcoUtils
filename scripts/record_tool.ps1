@@ -88,10 +88,12 @@ function Show-Menu {
     # Check ffmpeg
     if (-not (Test-Path $FFMPEG)) {
         Write-Host ""
-        Write-Host "  ERROR: ffmpeg not found at:" -ForegroundColor Red
-        Write-Host "    $FFMPEG" -ForegroundColor Red
+        Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Red
+        Write-Host "  ║  ERROR: ffmpeg not found                                 ║" -ForegroundColor Red
+        Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Red
         Write-Host ""
-        Write-Host "  Update `$FFMPEG path in record_tool.ps1 or install ffmpeg." -ForegroundColor Yellow
+        Write-Host "  Path : $FFMPEG" -ForegroundColor Yellow
+        Write-Host "  Fix  : Update `$FFMPEG in record_tool.ps1" -ForegroundColor DarkGray
         Write-Host ""
         Read-Host "  Press Enter to exit"
         return
@@ -102,33 +104,51 @@ function Show-Menu {
 
     while ($true) {
         Clear-Host
-        Write-Host "============================================================" -ForegroundColor Cyan
-        Write-Host "          Screen Recording Tool  (ffmpeg gdigrab)" -ForegroundColor Cyan
-        Write-Host "============================================================" -ForegroundColor Cyan
-        Write-Host ""
-        Write-Host ("  {0,-5} {1,-18} {2,-18} {3}" -f "No.", "Resolution", "Offset (x,y)", "Device")
-        Write-Host ("  " + "-" * 60)
+        $W = 66
+        $border = "═" * $W
+
+        Write-Host "  ╔$border╗" -ForegroundColor Cyan
+        Write-Host "  ║$(("  Screen Recording Tool  —  ffmpeg gdigrab").PadRight($W))║" -ForegroundColor Cyan
+        Write-Host "  ╠$border╣" -ForegroundColor Cyan
+
+        # Display table header
+        Write-Host "  ║$(("").PadRight($W))║" -ForegroundColor Cyan
+        Write-Host "  ║  $("  KEY   RESOLUTION         OFFSET (x,y)        DEVICE / NOTE".PadRight($W-2))║" -ForegroundColor DarkGray
+        Write-Host "  ║  $("  ───   ──────────────────  ──────────────────  ────────────────────".PadRight($W-2))║" -ForegroundColor DarkGray
+
         foreach ($d in $displays) {
-            $tag = if ($d.Primary) { "  *primary" } else { "" }
-            Write-Host ("  [{0}]   {1,-18} {2,-18} {3}{4}" -f `
+            $primary = if ($d.Primary) { " ★ primary" } else { "" }
+            $line = "  [{0}]   {1,-20}{2,-20}{3}{4}" -f `
                 $d.Index,
-                "$($d.Width)x$($d.Height)",
-                "($($d.OffsetX), $($d.OffsetY))",
+                "$($d.Width) x $($d.Height)",
+                "$($d.OffsetX), $($d.OffsetY)",
                 $d.Name,
-                $tag)
+                $primary
+            Write-Host "  ║  $($line.PadRight($W-2))║" -ForegroundColor White
         }
-        Write-Host ("  [A]   {0,-18} {1,-18} All displays (virtual desktop)" -f `
-            "$($vd.Width)x$($vd.Height)", "($($vd.OffsetX), $($vd.OffsetY))")
+
+        $allLine = "  [A]   {0,-20}{1,-20}All displays (virtual desktop)" -f `
+            "$($vd.Width) x $($vd.Height)", "$($vd.OffsetX), $($vd.OffsetY)"
+        Write-Host "  ║  $($allLine.PadRight($W-2))║" -ForegroundColor Yellow
+
+        Write-Host "  ║$(("").PadRight($W))║" -ForegroundColor Cyan
+        Write-Host "  ╠$border╣" -ForegroundColor Cyan
+
+        # Settings
+        $outLine  = "  Output dir  :  $OUTPUT_DIR"
+        $fpsLine  = "  Framerate   :  $FRAMERATE fps    Codec: libx264  Preset: veryfast  Pixel: yuv420p"
+        Write-Host "  ║$($outLine.PadRight($W))║" -ForegroundColor DarkGray
+        Write-Host "  ║$($fpsLine.PadRight($W))║" -ForegroundColor DarkGray
+
+        Write-Host "  ╠$border╣" -ForegroundColor Cyan
+
+        # Actions
+        Write-Host "  ║$("  [R]  Refresh display list".PadRight($W))║"
+        Write-Host "  ║$("  [O]  Change output directory".PadRight($W))║"
+        Write-Host "  ║$("  [0]  Exit".PadRight($W))║"
+        Write-Host "  ╚$border╝" -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "  Output dir : $OUTPUT_DIR" -ForegroundColor DarkGray
-        Write-Host "  Framerate  : $FRAMERATE fps" -ForegroundColor DarkGray
-        Write-Host ""
-        Write-Host "  [R] Refresh display list"
-        Write-Host "  [O] Change output directory"
-        Write-Host "  [0] Exit"
-        Write-Host ""
-        Write-Host "============================================================" -ForegroundColor Cyan
-        $choice = Read-Host "  Select display to record"
+        $choice = Read-Host "  Select"
 
         if ($choice -eq '0') { break }
 
@@ -179,34 +199,44 @@ function Show-Menu {
         }
 
         # Start recording(s)
-        $procs   = @()
+        $procs    = @()
         $outFiles = @()
+        Clear-Host
+        Write-Host ""
+        Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "  ║  ● RECORDING                                                     ║" -ForegroundColor Green
+        Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor Green
         foreach ($t in $targets) {
             $ts      = Get-Date -Format "yyyyMMdd_HHmmss"
             $outFile = Join-Path $OUTPUT_DIR "$($t.Label)_$ts.mp4"
             $outFiles += $outFile
-            Write-Host ""
-            Write-Host "  Recording  : $outFile" -ForegroundColor Green
-            Write-Host "  Size       : $($t.Width)x$($t.Height)  Offset: ($($t.OffsetX), $($t.OffsetY))" -ForegroundColor DarkGray
+            Write-Host "  ║  Target  :  $($t.Label.PadRight(54))║" -ForegroundColor White
+            Write-Host "  ║  Size    :  $("$($t.Width) x $($t.Height)   Offset: ($($t.OffsetX), $($t.OffsetY))".PadRight(54))║" -ForegroundColor DarkGray
+            Write-Host "  ║  Output  :  $(([System.IO.Path]::GetFileName($outFile)).PadRight(54))║" -ForegroundColor DarkGray
+            Write-Host "  ║$("".PadRight(66))║" -ForegroundColor Green
             $proc = Start-FfmpegRecording $t.OffsetX $t.OffsetY $t.Width $t.Height $outFile
             $procs += $proc
         }
-
+        Write-Host "  ║  Press Enter to STOP recording...$(("").PadRight(32))║" -ForegroundColor Yellow
+        Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
         Write-Host ""
-        Write-Host "  Recording in progress..." -ForegroundColor Yellow
-        Write-Host "  Press Enter to STOP recording." -ForegroundColor Yellow
         Read-Host | Out-Null
 
         # Stop all recordings
+        Write-Host "  Stopping... please wait." -ForegroundColor Yellow
         foreach ($proc in $procs) {
             Stop-FfmpegRecording $proc
         }
 
         Write-Host ""
-        Write-Host "  Recording stopped. Saved file(s):" -ForegroundColor Green
+        Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+        Write-Host "  ║  ✔ Recording complete                                            ║" -ForegroundColor Cyan
+        Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor Cyan
         foreach ($f in $outFiles) {
-            Write-Host "    $f" -ForegroundColor White
+            Write-Host "  ║  $([System.IO.Path]::GetFileName($f).PadRight(64))║" -ForegroundColor White
+            Write-Host "  ║  $($f.PadRight(64))║" -ForegroundColor DarkGray
         }
+        Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
         Write-Host ""
         Read-Host "  Press Enter to return to menu"
     }

@@ -43,6 +43,11 @@ python testcases/test_setup_flow.py --ip 192.168.1.100
 python testcases/test_setup_flow.py --serial 1882000501
 python testcases/test_setup_flow.py --ip 192.168.1.100 \
     --email user@domain.com --password MyPW --admin-password Admin123!
+
+# Polling-based setup tool (order-independent, handles any FW page order)
+python scripts/setup_tool.py --ip 192.168.1.100
+python scripts/setup_tool.py --serial 1882000501 --admin-password Admin@123
+scripts\setup_tool.bat   # interactive launcher (prompts for IP / serial)
 ```
 
 No install step — run directly from the repo root. There are no automated tests, linting config, or build system.
@@ -115,10 +120,14 @@ testcases/test_mtr_join_with_id_for_dirty_disconnect.py — same flow but Step 9
 testcases/test_setup_flow.py          — CLI entry point for MDEP setup wizard + Teams sign-in automation (14 steps, each skipped if screen not visible)
 tools/v4l2_stream_test   — Static ARM64 binary; pushed by push_peripheral_resources() (peripheral test only)
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed by push_peripheral_resources()
-scripts/                 — Windows helper batch files (ADB key switcher, Duvel device setup, ethernet control)
+scripts/                 — Windows helper scripts (ADB key switcher, Duvel device setup, ethernet control, setup automation)
 scripts/adb_key_switch.bat  — Switch active ADB vendor key between Duvel / Fruitesse
 scripts/duvel_setup.bat     — Interactive Duvel device provisioning (manufacturing mode, SN, certificate, SSID)
 scripts/wave4_tool.bat      — Interactive menu: ethernet up/down, network info, Barco APK version listing
+scripts/setup_tool.bat      — Interactive launcher for setup_tool.py (prompts for IP / serial, then runs Python)
+scripts/setup_tool.py       — Polling-based MDEP setup wizard + Teams sign-in automation; detects active page every 2s and handles it regardless of FW page order; adds sys.path for testcases/common imports
+scripts/record_tool.bat     — Launcher for record_tool.ps1
+scripts/record_tool.ps1     — Screen recording tool: detects displays via Windows Forms, records selected display(s) to MP4 via ffmpeg gdigrab
 ```
 
 **Data flow in testcases/test_peripheral.py:**

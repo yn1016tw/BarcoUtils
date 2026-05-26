@@ -65,7 +65,11 @@ BarcoUtils/
 ├── scripts/
 │   ├── adb_key_switch.bat         # Switch active ADB key between Duvel / Fruitesse
 │   ├── duvel_setup.bat            # Interactive Duvel device setup helper
-│   └── wave4_tool.bat             # Interactive menu to control ethernet (up/down) via ADB
+│   ├── wave4_tool.bat             # Interactive menu to control ethernet (up/down) via ADB
+│   ├── setup_tool.bat             # Launcher: interactive menu → calls setup_tool.py
+│   ├── setup_tool.py              # MDEP setup wizard + Teams sign-in (polling-based, order-independent)
+│   ├── record_tool.bat            # Launcher: calls record_tool.ps1
+│   └── record_tool.ps1            # Screen recording tool using ffmpeg gdigrab
 └── tools/
     ├── v4l2_stream_test.c         # Minimal V4L2 streaming test (source)
     └── v4l2_stream_test           # Precompiled static ARM64 binary (Android 26+)
@@ -483,6 +487,28 @@ scripts\wave4_tool.bat
 - Show all IP addresses
 
 Automatically runs `adb root` before ethernet up/down commands (requires debug or test build).
+
+### setup_tool.bat / setup_tool.py
+
+Automates the full MDEP Device Setup Wizard + Teams sign-in flow.  
+Uses a polling loop to detect which page is currently active and handle it —  
+resilient to page-order differences across firmware versions.
+
+```
+scripts\setup_tool.bat
+```
+
+**Interactive menu** prompts for connection type (IP or USB serial), then runs the Python script with default credentials. Credentials can be overridden by passing arguments directly to `setup_tool.py`:
+
+```bash
+python scripts/setup_tool.py --ip 192.168.1.100
+python scripts/setup_tool.py --serial 1882000501 --admin-password Admin@123
+python scripts/setup_tool.py --ip 192.168.1.100 --email user@domain.com --password MyPW
+```
+
+**Pages handled (any order):** confirm connection, language, network, date/time, terms, privacy, firmware update, XMS Cloud (skip), admin password, confirm installation, setup complete, Teams sign-in, Teams email, Azure password, device registration.
+
+**Timeout:** 10 minutes total. Polls every 2 seconds.
 
 ### adb_key_switch.bat
 

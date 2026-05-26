@@ -299,13 +299,15 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
 
-    serial = args.ip if args.ip else args.serial
-    device = DuvelDevice(serial=serial)
+    if args.ip:
+        device = DuvelDevice(serial=args.ip, is_ip=True)
+    else:
+        device = DuvelDevice(serial=args.serial, is_ip=False)
     device.connect()
 
     fw = device.barco_fw_version()
     print(f"\n{'=' * 60}")
-    print(f"  Device : {serial}")
+    print(f"  Device : {args.ip or args.serial}")
     print(f"  FW     : {fw}")
     print(f"  Email  : {args.email}")
     print(f"  TZ     : {args.timezone}")

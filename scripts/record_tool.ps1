@@ -27,6 +27,10 @@ function Get-EvenSize($w, $h) {
 }
 
 function Get-Displays {
+    # AllScreens is a cached static field — clear it to force re-enumeration
+    $f = [System.Windows.Forms.Screen].GetField('screens',
+        [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Static)
+    if ($f) { $f.SetValue($null, $null) }
     $screens = [System.Windows.Forms.Screen]::AllScreens | Sort-Object { $_.Bounds.X }
     $displays = @()
     $i = 1
@@ -34,7 +38,7 @@ function Get-Displays {
         $w, $h = Get-EvenSize $s.Bounds.Width $s.Bounds.Height
         $displays += [PSCustomObject]@{
             Index   = $i
-            Name    = $s.DeviceName -replace '\\\\.\\', 'DISPLAY' -replace '\\\.\\', ''
+            Name    = "Display $i"
             Width   = $w
             Height  = $h
             OffsetX = $s.Bounds.X
@@ -121,36 +125,28 @@ function Show-Menu {
 
         # Display table header
         Write-Host "  |$(''.PadRight($W))|"
-        Write-Host "  |  $("  KEY   RESOLUTION           OFFSET (x,y)        DEVICE".PadRight($W-2))|" -ForegroundColor DarkGray
-        Write-Host "  |  $("  ---   ------------------   ------------------  ------------------".PadRight($W-2))|" -ForegroundColor DarkGray
+        Write-Host "  |  $("  KEY   RESOLUTION           DEVICE".PadRight($W-2))|" -ForegroundColor DarkGray
+        Write-Host "  |  $("  ---   ------------------   ------------------".PadRight($W-2))|" -ForegroundColor DarkGray
 
         foreach ($d in $displays) {
             $primary = if ($d.Primary) { "  [primary]" } else { "" }
-            $line = "  [{0}]   {1,-22} {2,-20}{3}{4}" -f `
+            $line = "  [{0}]   {1,-22} {2}{3}" -f `
                 $d.Index,
                 "$($d.Width) x $($d.Height)",
-                "$($d.OffsetX), $($d.OffsetY)",
                 $d.Name,
                 $primary
             Write-Host "  |  $($line.PadRight($W-2))|" -ForegroundColor White
         }
 
-        $allLine = "  [A]   {0,-22} {1,-20}All displays (virtual desktop)" -f `
-            "$($vd.Width) x $($vd.Height)", "$($vd.OffsetX), $($vd.OffsetY)"
+        $allLine = "  [A]   {0,-22} All displays (virtual desktop)" -f "$($vd.Width) x $($vd.Height)"
         Write-Host "  |  $($allLine.PadRight($W-2))|" -ForegroundColor Yellow
 
         Write-Host "  |$(''.PadRight($W))|"
         Write-Host "  +$border+" -ForegroundColor Cyan
 
-        # Settings
-        Write-Host "  |$("  Output dir : $OUTPUT_DIR".PadRight($W))|" -ForegroundColor DarkGray
-        Write-Host "  |$("  Framerate  : $FRAMERATE fps   Codec: libx264   Preset: veryfast   Pixel: yuv420p".PadRight($W))|" -ForegroundColor DarkGray
-
-        Write-Host "  +$border+" -ForegroundColor Cyan
-
         # Actions
         Write-Host "  |$("  [R]  Refresh display list".PadRight($W))|"
-        Write-Host "  |$("  [O]  Change output directory".PadRight($W))|"
+        Write-Host "  |$("  [C]  Clear all recordings".PadRight($W))|"
         Write-Host "  |$("  [0]  Exit".PadRight($W))|"
         Write-Host "  +$thick+" -ForegroundColor Cyan
         Write-Host ""
@@ -164,9 +160,22 @@ function Show-Menu {
             continue
         }
 
-        if ($choice -eq 'O' -or $choice -eq 'o') {
-            $newDir = Read-Host "  Enter output directory"
-            if ($newDir -and $newDir.Trim()) { $OUTPUT_DIR = $newDir.Trim() }
+        if ($choice -eq 'C' -or $choice -eq 'c') {
+            $mp4s = @(Get-ChildItem -Path $OUTPUT_DIR -Filter "*.mp4" -ErrorAction SilentlyContinue)
+            if ($mp4s.Count -eq 0) {
+                Write-Host "  No recordings found in $OUTPUT_DIR" -ForegroundColor DarkGray
+            } else {
+                Write-Host ""
+                Write-Host "  Found $($mp4s.Count) file(s) in $OUTPUT_DIR" -ForegroundColor Yellow
+                $confirm = Read-Host "  Delete all? [y/N]"
+                if ($confirm -eq 'y' -or $confirm -eq 'Y') {
+                    $mp4s | Remove-Item -Force
+                    Write-Host "  Deleted $($mp4s.Count) file(s)." -ForegroundColor Green
+                } else {
+                    Write-Host "  Cancelled." -ForegroundColor DarkGray
+                }
+            }
+            Start-Sleep -Seconds 1
             continue
         }
 
@@ -175,7 +184,7 @@ function Show-Menu {
 
         if ($choice -eq 'A' -or $choice -eq 'a') {
             $targets += [PSCustomObject]@{
-                Label   = "AllDisplays"
+                Label   = "All Displays"
                 OffsetX = $vd.OffsetX
                 OffsetY = $vd.OffsetY
                 Width   = $vd.Width
@@ -186,7 +195,7 @@ function Show-Menu {
             if ($idx -ge 1 -and $idx -le $displays.Count) {
                 $d = $displays[$idx - 1]
                 $targets += [PSCustomObject]@{
-                    Label   = "Display$($d.Index)_$($d.Name)"
+                    Label   = $d.Name
                     OffsetX = $d.OffsetX
                     OffsetY = $d.OffsetY
                     Width   = $d.Width
@@ -217,7 +226,7 @@ function Show-Menu {
             $outFile = Join-Path $OUTPUT_DIR "$($t.Label)_$ts.mp4"
             $outFiles += $outFile
             Write-Host "  |  Target : $($t.Label.PadRight(56))|" -ForegroundColor White
-            Write-Host "  |  Size   : $("$($t.Width) x $($t.Height)   Offset: ($($t.OffsetX), $($t.OffsetY))".PadRight(56))|" -ForegroundColor DarkGray
+            Write-Host "  |  Size   : $("$($t.Width) x $($t.Height)".PadRight(56))|" -ForegroundColor DarkGray
             Write-Host "  |  File   : $(([System.IO.Path]::GetFileName($outFile)).PadRight(56))|" -ForegroundColor DarkGray
             Write-Host "  |$(''.PadRight(66))|" -ForegroundColor Green
             $proc = Start-FfmpegRecording $t.OffsetX $t.OffsetY $t.Width $t.Height $outFile

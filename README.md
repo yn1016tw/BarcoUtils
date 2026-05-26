@@ -518,6 +518,27 @@ Switches the active ADB vendor key between Duvel and Fruitesse devices.
 
 Interactive helper for Wave4 Duvel device provisioning (manufacturing mode, serial number, certificate, SSID).
 
+```
+scripts\duvel_setup.bat
+```
+
+**Menu options:**
+
+| Option | Description |
+|--------|-------------|
+| `[1]` | Enable Manufacturing Mode |
+| `[2]` | Set Serial Number |
+| `[3]` | Reboot Base Unit |
+| `[4]` | Activate Development Certificate |
+| `[5]` | Create Development Certificate (ClickShare) |
+| `[6]` | Set SSID (`ClickShare-<SN>`) |
+| `[7]` | **Setup** — run MDEP setup wizard + Teams sign-in via `setup_tool.py` |
+| `[8]` | Run All Steps 1–6 in sequence |
+| `[9]` | **Run All Steps + Auto Setup** — steps 1–6 then wizard (full one-shot init) |
+| `[A]` | Find Device IP Address (adb) |
+| `[B]` | Change Device IP |
+| `[C]` | Change SN |
+
 ---
 
 ## tools/v4l2_stream_test

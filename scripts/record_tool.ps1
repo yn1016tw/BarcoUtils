@@ -1,7 +1,14 @@
 # record_tool.ps1 — Screen recording tool using ffmpeg gdigrab
 # Detects all connected displays and records selected display(s) to MP4.
 
-Add-Type -AssemblyName System.Windows.Forms
+$ErrorActionPreference = 'Continue'
+try {
+    Add-Type -AssemblyName System.Windows.Forms
+} catch {
+    Write-Host "ERROR: Failed to load System.Windows.Forms: $_" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
 
 $FFMPEG      = "C:\Tools\ffmpeg\bin\ffmpeg.exe"
 $FRAMERATE   = 30
@@ -242,4 +249,13 @@ function Show-Menu {
     }
 }
 
-Show-Menu
+try {
+    Show-Menu
+} catch {
+    Write-Host ""
+    Write-Host "  ERROR: $_" -ForegroundColor Red
+    Write-Host "  $($_.ScriptStackTrace)" -ForegroundColor DarkGray
+    Write-Host ""
+    Read-Host "  Press Enter to exit"
+    exit 1
+}

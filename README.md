@@ -58,8 +58,7 @@ BarcoUtils/
 │   ├── test_peripheral.py                              # Peripheral boot-time test (camera / mic / speaker)
 │   ├── test_mtr_meet_now.py                            # MTR Meet Now test (Teams UI → Meet now → screenshot)
 │   ├── test_mtr_join_with_id.py                        # MTR join-with-ID test (join by ID → screenshot → hang up)
-│   ├── test_mtr_join_with_id_for_dirty_disconnect.py   # same flow but reboots Duvel after hang up
-│   └── test_setup_flow.py                              # MDEP setup wizard + Teams sign-in automation
+│   └── test_mtr_join_with_id_for_dirty_disconnect.py   # same flow but reboots Duvel after hang up
 ├── data/
 │   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed by push_peripheral_resources)
 ├── scripts/

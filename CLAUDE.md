@@ -38,12 +38,6 @@ python testcases/test_mtr_join_with_id.py --ip 192.168.1.100 --meeting-id 123456
 python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --from-host
 python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --meeting-id 123456789 --iterations 5
 
-# MDEP setup wizard + Teams sign-in automation (each step skipped if screen not visible)
-python testcases/test_setup_flow.py --ip 192.168.1.100
-python testcases/test_setup_flow.py --serial 1882000501
-python testcases/test_setup_flow.py --ip 192.168.1.100 \
-    --email user@domain.com --password MyPW --admin-password Admin123!
-
 # Polling-based setup tool (order-independent, handles any FW page order)
 python scripts/setup_tool.py --ip 192.168.1.100
 python scripts/setup_tool.py --serial 1882000501 --admin-password Admin@123
@@ -117,7 +111,6 @@ testcases/test_peripheral.py          — CLI entry point + TestResult / ResultW
 testcases/test_mtr_meet_now.py        — CLI entry point for the MTR Meet Now test (navigate to main → Meet Now → screenshot); reboots only on exception
 testcases/test_mtr_join_with_id.py    — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); records desktop via ffmpeg
 testcases/test_mtr_join_with_id_for_dirty_disconnect.py — same flow but Step 9 reboots Duvel after hang up to simulate dirty disconnect; records desktop via ffmpeg
-testcases/test_setup_flow.py          — CLI entry point for MDEP setup wizard + Teams sign-in automation (14 steps, each skipped if screen not visible)
 tools/v4l2_stream_test   — Static ARM64 binary; pushed by push_peripheral_resources() (peripheral test only)
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed by push_peripheral_resources()
 scripts/                 — Windows helper scripts (ADB key switcher, Duvel device setup, ethernet control, setup automation)
@@ -174,6 +167,8 @@ scripts/record_tool.ps1     — Screen recording tool: detects displays via Wind
 - `home()` / `back()` / `recent_apps()`
 - `screenshot(local_path)` — uses `adb exec-out screencap -p` (no temp file on device)
 - `dump_ui()` → raw XML; `find_element(text, text_contains, content_desc, resource_id, cls)` → dict with `center` tuple
+- `ui_dump_cache()` → context manager; share one `dump_ui()` result across all checks in a poll iteration (used by `setup_tool.py`); cache disabled by default
+- `invalidate_ui_cache()` → expire cache immediately; called automatically by all write operations
 - `tap_element(...)` → bool; `wait_for_element(timeout, ...)` → bool; `wait_for_element_gone(timeout, ...)` → bool
 - `current_activity()` → `"package/activity"` string
 - `launch(package, activity)` / `force_stop(package)`

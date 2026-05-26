@@ -25,10 +25,12 @@ echo   [3] Reboot Base Unit
 echo   [4] Activate Development Certificate
 echo   [5] Create Development Certificate (ClickShare)
 echo   [6] Set SSID
-echo   [7] Run All Steps (1-6 in sequence)
-echo   [8] Find Device IP Address (adb)
-echo   [9] Change Device IP
-echo   [A] Change SN
+echo   [7] Setup (MDEP wizard + Teams sign-in)
+echo   [8] Run All Steps (1-6 in sequence)
+echo   [9] Run All Steps + Auto Setup (1-6 then wizard)
+echo   [A] Find Device IP Address (adb)
+echo   [B] Change Device IP
+echo   [C] Change SN
 echo   [0] Exit
 echo.
 echo ============================================================
@@ -40,10 +42,12 @@ if "%CHOICE%"=="3" goto REBOOT
 if "%CHOICE%"=="4" goto ACTIVATE_CERT
 if "%CHOICE%"=="5" goto CREATE_CERT
 if "%CHOICE%"=="6" goto SET_SSID
-if "%CHOICE%"=="7" goto RUN_ALL
-if "%CHOICE%"=="8" goto FIND_IP
-if "%CHOICE%"=="9" goto CHANGE_IP
-if /i "%CHOICE%"=="A" goto CHANGE_SN
+if "%CHOICE%"=="7" goto SETUP
+if "%CHOICE%"=="8" goto RUN_ALL
+if "%CHOICE%"=="9" goto RUN_ALL_SETUP
+if /i "%CHOICE%"=="A" goto FIND_IP
+if /i "%CHOICE%"=="B" goto CHANGE_IP
+if /i "%CHOICE%"=="C" goto CHANGE_SN
 if "%CHOICE%"=="0" goto EXIT
 echo Invalid option.
 timeout /t 2 >nul
@@ -123,7 +127,7 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 7. Run All Steps ----
+:: ---- 8. Run All Steps ----
 :RUN_ALL
 echo.
 echo ============================================================
@@ -173,17 +177,78 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 8. Find Device IP Address ----
+:: ---- 7. Setup (MDEP wizard + Teams sign-in) ----
+:SETUP
+echo.
+echo [7] Running MDEP setup wizard + Teams sign-in for SN: %SN%...
+echo ------------------------------------------------------------
+python "%~dp0setup_tool.py" --serial %SN%
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- 9. Run All Steps + Auto Setup ----
+:RUN_ALL_SETUP
+echo.
+echo ============================================================
+echo  Running all steps + auto setup with SN: %SN%
+echo  Device IP: %DEVICE_IP%
+echo ============================================================
+echo.
+echo [Step 1/6] Enabling manufacturing mode...
+curl -s -X PUT -H "Content-Type: application/x-www-form-urlencoded" -d "url=%ACTIVATE_URL%" %DEVICE_IP%:%PROD_PORT%/activate
+echo.
+
+echo [Step 2/6] Setting serial number to %SN%...
+curl -s -X PUT -H "Content-Type: text/plain" -d "%SN%" %DEVICE_IP%:%PROD_PORT%/serial-number
+echo.
+
+echo [Step 3/6] Rebooting and waiting for device...
+adb reboot
+echo   Waiting for device to come back online...
+:WAIT_REBOOT2
+timeout /t 5 >nul
+curl -s -k -o nul https://%DEVICE_IP%:%REST_PORT%/v3/status >nul 2>&1
+if errorlevel 1 (
+    echo   Device not ready, retrying...
+    goto WAIT_REBOOT2
+)
+echo   Device is back online!
+echo.
+
+echo [Step 4/6] Activating development certificate...
+curl -s -X PUT -H "Content-Type: application/x-www-form-urlencoded" -d "url=%ACTIVATE_URL%:80" %DEVICE_IP%:%PROD_PORT%/activate
+echo.
+
+echo [Step 5/6] Creating ClickShare certificate...
+curl -s -X PUT %DEVICE_IP%:%PROD_PORT%/certificate/clickshare
+echo.
+
+echo [Step 6/6] Setting SSID to ClickShare-%SN%...
+curl -s -k -X PATCH "https://%DEVICE_IP%:%REST_PORT%/v3/network/wireless/1" -H "accept: */*" -H "Content-Type: application/json" -d "{""accessPoint"":{""ssid"":""ClickShare-%SN%""}}"
+echo.
+echo.
+echo [Step 7] Running MDEP setup wizard + Teams sign-in...
+python "%~dp0setup_tool.py" --serial %SN%
+echo.
+echo ============================================================
+echo  All steps + setup completed!
+echo ============================================================
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- A. Find Device IP Address ----
 :FIND_IP
 echo.
-echo [8] Finding device IP address...
+echo [A] Finding device IP address...
 echo ------------------------------------------------------------
 adb shell ifconfig eth0
 echo.
 pause
 goto MAIN_MENU
 
-:: ---- 9. Change Device IP ----
+:: ---- B. Change Device IP ----
 :CHANGE_IP
 echo.
 echo Current IP: %DEVICE_IP%
@@ -192,7 +257,7 @@ echo Device IP changed to %DEVICE_IP%
 timeout /t 2 >nul
 goto MAIN_MENU
 
-:: ---- A. Change SN ----
+:: ---- C. Change SN ----
 :CHANGE_SN
 echo.
 echo Current SN: %SN%  (SSID: ClickShare-%SN%)

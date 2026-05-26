@@ -146,6 +146,7 @@ function Show-Menu {
 
         # Actions
         Write-Host "  |$("  [R]  Refresh display list".PadRight($W))|"
+        Write-Host "  |$("  [E]  Open recordings folder".PadRight($W))|"
         Write-Host "  |$("  [C]  Clear all recordings".PadRight($W))|"
         Write-Host "  |$("  [0]  Exit".PadRight($W))|"
         Write-Host "  +$thick+" -ForegroundColor Cyan
@@ -157,6 +158,14 @@ function Show-Menu {
         if ($choice -eq 'R' -or $choice -eq 'r') {
             $displays = Get-Displays
             $vd       = Get-VirtualDesktop
+            continue
+        }
+
+        if ($choice -eq 'E' -or $choice -eq 'e') {
+            if (-not (Test-Path $OUTPUT_DIR)) {
+                New-Item -ItemType Directory -Path $OUTPUT_DIR | Out-Null
+            }
+            Start-Process explorer.exe $OUTPUT_DIR
             continue
         }
 

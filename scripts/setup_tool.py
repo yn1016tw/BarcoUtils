@@ -307,24 +307,25 @@ def _run_flow(ui, args: argparse.Namespace) -> None:
     completed: set[str] = set()
     deadline = time.time() + _FLOW_TIMEOUT
 
-    while time.time() < deadline:
-        if ui.main.is_visible():
-            break
-
-        matched = False
-        for name, check_fn, handle_fn in handlers:
-            if name in completed:
-                continue
-            if check_fn():
-                handle_fn()
-                completed.add(name)
-                matched = True
+    with ui.ui_dump_cache():
+        while time.time() < deadline:
+            if ui.main.is_visible():
                 break
 
-        if not matched:
-            time.sleep(_POLL_INTERVAL)
-    else:
-        _fail("flow", f"timed out after {_FLOW_TIMEOUT}s — completed: {sorted(completed)}")
+            matched = False
+            for name, check_fn, handle_fn in handlers:
+                if name in completed:
+                    continue
+                if check_fn():
+                    handle_fn()
+                    completed.add(name)
+                    matched = True
+                    break
+
+            if not matched:
+                time.sleep(_POLL_INTERVAL)
+        else:
+            _fail("flow", f"timed out after {_FLOW_TIMEOUT}s — completed: {sorted(completed)}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ from __future__ import annotations
 import subprocess
 import time
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
 _MTR_PACKAGE = "com.microsoft.skype.teams.ipphone"
 _POLL_INTERVAL = 1  # seconds between element polls
 _UI_DUMP_REMOTE = "/data/local/tmp/ui_dump.xml"
+_UI_CACHE_TTL = 0.5  # seconds; only active inside ui_dump_cache() context
 
 # Android keycodes
 KEY_HOME     = 3
@@ -92,6 +94,9 @@ class MtrUi:
         self._teams_sign_in = None           # lazily created by .teams_sign_in property
         self._teams_sign_in_email = None     # lazily created by .teams_sign_in_email property
         self._azure_auth_webview = None      # lazily created by .azure_auth_webview property
+        self._ui_cache_enabled: bool = False
+        self._ui_cache_xml: str = ""
+        self._ui_cache_ts: float = 0.0
 
     @property
     def main(self) -> "MainPage":
@@ -293,21 +298,26 @@ class MtrUi:
 
     def tap(self, x: int, y: int) -> None:
         self._adb(["shell", "input", "tap", str(x), str(y)])
+        self.invalidate_ui_cache()
 
     def long_press(self, x: int, y: int, duration_ms: int = 1000) -> None:
         self._adb(["shell", "input", "swipe",
                    str(x), str(y), str(x), str(y), str(duration_ms)])
+        self.invalidate_ui_cache()
 
     def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:
         self._adb(["shell", "input", "swipe",
                    str(x1), str(y1), str(x2), str(y2), str(duration_ms)])
+        self.invalidate_ui_cache()
 
     def keyevent(self, keycode: int | str) -> None:
         self._adb(["shell", "input", "keyevent", str(keycode)])
+        self.invalidate_ui_cache()
 
     def input_text(self, text: str) -> None:
         # ADB input text requires spaces as %s; other special chars passed through as-is
         self._adb(["shell", "input", "text", text.replace(" ", "%s")])
+        self.invalidate_ui_cache()
 
     # ------------------------------------------------------------------
     # Navigation shortcuts
@@ -339,10 +349,43 @@ class MtrUi:
 
     def dump_ui(self) -> str:
         """Dump the current UI hierarchy and return raw XML, or '' if dump fails."""
-        self._adb_raw(["shell", f"uiautomator dump {_UI_DUMP_REMOTE} >/dev/null 2>&1"], timeout=15)
-        raw = self._adb_bytes(["shell", "cat", _UI_DUMP_REMOTE], timeout=10)
-        self._adb_raw(["shell", "rm", "-f", _UI_DUMP_REMOTE], timeout=5)
-        return raw.decode("utf-8", errors="replace") if raw else ""
+        if self._ui_cache_enabled:
+            now = time.monotonic()
+            if self._ui_cache_xml and (now - self._ui_cache_ts) < _UI_CACHE_TTL:
+                return self._ui_cache_xml
+        raw = self._adb_bytes(
+            ["shell", f"uiautomator dump {_UI_DUMP_REMOTE} >/dev/null 2>&1"
+             f" && cat {_UI_DUMP_REMOTE} && rm -f {_UI_DUMP_REMOTE}"],
+            timeout=20,
+        )
+        xml = raw.decode("utf-8", errors="replace") if raw else ""
+        if self._ui_cache_enabled:
+            self._ui_cache_xml = xml
+            self._ui_cache_ts = time.monotonic()
+        return xml
+
+    def invalidate_ui_cache(self) -> None:
+        """Expire the UI cache immediately; called after any write operation."""
+        self._ui_cache_ts = 0.0
+
+    @contextmanager
+    def ui_dump_cache(self):
+        """Share a single dump_ui() result within each poll iteration.
+
+        Use in setup_tool.py only:
+            with ui.ui_dump_cache():
+                while ...:
+                    ...
+        Cache is disabled and cleared on context exit.
+        """
+        self._ui_cache_enabled = True
+        self._ui_cache_ts = 0.0
+        try:
+            yield
+        finally:
+            self._ui_cache_enabled = False
+            self._ui_cache_xml = ""
+            self._ui_cache_ts = 0.0
 
     def find_element(
         self,

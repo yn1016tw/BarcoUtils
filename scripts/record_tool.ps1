@@ -120,7 +120,7 @@ function Show-Menu {
         Write-Host "  +$thick+" -ForegroundColor Cyan
 
         # Display table header
-        Write-Host "  |$("".PadRight($W))|"
+        Write-Host "  |$(''.PadRight($W))|"
         Write-Host "  |  $("  KEY   RESOLUTION           OFFSET (x,y)        DEVICE".PadRight($W-2))|" -ForegroundColor DarkGray
         Write-Host "  |  $("  ---   ------------------   ------------------  ------------------".PadRight($W-2))|" -ForegroundColor DarkGray
 
@@ -139,7 +139,7 @@ function Show-Menu {
             "$($vd.Width) x $($vd.Height)", "$($vd.OffsetX), $($vd.OffsetY)"
         Write-Host "  |  $($allLine.PadRight($W-2))|" -ForegroundColor Yellow
 
-        Write-Host "  |$("".PadRight($W))|"
+        Write-Host "  |$(''.PadRight($W))|"
         Write-Host "  +$border+" -ForegroundColor Cyan
 
         # Settings
@@ -219,11 +219,11 @@ function Show-Menu {
             Write-Host "  |  Target : $($t.Label.PadRight(56))|" -ForegroundColor White
             Write-Host "  |  Size   : $("$($t.Width) x $($t.Height)   Offset: ($($t.OffsetX), $($t.OffsetY))".PadRight(56))|" -ForegroundColor DarkGray
             Write-Host "  |  File   : $(([System.IO.Path]::GetFileName($outFile)).PadRight(56))|" -ForegroundColor DarkGray
-            Write-Host "  |$("".PadRight(66))|" -ForegroundColor Green
+            Write-Host "  |$(''.PadRight(66))|" -ForegroundColor Green
             $proc = Start-FfmpegRecording $t.OffsetX $t.OffsetY $t.Width $t.Height $outFile
             $procs += $proc
         }
-        Write-Host "  |  Press Enter to STOP...$(("").PadRight(42))|" -ForegroundColor Yellow
+        Write-Host "  |  Press Enter to STOP...$(''.PadRight(42))|" -ForegroundColor Yellow
         Write-Host "  +==================================================================+" -ForegroundColor Green
         Write-Host ""
         Read-Host | Out-Null

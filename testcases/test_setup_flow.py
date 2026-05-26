@@ -131,7 +131,16 @@ def step_datetime(ui, timezone: str) -> None:
 def step_terms(ui) -> None:
     page = ui.setup_terms
     if not page.is_visible(timeout=_WIZARD_TIMEOUT):
-        _skip("terms")
+        activity = ui.current_activity()
+        _log("terms", f"not visible — current activity: {activity}")
+        if "devicesetupwizard" not in (activity or "").lower():
+            _skip("terms")
+            return
+        _log("terms", "wizard still active, attempting to tap Continue")
+        if not ui.tap_element(text="Continue"):
+            _skip("terms")
+            return
+        _ok("terms")
         return
     _log("terms", "accepting EULA")
     if not page.click_accept():

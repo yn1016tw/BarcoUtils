@@ -53,10 +53,11 @@ class SetupTermsPage(BasePage):
         return el.get("text") if el else None
 
     def click_accept(self) -> bool:
-        """Tap the 'I accept' primary button to agree to the EULA."""
+        """Tap the 'I accept' / 'Continue' primary button to agree to the EULA."""
         return self._tap([
             {"resource_id": f"{_PKG}:id/primaryButton"},
             {"text": "I accept"},
+            {"text": "Continue"},
         ])
 
     def get_ip_address(self) -> str | None:

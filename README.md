@@ -63,6 +63,7 @@ BarcoUtils/
 │   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed by push_peripheral_resources)
 ├── scripts/
 │   ├── adb_key_switch.bat         # Switch active ADB key between Duvel / Fruitesse
+│   ├── app.bat                    # Manage CLICKSHARE_DEBUG env var (ON/OFF/clear) for desktop app log
 │   ├── duvel_setup.bat            # Interactive Duvel device setup helper
 │   ├── wave4_tool.bat             # Interactive menu to control ethernet (up/down) via ADB
 │   ├── setup_tool.bat             # Launcher: interactive menu → calls setup_tool.py
@@ -468,6 +469,41 @@ Since `adb shell` runs as `shell` (not in the `audio` group), both commands are 
 ## scripts/
 
 Windows batch scripts for device management tasks.
+
+### app.bat
+
+Interactive menu for managing the `CLICKSHARE_DEBUG` environment variable, which controls log output in the ClickShare desktop app.
+
+```
+scripts\app.bat
+```
+
+**Menu options:**
+- `[1]` Enable debug log — `setx CLICKSHARE_DEBUG ON`
+- `[2]` Disable debug log — `setx CLICKSHARE_DEBUG OFF`
+- `[3]` Clear variable — removes `CLICKSHARE_DEBUG` from user environment
+
+The current value is read from `HKCU\Environment` and displayed at the top of the menu on each launch. Changes take effect after restarting the ClickShare app.
+
+**Other ways to enable logging in the ClickShare desktop app:**
+
+| Method | Description |
+|--------|-------------|
+| Hold left **Shift** at launch | Enables debug log for that session |
+| `CLICKSHARE_DEBUG=ON` env var | Permanent via `setx`; this tool manages it |
+| `-enablelogging` CLI arg | Pass to `ClickShare.exe` at launch |
+| `-debuglogging` CLI arg | Enables debug-level log |
+| `-loglevel <level>` CLI arg | Set log level (e.g. `debug`, `info`) |
+| `-logmaxsize <bytes>` CLI arg | Set max log file size |
+| `-debughandler` CLI arg | Enable debug handler |
+
+CLI example:
+```
+ClickShare.exe -enablelogging -debuglogging
+ClickShare.exe -enablelogging -loglevel debug
+```
+
+---
 
 ### wave4_tool.bat
 

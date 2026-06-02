@@ -115,6 +115,7 @@ tools/v4l2_stream_test   — Static ARM64 binary; pushed by push_peripheral_reso
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed by push_peripheral_resources()
 scripts/                 — Windows helper scripts (ADB key switcher, Duvel device setup, ethernet control, setup automation)
 scripts/adb_key_switch.bat  — Switch active ADB vendor key between Duvel / Fruitesse
+scripts/app.bat             — Interactive menu: manage CLICKSHARE_DEBUG env var (ON/OFF/clear) to control ClickShare desktop app log output
 scripts/duvel_setup.bat     — Interactive Duvel device provisioning; options 1-6: mfg mode/SN/reboot/cert/SSID; [7] MDEP setup wizard; [8] run all 1-6; [9] run all 1-6 + auto setup wizard
 scripts/wave4_tool.bat      — Interactive menu: ethernet up/down, network info, Barco APK version listing
 scripts/setup_tool.bat      — Interactive launcher for setup_tool.py (prompts for IP / serial, then runs Python)

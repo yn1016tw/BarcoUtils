@@ -63,7 +63,7 @@ BarcoUtils/
 │   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed by push_peripheral_resources)
 ├── scripts/
 │   ├── adb_key_switch.bat         # Switch active ADB key between Duvel / Fruitesse
-│   ├── app.bat                    # Manage CLICKSHARE_DEBUG env var (ON/OFF/clear) for desktop app log
+│   ├── app_tool.bat               # Manage CLICKSHARE_DEBUG env var (ON/OFF/clear) for desktop app log
 │   ├── duvel_setup.bat            # Interactive Duvel device setup helper
 │   ├── wave4_tool.bat             # Interactive menu to control ethernet (up/down) via ADB
 │   ├── setup_tool.bat             # Launcher: interactive menu → calls setup_tool.py
@@ -470,12 +470,12 @@ Since `adb shell` runs as `shell` (not in the `audio` group), both commands are 
 
 Windows batch scripts for device management tasks.
 
-### app.bat
+### app_tool.bat
 
 Interactive menu for managing the `CLICKSHARE_DEBUG` environment variable, which controls log output in the ClickShare desktop app.
 
 ```
-scripts\app.bat
+scripts\app_tool.bat
 ```
 
 **Menu options:**

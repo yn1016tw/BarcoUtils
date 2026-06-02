@@ -33,11 +33,8 @@ setlocal enabledelayedexpansion
 :MAIN_MENU
 cls
 
-:: Read current CLICKSHARE_DEBUG value from user environment (registry)
-set "CURRENT_VALUE="
-for /f "tokens=3" %%V in ('reg query "HKCU\Environment" /v CLICKSHARE_DEBUG 2^>nul') do (
-    set "CURRENT_VALUE=%%V"
-)
+:: Read current CLICKSHARE_DEBUG value from system environment
+set "CURRENT_VALUE=%CLICKSHARE_DEBUG%"
 if "!CURRENT_VALUE!"=="" set "CURRENT_VALUE=(not set)"
 
 echo ============================================================
@@ -67,6 +64,7 @@ goto MAIN_MENU
 echo.
 echo [1] Setting CLICKSHARE_DEBUG=ON ...
 setx CLICKSHARE_DEBUG ON
+set "CLICKSHARE_DEBUG=ON"
 echo.
 echo Done. Restart the ClickShare app to apply.
 echo.
@@ -77,6 +75,7 @@ goto MAIN_MENU
 echo.
 echo [2] Setting CLICKSHARE_DEBUG=OFF ...
 setx CLICKSHARE_DEBUG OFF
+set "CLICKSHARE_DEBUG=OFF"
 echo.
 echo Done. Restart the ClickShare app to apply.
 echo.
@@ -87,6 +86,7 @@ goto MAIN_MENU
 echo.
 echo [3] Removing CLICKSHARE_DEBUG ...
 reg delete "HKCU\Environment" /v CLICKSHARE_DEBUG /f >nul 2>&1
+set "CLICKSHARE_DEBUG="
 echo Variable removed.
 echo.
 echo Done. Restart the ClickShare app to apply.

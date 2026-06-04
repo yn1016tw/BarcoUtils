@@ -72,6 +72,32 @@ NDK=$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/bin
 $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_stream_test.c
 ```
 
+## src/ utilities
+
+**Timesheet auto-fill** (`src/timesheet/fill_timesheet.py`): Playwright-based tool that logs into SAP Fiori CATS via the Edge persistent profile and fills/submits time entries for the current week. Sends Telegram notifications on success or failure.
+
+```bash
+# Prerequisites (one-time)
+pip install playwright click python-dotenv
+playwright install msedge
+
+# Run (from repo root or src/timesheet/)
+python src/timesheet/fill_timesheet.py                     # fill today (headed, with backfill Mon-today)
+python src/timesheet/fill_timesheet.py --date 2026-05-30   # specific date
+python src/timesheet/fill_timesheet.py --hidden            # headless Edge
+python src/timesheet/fill_timesheet.py --no-backfill       # only fill the target date
+python src/timesheet/fill_timesheet.py --skip              # exit without filling (notifies Telegram)
+```
+
+Requires `src/timesheet/.env` with at minimum `SAP_URL`. Uses the Edge User Data profile at `%LOCALAPPDATA%\Microsoft\Edge\User Data`; if the SAP session has expired, automatically opens a headed window for SSO refresh. Logs to `src/timesheet/log/fill_timesheet.log`; screenshots to `src/timesheet/log/debug_*.png`.
+
+**HID test** (`src/hid-test/`): Windows x64 C++ tool to enumerate ClickShare Gen5 Button (VID=0x0600 PID=0x0185) and verify HID open/read/write.
+
+```bat
+src\hid-test\build.bat   # compile with MSVC (auto-detects VS 2017/2019/2022)
+src\hid-test\hid_test.exe
+```
+
 ## Architecture
 
 All Python source lives under `testcases/` (import root = `testcases/` at runtime).
@@ -122,6 +148,15 @@ scripts/setup_tool.bat      — Interactive launcher for setup_tool.py (prompts 
 scripts/setup_tool.py       — Polling-based MDEP setup wizard + Teams sign-in automation; detects active page every 2s and handles it regardless of FW page order; adds sys.path for testcases/common imports
 scripts/record_tool.bat     — Launcher for record_tool.ps1
 scripts/record_tool.ps1     — Screen recording tool: detects displays via Windows Forms, records selected display(s) to MP4 via ffmpeg gdigrab
+scripts/diagnose-hid-binding.ps1 — Inspect USB/HID registry driver bindings for Gen5 Button (VID=0600 PID=0185); run on problem laptop with BarcoClickShareAutorunService disabled
+scripts/find-hid-holder.ps1      — Enumerate which processes hold open handles to the Gen5 Button HID device
+scripts/fix-barco-driver.ps1     — Remove duplicate BarcoClickShareDrv entries via pnputil; requires Administrator
+scripts/test-hid-clickshare.ps1  — Open/read/write Gen5 Button HID device from PowerShell (no build required)
+src/hid-test/hid_test.cpp  — Windows C++ tool: enumerate ClickShare HID devices and test open/read/write
+src/hid-test/build.bat     — MSVC build script for hid_test.cpp (auto-detects VS 2017/2019/2022)
+src/timesheet/fill_timesheet.py  — SAP Fiori CATS timesheet auto-fill via Playwright + Edge persistent profile
+src/timesheet/2026_holidays.csv  — Taiwan public holidays used for holiday-vs-workday classification
+src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT, TELEGRAM_BOT_TOKEN, etc. (not committed)
 ```
 
 **Data flow in testcases/test_peripheral.py:**

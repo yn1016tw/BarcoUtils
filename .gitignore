@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 *.pyo
 logs/
+src/timesheet/log/
+src/hid-test/*.exe

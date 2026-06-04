@@ -575,13 +575,10 @@ def main(date_str, hours, assignment, skip, hidden, no_backfill):
                         session_opened = True
                     fill_timesheet(page, date, fill_assignment_val, fill_hours_val)
                     filled_summary.append(f"✅ {date} | {fill_assignment_val} | {fill_hours_val}h")
-                    result_image: Path | None = None
                     try:
                         page.screenshot(path=str(_LOG_DIR / "debug_after_submit.png"))
-                        result_image = _LOG_DIR / "debug_after_submit.png"
                     except Exception as ss_err:
                         _print(f"Screenshot (after fill) failed: {ss_err}")
-                    send_telegram_result(filled_summary[-1], result_image)
                     break  # next date
                 except SessionExpiredError as e:
                     _print(f"ERROR [{date}] (attempt #{attempt}): {e}")
@@ -616,10 +613,13 @@ def main(date_str, hours, assignment, skip, hidden, no_backfill):
 
         context.close()
 
-    if len(filled_summary) > 1:
-        summary = "📋 本週補填摘要:\n" + "\n".join(filled_summary)
+    if filled_summary:
+        result_image: Path | None = _LOG_DIR / "debug_after_submit.png"
+        if not result_image.exists():
+            result_image = None
+        summary = "📋 完成:\n" + "\n".join(filled_summary)
         _print(summary)
-        send_telegram_result(summary)
+        send_telegram_result(summary, result_image)
 
 
 if __name__ == "__main__":

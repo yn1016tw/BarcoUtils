@@ -206,12 +206,9 @@ def go_to_timesheet(page: Page):
     # Handle login if needed
     if page.query_selector("input[id*='logonuidfield'], #USERNAME_FIELD"):
         _print("Login required — waiting for user ...")
-        page.wait_for_url("*Shell-home*", timeout=300_000)
+        page.wait_for_url("*TimeEntry-manageTimesheet*", timeout=300_000)
         page.wait_for_timeout(8000)
 
-    _print("Clicking 'My Timesheet' ...")
-    page.click("text=My Timesheet")
-    page.wait_for_timeout(8000)
     _print(f"Timesheet page: {page.url}")
 
 

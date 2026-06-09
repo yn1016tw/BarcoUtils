@@ -1,6 +1,6 @@
 /**
  * hid_test.cpp
- * Enumerate ClickShare HID devices (VID=0x0600 PID=0x0185) and test open/read/write.
+ * Enumerate ClickShare HID devices (VID=0x0600 PID=0x00CE/0x0185) and test open/read/write.
  * Build: see build.bat
  */
 
@@ -19,8 +19,23 @@
 // ---------------------------------------------------------------------------
 // Target device
 // ---------------------------------------------------------------------------
-static const USHORT TARGET_VID = 0x0600;
-static const USHORT TARGET_PID = 0x0185;
+static const USHORT TARGET_VID      = 0x0600;
+static const USHORT TARGET_PID_GEN4 = 0x00CE;
+static const USHORT TARGET_PID_GEN5 = 0x0185;
+
+static bool isTargetPID(USHORT pid)
+{
+    return pid == TARGET_PID_GEN4 || pid == TARGET_PID_GEN5;
+}
+
+static const char* genStr(USHORT pid)
+{
+    switch (pid) {
+        case 0x00CE: return "Gen4";
+        case 0x0185: return "Gen5";
+        default:     return "Unknown";
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Colour helpers (Windows console)
@@ -126,7 +141,7 @@ static int enumerateClickShare(DevInfo* out, int maxOut)
 
         HIDD_ATTRIBUTES attr = { sizeof(attr) };
         BOOL ok = HidD_GetAttributes(h, &attr);
-        if (!ok || attr.VendorID != TARGET_VID || attr.ProductID != TARGET_PID) {
+        if (!ok || attr.VendorID != TARGET_VID || !isTargetPID(attr.ProductID)) {
             CloseHandle(h);
             free(det);
             continue;
@@ -174,7 +189,7 @@ static void testDevice(const DevInfo* d, int num)
     printf("----------------------------------------\n");
     resetColour();
     printf("  Path    : %ls\n", d->path);
-    printf("  VID/PID : 0x%04X / 0x%04X   FW=0x%04X\n", d->vid, d->pid, d->fw);
+    printf("  VID/PID : 0x%04X / 0x%04X (%s)   FW=0x%04X\n", d->vid, d->pid, genStr(d->pid), d->fw);
     printf("  Usage   : Page=0x%04X  Usage=0x%04X\n", d->usagePage, d->usage);
     printf("  Reports : Input=%uB  Output=%uB\n", d->inputLen, d->outputLen);
     if (d->product[0]) printf("  Product : %ls\n", d->product);
@@ -215,75 +230,21 @@ static void testDevice(const DevInfo* d, int num)
     if (ok) {
         setColour(GREEN);
         printf("  [C] RW  + ShareR (rawhid) : OK  <-- rawhid_open() will SUCCEED\n");
-        resetColour();
+        CloseHandle(h);
     } else {
         setColour(RED);
         printf("  [C] RW  + ShareR (rawhid) : %s  <-- rawhid_open() FAILS\n", errStr(gle));
-        resetColour();
     }
+    resetColour();
 
-    if (ok) {
-        // ---- [D] ReadFile ----
-        if (d->inputLen > 0) {
-            BYTE*  rbuf = (BYTE*)calloc(d->inputLen, 1);
-            DWORD  nr   = 0;
-            BOOL   rok  = ReadFile(h, rbuf, d->inputLen, &nr, NULL);
-            DWORD  er   = GetLastError();
-            if (rok) {
-                setColour(GREEN);
-                printf("  [D] ReadFile              : OK  bytes=%lu  [", nr);
-                for (int i = 0; i < (int)nr && i < 8; i++) printf("%02X ", rbuf[i]);
-                printf("...]\n");
-            } else if (er == ERROR_IO_PENDING) {
-                setColour(GREEN);
-                printf("  [D] ReadFile              : OK (IO_PENDING -- device alive)\n");
-            } else {
-                setColour(RED);
-                printf("  [D] ReadFile              : %s\n", errStr(er));
-            }
-            resetColour();
-            free(rbuf);
-        } else {
-            setColour(GRAY);
-            printf("  [D] ReadFile              : SKIP (InputLen=0)\n");
-            resetColour();
-        }
-
-        // ---- [E] WriteFile ----
-        if (d->outputLen > 0) {
-            BYTE*  wbuf = (BYTE*)calloc(d->outputLen, 1);
-            DWORD  nw   = 0;
-            BOOL   wok  = WriteFile(h, wbuf, d->outputLen, &nw, NULL);
-            DWORD  ew   = GetLastError();
-            if (wok) {
-                setColour(GREEN);
-                printf("  [E] WriteFile             : OK  bytes=%lu\n", nw);
-            } else if (ew == ERROR_IO_PENDING) {
-                setColour(GREEN);
-                printf("  [E] WriteFile             : OK (IO_PENDING -- device alive)\n");
-            } else {
-                setColour(RED);
-                printf("  [E] WriteFile             : %s\n", errStr(ew));
-            }
-            resetColour();
-            free(wbuf);
-        } else {
-            setColour(GRAY);
-            printf("  [E] WriteFile             : SKIP (OutputLen=0)\n");
-            resetColour();
-        }
-
-        CloseHandle(h);
-    }
-
-    // ---- [F] RW + ShareRW (can two processes coexist?) ----
+    // ---- [D] RW + ShareRW; send gruutctrl_GetVersionNumber (29) if CONTROL interface ----
     h = CreateFileW(d->path, GENERIC_READ | GENERIC_WRITE,
                     FILE_SHARE_READ | FILE_SHARE_WRITE,
                     NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
     gle = GetLastError();
     ok  = (h != INVALID_HANDLE_VALUE);
     setColour(ok ? CYAN : YELLOW);
-    printf("  [F] RW  + ShareRW         : %s\n", ok ? "OK  (exclusive RW possible)" : errStr(gle));
+    printf("  [D] RW  + ShareRW         : %s\n", ok ? "OK" : errStr(gle));
     resetColour();
     if (ok) CloseHandle(h);
 
@@ -420,7 +381,8 @@ int main()
     setColour(CYAN);
     printf("========================================\n");
     printf("  ClickShare HID Device Test\n");
-    printf("  Target VID=0x%04X  PID=0x%04X\n", TARGET_VID, TARGET_PID);
+    printf("  Target VID=0x%04X  PID=0x%04X(Gen4)/0x%04X(Gen5)\n",
+           TARGET_VID, TARGET_PID_GEN4, TARGET_PID_GEN5);
     printf("========================================\n");
     resetColour();
     printf("\n");

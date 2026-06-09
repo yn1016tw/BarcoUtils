@@ -48,7 +48,7 @@ No install step — run directly from the repo root. There are no automated test
 
 ## Version control
 
-**Versioning:** `testcases/common/version.py` holds `VERSION` and `VERSION_INFO`. Bump both manually — patch (`1.9.x`) for bug fixes and minor additions, minor (`1.x.0`) for new features or behavioural changes.
+**Versioning:** `testcases/common/version.py` holds `VERSION` and `VERSION_INFO`. Bump both manually — patch (`1.15.x`) for bug fixes and minor additions, minor (`1.x.0`) for new features or behavioural changes.
 
 **Commit message format:**
 - Version bump commits: `bump to vX.Y.Z: <one-line summary of what changed>`

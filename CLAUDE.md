@@ -91,7 +91,7 @@ python src/timesheet/fill_timesheet.py --skip              # exit without fillin
 
 Requires `src/timesheet/.env` with at minimum `SAP_URL`. Uses the Edge User Data profile at `%LOCALAPPDATA%\Microsoft\Edge\User Data`; if the SAP session has expired, automatically opens a headed window for SSO refresh. Logs to `src/timesheet/log/fill_timesheet.log`; screenshots to `src/timesheet/log/debug_*.png`.
 
-**HID test** (`src/hid-test/`): Windows x64 C++ tool to enumerate ClickShare Gen5 Button (VID=0x0600 PID=0x0185) and verify HID open/read/write.
+**HID test** (`src/hid-test/`): Windows x64 C++ tool to enumerate ClickShare Gen4 (PID=0x00CE) and Gen5 (PID=0x0185) Buttons (VID=0x0600) and verify HID open access ([A]–[D] CreateFile tests).
 
 ```bat
 src\hid-test\build.bat   # compile with MSVC (auto-detects VS 2017/2019/2022)
@@ -152,7 +152,7 @@ scripts/diagnose-hid-binding.ps1 — Inspect USB/HID registry driver bindings fo
 scripts/find-hid-holder.ps1      — Enumerate which processes hold open handles to the Gen5 Button HID device
 scripts/fix-barco-driver.ps1     — Remove duplicate BarcoClickShareDrv entries via pnputil; requires Administrator
 scripts/test-hid-clickshare.ps1  — Open/read/write Gen5 Button HID device from PowerShell (no build required)
-src/hid-test/hid_test.cpp  — Windows C++ tool: enumerate ClickShare HID devices and test open/read/write
+src/hid-test/hid_test.cpp  — Windows C++ tool: enumerate ClickShare Gen4/Gen5 HID devices and test CreateFile open access
 src/hid-test/build.bat     — MSVC build script for hid_test.cpp (auto-detects VS 2017/2019/2022)
 src/timesheet/fill_timesheet.py  — SAP Fiori CATS timesheet auto-fill via Playwright + Edge persistent profile
 src/timesheet/2026_holidays.csv  — Taiwan public holidays used for holiday-vs-workday classification

@@ -9,6 +9,12 @@ try {
     Read-Host "Press Enter to exit"
     exit 1
 }
+try {
+    Add-Type -Name ConsoleWindow -Namespace Win32 -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+'@
+} catch {}
 
 $FFMPEG      = "C:\Tools\ffmpeg\bin\ffmpeg.exe"
 $FRAMERATE   = 30
@@ -110,7 +116,7 @@ function Show-Menu {
         return
     }
 
-    $displays = Get-Displays
+    $displays = @(Get-Displays)
     $vd       = Get-VirtualDesktop
 
     while ($true) {
@@ -151,12 +157,12 @@ function Show-Menu {
         Write-Host "  |$("  [0]  Exit".PadRight($W))|"
         Write-Host "  +$thick+" -ForegroundColor Cyan
         Write-Host ""
-        $choice = Read-Host "  Select"
+        $choice = (Read-Host "  Select").Trim()
 
         if ($choice -eq '0') { break }
 
         if ($choice -eq 'R' -or $choice -eq 'r') {
-            $displays = Get-Displays
+            $displays = @(Get-Displays)
             $vd       = Get-VirtualDesktop
             continue
         }
@@ -221,6 +227,10 @@ function Show-Menu {
         if (-not (Test-Path $OUTPUT_DIR)) {
             New-Item -ItemType Directory -Path $OUTPUT_DIR | Out-Null
         }
+
+        # Minimize this console window before recording
+        [Win32.ConsoleWindow]::ShowWindow([Win32.ConsoleWindow]::GetConsoleWindow(), 2) | Out-Null
+        Start-Sleep -Milliseconds 300
 
         # Start recording(s)
         $procs    = @()

@@ -105,6 +105,10 @@ class SessionExpiredError(Exception):
     """Raised when SAP returns 403, indicating the session cookie has expired."""
 
 
+class LoginPageError(Exception):
+    """Raised when the login page is still shown after all Ctrl+R refresh retries."""
+
+
 # ---------------------------------------------------------------------------
 # Browser / session
 # ---------------------------------------------------------------------------
@@ -203,13 +207,28 @@ def go_to_timesheet(page: Page):
         pick_account.click()
         page.wait_for_timeout(8000)
 
-    # Handle login if needed
-    if page.query_selector("input[id*='logonuidfield'], #USERNAME_FIELD"):
-        _print("Login required — waiting for user ...")
-        page.wait_for_url("*TimeEntry-manageTimesheet*", timeout=300_000)
-        page.wait_for_timeout(8000)
+    # Confirm SAP Fiori timesheet content actually rendered.
+    # If the session is expired, SAP returns the correct URL hash but renders nothing
+    # (no calendar widget, no "Enter Records"). Detect this by checking for any
+    # [data-sap-day] cell — present only when the app has fully loaded.
+    _MAX_REFRESH_RETRIES = 10
+    _REFRESH_INTERVAL_S = 10
+    for _retry in range(_MAX_REFRESH_RETRIES):
+        if page.query_selector("[data-sap-day]"):
+            break
+        _print(
+            f"[{_retry + 1}/{_MAX_REFRESH_RETRIES}] Timesheet not loaded — reloading page ..."
+        )
+        page.reload(wait_until="domcontentloaded", timeout=60_000)
+        page.wait_for_timeout(_REFRESH_INTERVAL_S * 1000)
+    else:
+        # Still no content after all retries — stop this run
+        if not page.query_selector("[data-sap-day]"):
+            raise LoginPageError(
+                f"Timesheet failed to load after {_MAX_REFRESH_RETRIES} reload(s) — aborting this run."
+            )
 
-    _print(f"Timesheet page: {page.url}")
+    _print(f"Timesheet loaded: {page.url}")
 
 
 def navigate_to_week(page: Page, target_date: datetime.date):

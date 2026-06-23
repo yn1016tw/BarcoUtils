@@ -98,6 +98,19 @@ src\hid-test\build.bat   # compile with MSVC (auto-detects VS 2017/2019/2022)
 src\hid-test\hid_test.exe
 ```
 
+**HID descriptor tool** (`src/hid-desc/`): ADB-based menu tool to inspect, backup/restore, and patch the ClickShare Button's HID report descriptor (`/clickshare/hid*.bin` on the Button, accessed via `adb` as root — Button must be USB-connected, single device assumed).
+
+```bat
+src\hid-desc\hid_desc_tool.bat   # menu: enable rootfsoverlay, remount RW, backup/recover descriptor, update Usage Page/Usage, reboot Button, clear backup, read descriptor
+```
+
+```bash
+python src/hid-desc/parse_hid_desc.py <file.bin> [file2.bin ...]   # human-readable dump of a HID report descriptor
+python src/hid-desc/patch_hid_desc.py <file.bin> --usage-page 0x0081 --usage 0x83   # patch Usage Page/Usage, writes to a new file by default
+```
+
+`hid_desc_tool.bat` runs `adb root` once on startup (retries until adb reconnects), then all subsequent `adb` calls omit `-s` (single connected device assumed). Menu option [5] lists `/clickshare/hid*.bin` on the device and, for each file, prompts separately for a new Usage Page / Usage (Enter on both = skip that file, value is not carried over to the next file), pulls it to `src/hid-desc/device_files/` (gitignored), patches in place via `patch_hid_desc.py --out <same path>`, then pushes back over the original device path. Options [3]/[4] (backup/recover) and [7] (clear backup) list matching files on-device first and operate per-file (a single `cp`/`rm` with a glob source and non-directory target fails when multiple files match) — do not touch the host. Reboot uses `adb shell reboot`, not `adb reboot` (this device's adbd doesn't implement the latter). Option [6] reboots and waits for the device to reconnect as root afterward (reuses the same `WAIT_FOR_ROOT` routine as startup); option [2] (remount RW) just remounts and returns to the menu immediately, no reboot. `WAIT_FOR_ROOT` also auto-remounts RW (`mount -o remount,rw /`) every time it confirms root, so startup and every post-[6] reboot already leave the device RW — [2] exists as a manual re-run if needed. Option [8] lists `/clickshare/hid*.bin`, pulls each to `device_files/` (read-only — does not push anything back), and runs `parse_hid_desc.py` on it to print the decoded descriptor. `adb shell "ls ..."` output on this device has a trailing CR per line (PTY artifact); every loop over that output strips it via a `copy /Z` self-reference trick (`CR` variable set near the top of the script) before using the path, otherwise `cp`/`rm`/`pull` fail with a literal `\r` appended to the filename.
+
 ## Architecture
 
 All Python source lives under `testcases/` (import root = `testcases/` at runtime).
@@ -154,6 +167,9 @@ scripts/fix-barco-driver.ps1     — Remove duplicate BarcoClickShareDrv entries
 scripts/test-hid-clickshare.ps1  — Open/read/write Gen5 Button HID device from PowerShell (no build required)
 src/hid-test/hid_test.cpp  — Windows C++ tool: enumerate ClickShare Gen4/Gen5 HID devices and test CreateFile open access
 src/hid-test/build.bat     — MSVC build script for hid_test.cpp (auto-detects VS 2017/2019/2022)
+src/hid-desc/hid_desc_tool.bat  — ADB menu tool: enable rootfsoverlay, remount RW, backup/recover/patch HID descriptor, reboot Button
+src/hid-desc/parse_hid_desc.py  — Parse and pretty-print a USB HID report descriptor .bin file
+src/hid-desc/patch_hid_desc.py  — Patch Usage Page / Usage in a HID report descriptor .bin file
 src/timesheet/fill_timesheet.py  — SAP Fiori CATS timesheet auto-fill via Playwright + Edge persistent profile
 src/timesheet/2026_holidays.csv  — Taiwan public holidays used for holiday-vs-workday classification
 src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT, TELEGRAM_BOT_TOKEN, etc. (not committed)

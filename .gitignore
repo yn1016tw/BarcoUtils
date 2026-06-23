@@ -4,3 +4,4 @@ __pycache__/
 logs/
 src/timesheet/log/
 src/hid-test/*.exe
+src/hid-desc/device_files/

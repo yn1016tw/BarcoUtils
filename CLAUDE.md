@@ -144,6 +144,7 @@ testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page objec
 testcases/common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, log Teams version, auto-accept incoming calls; writes meeting_info.json to logs/teams_meeting_host/ by default
 testcases/common/logger.py            — Logger class: write timestamped messages to stdout and {output_dir}/logs.txt simultaneously; methods: info/warning/error/debug
+testcases/common/acroname_hub.py      — AcronameHub class: brainstem SDK wrapper for Acroname USBHub3+ (USB module mode); controls port power/data/speed, measures current/voltage, manages boost charge and reports hub info
 testcases/common/utils.py             — Shared test utilities: screenshot_for_debug, screenshot_host_desktop, start_recording, stop_recording, start_ui_with_scrcpy, FFMPEG_DEFAULT, SCRCPY_DEFAULT
 testcases/common/version.py           — VERSION string (bump manually on releases)
 testcases/test_peripheral.py          — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
@@ -183,6 +184,18 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 **Logger** (`testcases/common/logger.py`, `from common.logger import Logger`):
 - `Logger(output_dir, name="barcoutils", filename="logs.txt")` — creates logger that writes to stdout and `{output_dir}/{filename}` (append mode); format: `HH:MM:SS  LEVEL    message`
 - `info(msg, *args)` / `warning(msg, *args)` / `error(msg, *args)` / `debug(msg, *args)` — log at the corresponding level; supports `%`-style format args
+
+**AcronameHub** (`testcases/common/acroname_hub.py`, `from common.acroname_hub import AcronameHub`):
+- `connect(serial: int | None = None) -> bool` — auto-discover first USB hub or connect to specific serial; returns False on failure
+- `disconnect() -> None` — release brainstem connection; safe to call without prior connect
+- `set_port_power(port, enable) -> bool` / `get_port_power(port) -> bool | None` — VBUS on/off per port 0–7
+- `set_port_data(port, enable) -> bool` / `get_port_data(port) -> bool | None` — data lines on/off per port
+- `set_port_speed(port, speed) -> bool` — speed ∈ `{'auto','ss','hs','fs','ls'}`; returns False for unknown strings
+- `get_port_current(port) -> float | None` — port current in mA; None on error
+- `get_port_voltage(port) -> float | None` — port voltage in mV; None on error
+- `set_port_boost_charge(port, enable) -> bool` — BC1.2 boost charge per port
+- `hub_serial() -> int | None` — hub serial number; None on error
+- `hub_firmware_version() -> str | None` — firmware version string e.g. `'3.0.0'`; None on error
 
 **utils.py public API** (`from common.utils import ...`):
 - `FFMPEG_DEFAULT` — default path to ffmpeg.exe (`C:\Tools\ffmpeg\bin\ffmpeg.exe`)

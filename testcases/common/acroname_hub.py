@@ -160,20 +160,31 @@ class AcronameHub:
             return False
 
     # ------------------------------------------------------------------
-    # Upstream host port switching
-    # exclusive=True  -> one host only (UPSTREAM_MODE_PORT_0/1)
-    # exclusive=False -> auto mode; hub picks available upstream
+    # Port switching (downstream ports 0-7)
+    # exclusive=True  -> power on target port, power off all others
+    # exclusive=False -> power on target port only, leave others unchanged
     # ------------------------------------------------------------------
 
-    def switch_usb_port(self, port: int, exclusive: bool = True) -> bool:
-        if not 0 <= port <= _UPSTREAM_MAX:
+    def switch_port(self, port: int, exclusive: bool = True) -> bool:
+        if not self._valid_port(port):
             return False
         try:
             usb = self._hub.usb
             if exclusive:
-                mode = usb.UPSTREAM_MODE_PORT_0 if port == 0 else usb.UPSTREAM_MODE_PORT_1
-            else:
-                mode = usb.UPSTREAM_MODE_AUTO
+                for p in range(_PORT_MAX + 1):
+                    if p != port:
+                        usb.setDataDisable(p)
+                        usb.setPowerDisable(p)
+            return usb.setDataEnable(port) == 0 and usb.setPowerEnable(port) == 0
+        except Exception:
+            return False
+
+    def set_upstream_port(self, port: int) -> bool:
+        if not 0 <= port <= _UPSTREAM_MAX:
+            return False
+        try:
+            usb = self._hub.usb
+            mode = usb.UPSTREAM_MODE_PORT_0 if port == 0 else usb.UPSTREAM_MODE_PORT_1
             return usb.setUpstreamMode(mode) == 0
         except Exception:
             return False

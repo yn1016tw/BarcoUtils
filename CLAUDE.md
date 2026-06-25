@@ -186,7 +186,7 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 - `info(msg, *args)` / `warning(msg, *args)` / `error(msg, *args)` / `debug(msg, *args)` — log at the corresponding level; supports `%`-style format args
 
 **AcronameHub** (`testcases/common/acroname_hub.py`, `from common.acroname_hub import AcronameHub`):
-- `connect(serial: int | None = None) -> bool` — auto-discover first USB hub via USB or connect to specific serial; returns False on failure; brainstem lazy-imported on first call
+- `connect(serial: int | None = None) -> bool` — USB-only; auto-discover first hub (`discoverAndConnect`) or connect by serial (`connectFromSerial`), both via `Spec.USB`; returns False on failure; brainstem lazy-imported on first call
 - `disconnect() -> None` — release brainstem connection; safe to call without prior connect
 - `set_port_power(port, enable) -> bool` / `get_port_power(port) -> bool | None` — VBUS on/off per port 0–7; SDK uses separate `setPowerEnable(ch)` / `setPowerDisable(ch)`; reads via `getPortState()` bitmask (`PORT_MODE_VBUS_ENABLE`)
 - `set_port_data(port, enable) -> bool` / `get_port_data(port) -> bool | None` — data lines on/off per port; SDK uses `setDataEnable(ch)` / `setDataDisable(ch)`; reads via `getPortState()` bitmask (`PORT_MODE_USB2_A_ENABLE`)
@@ -194,7 +194,8 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 - `get_port_current(port) -> float | None` — port current in mA (SDK `getPortCurrent` returns µA; divided by 1000); None on error
 - `get_port_voltage(port) -> float | None` — port voltage in mV (SDK `getPortVoltage` returns µV; divided by 1000); None on error
 - `set_boost_charge(enable) -> bool` — hub-wide BC1.2 boost charge (SDK `setDownstreamBoostMode`): True → BOOST_8_PERCENT, False → BOOST_0_PERCENT; no per-port control
-- `switch_usb_port(port, exclusive=True) -> bool` — switch upstream host port (0 or 1); exclusive=True → `UPSTREAM_MODE_PORT_0/1` (only one host sees hub); exclusive=False → `UPSTREAM_MODE_AUTO` (hub auto-selects, port param ignored)
+- `switch_port(port, exclusive=True) -> bool` — switch to downstream port 0–7; data then power; exclusive=True → disables data+power on all other ports first, then enables data+power on target; exclusive=False → enables data+power on target only
+- `set_upstream_port(port) -> bool` — select upstream host port (0 or 1) via `setUpstreamMode(UPSTREAM_MODE_PORT_0/1)`; returns False for invalid port or SDK error
 - `get_upstream_port() -> int | None` — current active upstream port via `getUpstreamState()` (0 or 1); None on error
 - `hub_serial() -> int | None` — hub serial number as int; None on error
 - `hub_firmware_version() -> str | None` — firmware version (SDK returns raw int, converted via str()); None on error

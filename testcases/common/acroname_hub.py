@@ -1,6 +1,7 @@
 # Author: James Yang <james.yang@barco.com>
 
 _PORT_MAX = 7
+_UPSTREAM_MAX = 1  # USBHub3+ supports 2 upstream host ports (0 and 1)
 
 
 class AcronameHub:
@@ -131,6 +132,32 @@ class AcronameHub:
             return self._hub.usb.setBoostEnable(port, enable) == 0
         except Exception:
             return False
+
+    # ------------------------------------------------------------------
+    # Upstream host port switching
+    # ------------------------------------------------------------------
+
+    def switch_usb_port(self, port: int, exclusive: bool = True) -> bool:
+        if not 0 <= port <= _UPSTREAM_MAX:
+            return False
+        try:
+            err = self._hub.usb.setUpstreamPort(port)
+            if err != 0:
+                return False
+            other = 1 - port
+            # exclusive: disable the other upstream so only one host sees the hub
+            # non-exclusive: re-enable it so both hosts can access simultaneously
+            self._hub.usb.setUpstreamPortEnable(other, not exclusive)
+            return True
+        except Exception:
+            return False
+
+    def get_upstream_port(self) -> int | None:
+        try:
+            result = self._hub.usb.getUpstreamPort()
+            return result.value if result.error == 0 else None
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------
     # Hub info

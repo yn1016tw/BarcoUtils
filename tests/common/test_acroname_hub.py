@@ -314,3 +314,56 @@ def test_hub_firmware_version_error():
     hub.connect()
     stem.system.getVersion.return_value = _make_err_result()
     assert hub.hub_firmware_version() is None
+
+def test_switch_usb_port_exclusive():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setUpstreamPort.return_value = 0
+    assert hub.switch_usb_port(0, exclusive=True) is True
+    stem.usb.setUpstreamPort.assert_called_once_with(0)
+    stem.usb.setUpstreamPortEnable.assert_called_once_with(1, False)
+
+
+def test_switch_usb_port_non_exclusive():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setUpstreamPort.return_value = 0
+    assert hub.switch_usb_port(1, exclusive=False) is True
+    stem.usb.setUpstreamPort.assert_called_once_with(1)
+    stem.usb.setUpstreamPortEnable.assert_called_once_with(0, True)
+
+
+def test_switch_usb_port_default_exclusive():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setUpstreamPort.return_value = 0
+    assert hub.switch_usb_port(0) is True
+    stem.usb.setUpstreamPortEnable.assert_called_once_with(1, False)
+
+
+def test_switch_usb_port_invalid_port():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.switch_usb_port(2) is False
+    stem.usb.setUpstreamPort.assert_not_called()
+
+
+def test_switch_usb_port_sdk_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setUpstreamPort.return_value = 1
+    assert hub.switch_usb_port(0) is False
+
+
+def test_get_upstream_port_ok():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getUpstreamPort.return_value = _make_ok_result(1)
+    assert hub.get_upstream_port() == 1
+
+
+def test_get_upstream_port_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getUpstreamPort.return_value = _make_err_result()
+    assert hub.get_upstream_port() is None

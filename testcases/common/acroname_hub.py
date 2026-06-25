@@ -41,14 +41,17 @@ class AcronameHub:
         return 0 <= port <= _PORT_MAX
 
     # ------------------------------------------------------------------
-    # Port power
+    # Port power  (setPowerEnable/Disable take channel only, no bool arg)
     # ------------------------------------------------------------------
 
     def set_port_power(self, port: int, enable: bool) -> bool:
         if not self._valid_port(port):
             return False
         try:
-            return self._hub.usb.setPowerEnable(port, enable) == 0
+            if enable:
+                return self._hub.usb.setPowerEnable(port) == 0
+            else:
+                return self._hub.usb.setPowerDisable(port) == 0
         except Exception:
             return False
 
@@ -56,20 +59,25 @@ class AcronameHub:
         if not self._valid_port(port):
             return None
         try:
-            result = self._hub.usb.getPowerEnable(port)
-            return result.value if result.error == 0 else None
+            result = self._hub.usb.getPortState(port)
+            if result.error != 0:
+                return None
+            return bool(result.value & self._hub.usb.PORT_MODE_VBUS_ENABLE)
         except Exception:
             return None
 
     # ------------------------------------------------------------------
-    # Port data
+    # Port data  (setDataEnable/Disable take channel only, no bool arg)
     # ------------------------------------------------------------------
 
     def set_port_data(self, port: int, enable: bool) -> bool:
         if not self._valid_port(port):
             return False
         try:
-            return self._hub.usb.setDataEnable(port, enable) == 0
+            if enable:
+                return self._hub.usb.setDataEnable(port) == 0
+            else:
+                return self._hub.usb.setDataDisable(port) == 0
         except Exception:
             return False
 
@@ -77,38 +85,56 @@ class AcronameHub:
         if not self._valid_port(port):
             return None
         try:
-            result = self._hub.usb.getDataEnable(port)
-            return result.value if result.error == 0 else None
+            result = self._hub.usb.getPortState(port)
+            if result.error != 0:
+                return None
+            return bool(result.value & self._hub.usb.PORT_MODE_USB2_A_ENABLE)
         except Exception:
             return None
 
     # ------------------------------------------------------------------
-    # Port speed
+    # Port speed  (setHiSpeedData*/setSuperSpeedData* per channel)
     # ------------------------------------------------------------------
-
-    _SPEED_MAP = {"auto": 0, "ss": 1, "hs": 2, "fs": 3, "ls": 4}
 
     def set_port_speed(self, port: int, speed: str) -> bool:
         if not self._valid_port(port):
             return False
-        mode = self._SPEED_MAP.get(speed)  # 0 is valid (auto), so check is None not falsy
-        if mode is None:
-            return False
         try:
-            return self._hub.usb.setPortMode(port, mode) == 0
+            usb = self._hub.usb
+            if speed == "auto":
+                # enable both HS and SS; hub negotiates
+                r1 = usb.setHiSpeedDataEnable(port)
+                r2 = usb.setSuperSpeedDataEnable(port)
+                return r1 == 0 and r2 == 0
+            elif speed == "ss":
+                r1 = usb.setSuperSpeedDataEnable(port)
+                r2 = usb.setHiSpeedDataDisable(port)
+                return r1 == 0 and r2 == 0
+            elif speed == "hs":
+                r1 = usb.setHiSpeedDataEnable(port)
+                r2 = usb.setSuperSpeedDataDisable(port)
+                return r1 == 0 and r2 == 0
+            elif speed in ("fs", "ls"):
+                # disable both; device falls back to FS/LS
+                r1 = usb.setHiSpeedDataDisable(port)
+                r2 = usb.setSuperSpeedDataDisable(port)
+                return r1 == 0 and r2 == 0
+            else:
+                return False
         except Exception:
             return False
 
     # ------------------------------------------------------------------
     # Current / voltage measurement
+    # getPortCurrent returns µA; getPortVoltage returns µV
     # ------------------------------------------------------------------
 
     def get_port_current(self, port: int) -> float | None:
         if not self._valid_port(port):
             return None
         try:
-            result = self._hub.usb.getCurrentMicroAmps(port)
-            return result.value / 1000.0 if result.error == 0 else None
+            result = self._hub.usb.getPortCurrent(port)
+            return result.value / 1000.0 if result.error == 0 else None  # µA -> mA
         except Exception:
             return None
 
@@ -116,45 +142,45 @@ class AcronameHub:
         if not self._valid_port(port):
             return None
         try:
-            result = self._hub.usb.getVoltageMillivolts(port)
-            return float(result.value) if result.error == 0 else None
+            result = self._hub.usb.getPortVoltage(port)
+            return result.value / 1000.0 if result.error == 0 else None  # µV -> mV
         except Exception:
             return None
 
     # ------------------------------------------------------------------
-    # Boost charge (BC1.2)
+    # Boost charge (BC1.2) — hub-wide, not per-port
     # ------------------------------------------------------------------
 
-    def set_port_boost_charge(self, port: int, enable: bool) -> bool:
-        if not self._valid_port(port):
-            return False
+    def set_boost_charge(self, enable: bool) -> bool:
         try:
-            return self._hub.usb.setBoostEnable(port, enable) == 0
+            usb = self._hub.usb
+            setting = usb.BOOST_8_PERCENT if enable else usb.BOOST_0_PERCENT
+            return usb.setDownstreamBoostMode(setting) == 0
         except Exception:
             return False
 
     # ------------------------------------------------------------------
     # Upstream host port switching
+    # exclusive=True  -> one host only (UPSTREAM_MODE_PORT_0/1)
+    # exclusive=False -> auto mode; hub picks available upstream
     # ------------------------------------------------------------------
 
     def switch_usb_port(self, port: int, exclusive: bool = True) -> bool:
         if not 0 <= port <= _UPSTREAM_MAX:
             return False
         try:
-            err = self._hub.usb.setUpstreamPort(port)
-            if err != 0:
-                return False
-            other = 1 - port
-            # exclusive: disable the other upstream so only one host sees the hub
-            # non-exclusive: re-enable it so both hosts can access simultaneously
-            self._hub.usb.setUpstreamPortEnable(other, not exclusive)
-            return True
+            usb = self._hub.usb
+            if exclusive:
+                mode = usb.UPSTREAM_MODE_PORT_0 if port == 0 else usb.UPSTREAM_MODE_PORT_1
+            else:
+                mode = usb.UPSTREAM_MODE_AUTO
+            return usb.setUpstreamMode(mode) == 0
         except Exception:
             return False
 
     def get_upstream_port(self) -> int | None:
         try:
-            result = self._hub.usb.getUpstreamPort()
+            result = self._hub.usb.getUpstreamState()
             return result.value if result.error == 0 else None
         except Exception:
             return None

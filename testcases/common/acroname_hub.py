@@ -79,3 +79,54 @@ class AcronameHub:
             return result.value if result.error == 0 else None
         except Exception:
             return None
+
+    # ------------------------------------------------------------------
+    # Port speed
+    # ------------------------------------------------------------------
+
+    _SPEED_MAP = {"auto": 0, "ss": 1, "hs": 2, "fs": 3, "ls": 4}
+
+    def set_port_speed(self, port: int, speed: str) -> bool:
+        if not self._valid_port(port):
+            return False
+        mode = self._SPEED_MAP.get(speed)
+        if mode is None:
+            return False
+        try:
+            return self._hub.usb.setPortMode(port, mode) == 0
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------------
+    # Current / voltage measurement
+    # ------------------------------------------------------------------
+
+    def get_port_current(self, port: int) -> float | None:
+        if not self._valid_port(port):
+            return None
+        try:
+            result = self._hub.usb.getCurrentMicroAmps(port)
+            return result.value / 1000.0 if result.error == 0 else None
+        except Exception:
+            return None
+
+    def get_port_voltage(self, port: int) -> float | None:
+        if not self._valid_port(port):
+            return None
+        try:
+            result = self._hub.usb.getVoltageMillivolts(port)
+            return float(result.value) if result.error == 0 else None
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------
+    # Boost charge (BC1.2)
+    # ------------------------------------------------------------------
+
+    def set_port_boost_charge(self, port: int, enable: bool) -> bool:
+        if not self._valid_port(port):
+            return False
+        try:
+            return self._hub.usb.setBoostEnable(port, enable) == 0
+        except Exception:
+            return False

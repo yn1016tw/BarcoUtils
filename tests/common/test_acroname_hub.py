@@ -1,6 +1,7 @@
 import sys
 import types
 from unittest.mock import MagicMock, patch, call
+import pytest
 
 # ---------------------------------------------------------------------------
 # Stub out the brainstem package before importing AcronameHub so tests work
@@ -177,3 +178,97 @@ def test_get_port_data_error():
     hub.connect()
     stem.usb.getDataEnable.return_value = _make_err_result()
     assert hub.get_port_data(1) is None
+
+
+def test_set_port_speed_ss():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setPortMode.return_value = 0
+    assert hub.set_port_speed(0, "ss") is True
+    stem.usb.setPortMode.assert_called_once_with(0, 1)
+
+
+def test_set_port_speed_auto():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setPortMode.return_value = 0
+    assert hub.set_port_speed(0, "auto") is True
+    stem.usb.setPortMode.assert_called_once_with(0, 0)
+
+
+def test_set_port_speed_unknown_string():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.set_port_speed(0, "turbo") is False
+    stem.usb.setPortMode.assert_not_called()
+
+
+def test_set_port_speed_invalid_port():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.set_port_speed(8, "ss") is False
+    stem.usb.setPortMode.assert_not_called()
+
+
+def test_set_port_speed_sdk_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setPortMode.return_value = 1
+    assert hub.set_port_speed(0, "hs") is False
+
+
+def test_get_port_current_ok():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getCurrentMicroAmps.return_value = _make_ok_result(450000)
+    assert hub.get_port_current(0) == pytest.approx(450.0)
+
+
+def test_get_port_current_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getCurrentMicroAmps.return_value = _make_err_result()
+    assert hub.get_port_current(0) is None
+
+
+def test_get_port_current_invalid_port():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.get_port_current(8) is None
+    stem.usb.getCurrentMicroAmps.assert_not_called()
+
+
+def test_get_port_voltage_ok():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getVoltageMillivolts.return_value = _make_ok_result(5000)
+    assert hub.get_port_voltage(0) == pytest.approx(5000.0)
+
+
+def test_get_port_voltage_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getVoltageMillivolts.return_value = _make_err_result()
+    assert hub.get_port_voltage(0) is None
+
+
+def test_set_port_boost_charge_enable():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setBoostEnable.return_value = 0
+    assert hub.set_port_boost_charge(0, True) is True
+    stem.usb.setBoostEnable.assert_called_once_with(0, True)
+
+
+def test_set_port_boost_charge_sdk_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setBoostEnable.return_value = 1
+    assert hub.set_port_boost_charge(0, True) is False
+
+
+def test_set_port_boost_charge_invalid_port():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.set_port_boost_charge(8, True) is False
+    stem.usb.setBoostEnable.assert_not_called()

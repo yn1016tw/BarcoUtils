@@ -1,7 +1,19 @@
 # Author: James Yang <james.yang@barco.com>
 
+from enum import IntEnum
+
+
+class UpstreamMode(IntEnum):
+    NONE   = 255  # disable all upstream ports (UPSTREAM_MODE_NONE)
+    PORT_0 = 0
+    PORT_1 = 1
+    AUTO   = 2
+
+
 _PORT_MAX = 7
 _UPSTREAM_MAX = 1  # USBHub3+ supports 2 upstream host ports (0 and 1)
+
+
 
 
 class AcronameHub:
@@ -178,20 +190,16 @@ class AcronameHub:
         except Exception:
             return False
 
-    def set_upstream_port(self, port: int) -> bool:
-        if not 0 <= port <= _UPSTREAM_MAX:
-            return False
+    def set_upstream_mode(self, mode: UpstreamMode) -> bool:
         try:
-            usb = self._hub.usb
-            mode = usb.UPSTREAM_MODE_PORT_0 if port == 0 else usb.UPSTREAM_MODE_PORT_1
-            return usb.setUpstreamMode(mode) == 0
-        except Exception:
+            return self._hub.usb.setUpstreamMode(int(UpstreamMode(mode))) == 0
+        except (ValueError, Exception):
             return False
 
-    def get_upstream_port(self) -> int | None:
+    def get_upstream_mode(self) -> UpstreamMode | None:
         try:
-            result = self._hub.usb.getUpstreamState()
-            return result.value if result.error == 0 else None
+            result = self._hub.usb.getUpstreamMode()
+            return UpstreamMode(result.value) if result.error == 0 else None
         except Exception:
             return None
 

@@ -18,7 +18,7 @@ sys.modules["brainstem.link"] = _bs.link
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "testcases"))
 
-from common.acroname_hub import AcronameHub
+from common.acroname_hub import AcronameHub, UpstreamMode
 
 
 def _make_ok_result(value):
@@ -39,6 +39,7 @@ def _make_hub(connect_err=0):
     mock_stem = MagicMock()
     mock_stem.discoverAndConnect.return_value = connect_err
     # upstream mode constants
+    mock_stem.usb.UPSTREAM_MODE_NONE = 255
     mock_stem.usb.UPSTREAM_MODE_PORT_0 = 0
     mock_stem.usb.UPSTREAM_MODE_PORT_1 = 1
     mock_stem.usb.UPSTREAM_MODE_AUTO = 2
@@ -373,42 +374,57 @@ def test_switch_port_sdk_error():
     assert hub.switch_port(0) is False
 
 
-def test_set_upstream_port_0():
+def test_set_upstream_mode_port0():
     hub, stem = _make_hub()
     stem.usb.setUpstreamMode.return_value = 0
-    assert hub.set_upstream_port(0) is True
+    assert hub.set_upstream_mode(UpstreamMode.PORT_0) is True
     stem.usb.setUpstreamMode.assert_called_once_with(stem.usb.UPSTREAM_MODE_PORT_0)
 
 
-def test_set_upstream_port_1():
+def test_set_upstream_mode_port1():
     hub, stem = _make_hub()
     stem.usb.setUpstreamMode.return_value = 0
-    assert hub.set_upstream_port(1) is True
+    assert hub.set_upstream_mode(UpstreamMode.PORT_1) is True
     stem.usb.setUpstreamMode.assert_called_once_with(stem.usb.UPSTREAM_MODE_PORT_1)
 
 
-def test_set_upstream_port_invalid():
+def test_set_upstream_mode_auto():
     hub, stem = _make_hub()
-    assert hub.set_upstream_port(2) is False
+    stem.usb.setUpstreamMode.return_value = 0
+    assert hub.set_upstream_mode(UpstreamMode.AUTO) is True
+    stem.usb.setUpstreamMode.assert_called_once_with(stem.usb.UPSTREAM_MODE_AUTO)
+
+
+def test_set_upstream_mode_none_disables_all():
+    hub, stem = _make_hub()
+    stem.usb.setUpstreamMode.return_value = 0
+    assert hub.set_upstream_mode(UpstreamMode.NONE) is True
+    stem.usb.setUpstreamMode.assert_called_once_with(stem.usb.UPSTREAM_MODE_NONE)
+
+
+def test_set_upstream_mode_invalid():
+    hub, stem = _make_hub()
+    assert hub.set_upstream_mode(99) is False
     stem.usb.setUpstreamMode.assert_not_called()
 
 
-def test_set_upstream_port_sdk_error():
+def test_set_upstream_mode_sdk_error():
     hub, stem = _make_hub()
     stem.usb.setUpstreamMode.return_value = 1
-    assert hub.set_upstream_port(0) is False
+    assert hub.set_upstream_mode(UpstreamMode.PORT_0) is False
 
 
-def test_get_upstream_port_ok():
+def test_get_upstream_mode_ok():
     hub, stem = _make_hub()
-    stem.usb.getUpstreamState.return_value = _make_ok_result(1)
-    assert hub.get_upstream_port() == 1
+    stem.usb.getUpstreamMode.return_value = _make_ok_result(2)
+    assert hub.get_upstream_mode() == UpstreamMode.AUTO
 
 
-def test_get_upstream_port_error():
+def test_get_upstream_mode_error():
     hub, stem = _make_hub()
-    stem.usb.getUpstreamState.return_value = _make_err_result()
-    assert hub.get_upstream_port() is None
+    stem.usb.getUpstreamMode.return_value = _make_err_result()
+    assert hub.get_upstream_mode() is None
+
 
 
 # ------------------------------------------------------------------

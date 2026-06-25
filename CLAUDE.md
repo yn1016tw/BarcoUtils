@@ -195,8 +195,9 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 - `get_port_voltage(port) -> float | None` — port voltage in mV (SDK `getPortVoltage` returns µV; divided by 1000); None on error
 - `set_boost_charge(enable) -> bool` — hub-wide BC1.2 boost charge (SDK `setDownstreamBoostMode`): True → BOOST_8_PERCENT, False → BOOST_0_PERCENT; no per-port control
 - `switch_port(port, exclusive=True) -> bool` — switch to downstream port 0–7 via `setPortEnable/setPortDisable` (power+data together); exclusive=True → disables all other ports first; exclusive=False → enables target only
-- `set_upstream_port(port) -> bool` — select upstream host port (0 or 1) via `setUpstreamMode(UPSTREAM_MODE_PORT_0/1)`; returns False for invalid port or SDK error
-- `get_upstream_port() -> int | None` — current active upstream port via `getUpstreamState()` (0 or 1); None on error
+- `set_upstream_mode(mode: UpstreamMode) -> bool` — select upstream mode via `UpstreamMode` enum: `NONE` (255, disable all), `PORT_0` (0), `PORT_1` (1), `AUTO` (2); returns False for unknown value or SDK error
+- `get_upstream_mode() -> UpstreamMode | None` — configured upstream mode via `getUpstreamMode()`; returns `UpstreamMode` enum; None on error
+- `UpstreamMode` — `IntEnum` exported from `acroname_hub`: `NONE=255`, `PORT_0=0`, `PORT_1=1`, `AUTO=2`
 - `hub_serial() -> int | None` — hub serial number as int; None on error
 - `hub_firmware_version() -> str | None` — firmware version (SDK returns raw int, converted via str()); None on error
 

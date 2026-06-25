@@ -20,11 +20,11 @@ Typical usage:
   python testcases/common/teams_meeting_host.py
 
   # Terminal 2 — run the test:
-  python testcases/test_mtr_join_with_id_multiple_peripheral.py --ip 192.168.1.100 --from-host
-  python testcases/test_mtr_join_with_id_multiple_peripheral.py --ip 192.168.1.100 --from-host --ports 0 1 2
-  python testcases/test_mtr_join_with_id_multiple_peripheral.py --ip 192.168.1.100 --meeting-id 123456789 --ports 0 1 2 3 4 5 6 7
+  python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --from-host
+  python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --from-host --ports 0 1 2
+  python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --meeting-id 123456789 --ports 0 1 2 3 4 5 6 7
   
-  python ./test_mtr_join_with_id_multiple_peripheral.py --serial 1882000501 --from-host --ports 0 2
+  python ./test_mtr_join_with_id_for_multiple_peripherals.py --serial 1882000501 --from-host --ports 0 2
 
 Author: James Yang <james.yang@barco.com>
 """

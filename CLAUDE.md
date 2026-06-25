@@ -39,9 +39,9 @@ python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.10
 python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.100 --meeting-id 123456789 --iterations 5
 
 # MTR multiple-peripheral test — switch Acroname hub port → join → screenshot → hang up; one port per iteration
-python testcases/test_mtr_join_with_id_multiple_peripheral.py --ip 192.168.1.100 --from-host
-python testcases/test_mtr_join_with_id_multiple_peripheral.py --ip 192.168.1.100 --from-host --ports 0 1 2
-python testcases/test_mtr_join_with_id_multiple_peripheral.py --ip 192.168.1.100 --meeting-id 123456789 --ports 0 1 2 3 --iterations 2
+python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --from-host
+python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --from-host --ports 0 1 2
+python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --meeting-id 123456789 --ports 0 1 2 3 --iterations 2
 
 # Polling-based setup tool (order-independent, handles any FW page order)
 python scripts/setup_tool.py --ip 192.168.1.100
@@ -156,7 +156,7 @@ testcases/test_peripheral.py          — CLI entry point + TestResult / ResultW
 testcases/test_mtr_meet_now.py        — CLI entry point for the MTR Meet Now test (navigate to main → Meet Now → screenshot); reboots only on exception
 testcases/test_mtr_join_with_id.py    — CLI entry point for the MTR join-with-ID call test (navigate to main → join by ID → screenshot → hang up); records desktop via ffmpeg
 testcases/test_mtr_join_with_id_for_dirty_disconnect.py — same flow but Step 9 reboots Duvel after hang up to simulate dirty disconnect; records desktop via ffmpeg
-testcases/test_mtr_join_with_id_multiple_peripheral.py — iterates over Acroname USBHub3+ ports (switch_port exclusive), runs full join-with-ID flow per port; --ports selects ports, --iterations per port, --port-settle wait after switch
+testcases/test_mtr_join_with_id_for_multiple_peripherals.py — iterates over Acroname USBHub3+ ports (switch_port exclusive), runs full join-with-ID flow per port; --ports selects ports, --iterations per port, --port-settle wait after switch
 tools/v4l2_stream_test   — Static ARM64 binary; pushed by push_peripheral_resources() (peripheral test only)
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed by push_peripheral_resources()
 scripts/                 — Windows helper scripts (ADB key switcher, Duvel device setup, ethernet control, setup automation)

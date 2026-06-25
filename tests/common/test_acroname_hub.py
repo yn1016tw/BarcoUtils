@@ -335,55 +335,41 @@ def test_set_boost_charge_sdk_error():
 
 def test_switch_port_exclusive_enables_target_and_disables_others():
     hub, stem = _make_hub()
-    stem.usb.setPowerEnable.return_value = 0
-    stem.usb.setDataEnable.return_value = 0
-    stem.usb.setPowerDisable.return_value = 0
-    stem.usb.setDataDisable.return_value = 0
+    stem.usb.setPortEnable.return_value = 0
+    stem.usb.setPortDisable.return_value = 0
     assert hub.switch_port(3, exclusive=True) is True
-    stem.usb.setPowerEnable.assert_called_once_with(3)
-    stem.usb.setDataEnable.assert_called_once_with(3)
-    disabled_power = [c.args[0] for c in stem.usb.setPowerDisable.call_args_list]
-    disabled_data = [c.args[0] for c in stem.usb.setDataDisable.call_args_list]
-    assert sorted(disabled_power) == [0, 1, 2, 4, 5, 6, 7]
-    assert sorted(disabled_data) == [0, 1, 2, 4, 5, 6, 7]
+    stem.usb.setPortEnable.assert_called_once_with(3)
+    disabled = [c.args[0] for c in stem.usb.setPortDisable.call_args_list]
+    assert sorted(disabled) == [0, 1, 2, 4, 5, 6, 7]
 
 
 def test_switch_port_non_exclusive_only_enables_target():
     hub, stem = _make_hub()
-    stem.usb.setPowerEnable.return_value = 0
-    stem.usb.setDataEnable.return_value = 0
+    stem.usb.setPortEnable.return_value = 0
     assert hub.switch_port(3, exclusive=False) is True
-    stem.usb.setPowerEnable.assert_called_once_with(3)
-    stem.usb.setDataEnable.assert_called_once_with(3)
-    stem.usb.setPowerDisable.assert_not_called()
-    stem.usb.setDataDisable.assert_not_called()
+    stem.usb.setPortEnable.assert_called_once_with(3)
+    stem.usb.setPortDisable.assert_not_called()
 
 
 def test_switch_port_default_is_exclusive():
     hub, stem = _make_hub()
-    stem.usb.setPowerEnable.return_value = 0
-    stem.usb.setDataEnable.return_value = 0
-    stem.usb.setPowerDisable.return_value = 0
-    stem.usb.setDataDisable.return_value = 0
+    stem.usb.setPortEnable.return_value = 0
+    stem.usb.setPortDisable.return_value = 0
     assert hub.switch_port(0) is True
-    stem.usb.setPowerEnable.assert_called_once_with(0)
-    stem.usb.setDataEnable.assert_called_once_with(0)
-    assert stem.usb.setPowerDisable.call_count == 7
-    assert stem.usb.setDataDisable.call_count == 7
+    stem.usb.setPortEnable.assert_called_once_with(0)
+    assert stem.usb.setPortDisable.call_count == 7
 
 
 def test_switch_port_invalid_port():
     hub, stem = _make_hub()
     assert hub.switch_port(8) is False
-    stem.usb.setPowerEnable.assert_not_called()
+    stem.usb.setPortEnable.assert_not_called()
 
 
 def test_switch_port_sdk_error():
     hub, stem = _make_hub()
-    stem.usb.setPowerDisable.return_value = 0
-    stem.usb.setDataDisable.return_value = 0
-    stem.usb.setDataEnable.return_value = 1
-    stem.usb.setPowerEnable.return_value = 0
+    stem.usb.setPortDisable.return_value = 0
+    stem.usb.setPortEnable.return_value = 1
     assert hub.switch_port(0) is False
 
 

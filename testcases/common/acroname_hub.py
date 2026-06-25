@@ -1,8 +1,5 @@
 # Author: James Yang <james.yang@barco.com>
 
-import brainstem
-from brainstem.link import Spec
-
 _PORT_MAX = 7
 
 
@@ -10,13 +7,17 @@ class AcronameHub:
     """Thin wrapper around brainstem USBHub3p SDK."""
 
     def __init__(self):
-        self._hub = brainstem.stem.USBHub3p()
+        self._hub = None
         self._connected = False
 
     def connect(self, serial: int | None = None) -> bool:
         try:
+            import brainstem
+            from brainstem.link import Spec
+            if self._hub is None:
+                self._hub = brainstem.stem.USBHub3p()
             if serial is not None:
-                err = self._hub.connectFromSerial(serial)
+                err = self._hub.connectFromSerial(serial, Spec.USB)
             else:
                 err = self._hub.discoverAndConnect(Spec.USB)
             self._connected = (err == 0)
@@ -89,7 +90,7 @@ class AcronameHub:
     def set_port_speed(self, port: int, speed: str) -> bool:
         if not self._valid_port(port):
             return False
-        mode = self._SPEED_MAP.get(speed)
+        mode = self._SPEED_MAP.get(speed)  # 0 is valid (auto), so check is None not falsy
         if mode is None:
             return False
         try:

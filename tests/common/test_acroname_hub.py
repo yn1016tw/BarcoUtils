@@ -43,7 +43,7 @@ def test_connect_with_serial():
     stem.connectFromSerial.return_value = 0
     result = hub.connect(serial=0xABCD1234)
     assert result is True
-    stem.connectFromSerial.assert_called_once_with(0xABCD1234)
+    stem.connectFromSerial.assert_called_once_with(0xABCD1234, _bs.link.Spec.USB)
 
 
 def test_connect_failure():
@@ -178,6 +178,13 @@ def test_get_port_data_error():
     hub.connect()
     stem.usb.getDataEnable.return_value = _make_err_result()
     assert hub.get_port_data(1) is None
+
+
+def test_get_port_data_invalid_port():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.get_port_data(-1) is None
+    stem.usb.getDataEnable.assert_not_called()
 
 
 def test_set_port_speed_ss():

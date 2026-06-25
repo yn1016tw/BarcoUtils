@@ -61,3 +61,119 @@ def test_disconnect_calls_sdk():
 def test_disconnect_before_connect_does_not_raise():
     hub, stem = _make_hub()
     hub.disconnect()  # no exception
+
+
+def _make_ok_result(value):
+    r = MagicMock()
+    r.error = 0
+    r.value = value
+    return r
+
+
+def _make_err_result():
+    r = MagicMock()
+    r.error = 1
+    r.value = None
+    return r
+
+
+def test_set_port_power_enable():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setPowerEnable.return_value = 0
+    assert hub.set_port_power(0, True) is True
+    stem.usb.setPowerEnable.assert_called_once_with(0, True)
+
+
+def test_set_port_power_disable():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setPowerEnable.return_value = 0
+    assert hub.set_port_power(3, False) is True
+    stem.usb.setPowerEnable.assert_called_once_with(3, False)
+
+
+def test_set_port_power_sdk_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setPowerEnable.return_value = 1
+    assert hub.set_port_power(0, True) is False
+
+
+def test_set_port_power_invalid_port():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.set_port_power(8, True) is False
+    stem.usb.setPowerEnable.assert_not_called()
+
+
+def test_get_port_power_true():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getPowerEnable.return_value = _make_ok_result(True)
+    assert hub.get_port_power(0) is True
+
+
+def test_get_port_power_false():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getPowerEnable.return_value = _make_ok_result(False)
+    assert hub.get_port_power(0) is False
+
+
+def test_get_port_power_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getPowerEnable.return_value = _make_err_result()
+    assert hub.get_port_power(0) is None
+
+
+def test_get_port_power_invalid_port():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.get_port_power(8) is None
+    stem.usb.getPowerEnable.assert_not_called()
+
+
+def test_set_port_data_enable():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setDataEnable.return_value = 0
+    assert hub.set_port_data(2, True) is True
+    stem.usb.setDataEnable.assert_called_once_with(2, True)
+
+
+def test_set_port_data_disable():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setDataEnable.return_value = 0
+    assert hub.set_port_data(2, False) is True
+    stem.usb.setDataEnable.assert_called_once_with(2, False)
+
+
+def test_set_port_data_sdk_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.setDataEnable.return_value = 1
+    assert hub.set_port_data(2, True) is False
+
+
+def test_set_port_data_invalid_port():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.set_port_data(-1, True) is False
+    stem.usb.setDataEnable.assert_not_called()
+
+
+def test_get_port_data_true():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getDataEnable.return_value = _make_ok_result(True)
+    assert hub.get_port_data(1) is True
+
+
+def test_get_port_data_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.usb.getDataEnable.return_value = _make_err_result()
+    assert hub.get_port_data(1) is None

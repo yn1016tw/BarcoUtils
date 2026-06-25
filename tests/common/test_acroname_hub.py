@@ -252,6 +252,13 @@ def test_get_port_voltage_error():
     assert hub.get_port_voltage(0) is None
 
 
+def test_get_port_voltage_invalid_port():
+    hub, stem = _make_hub()
+    hub.connect()
+    assert hub.get_port_voltage(8) is None
+    stem.usb.getVoltageMillivolts.assert_not_called()
+
+
 def test_set_port_boost_charge_enable():
     hub, stem = _make_hub()
     hub.connect()

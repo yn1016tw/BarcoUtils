@@ -130,3 +130,21 @@ class AcronameHub:
             return self._hub.usb.setBoostEnable(port, enable) == 0
         except Exception:
             return False
+
+    # ------------------------------------------------------------------
+    # Hub info
+    # ------------------------------------------------------------------
+
+    def hub_serial(self) -> int | None:
+        try:
+            result = self._hub.system.getSerialNumber()
+            return result.value if result.error == 0 else None
+        except Exception:
+            return None
+
+    def hub_firmware_version(self) -> str | None:
+        try:
+            result = self._hub.system.getVersion()
+            return str(result.value) if result.error == 0 else None
+        except Exception:
+            return None

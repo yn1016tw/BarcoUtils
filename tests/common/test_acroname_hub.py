@@ -279,3 +279,31 @@ def test_set_port_boost_charge_invalid_port():
     hub.connect()
     assert hub.set_port_boost_charge(8, True) is False
     stem.usb.setBoostEnable.assert_not_called()
+
+
+def test_hub_serial_ok():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.system.getSerialNumber.return_value = _make_ok_result(0x12345678)
+    assert hub.hub_serial() == 0x12345678
+
+
+def test_hub_serial_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.system.getSerialNumber.return_value = _make_err_result()
+    assert hub.hub_serial() is None
+
+
+def test_hub_firmware_version_ok():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.system.getVersion.return_value = _make_ok_result("3.0.0")
+    assert hub.hub_firmware_version() == "3.0.0"
+
+
+def test_hub_firmware_version_error():
+    hub, stem = _make_hub()
+    hub.connect()
+    stem.system.getVersion.return_value = _make_err_result()
+    assert hub.hub_firmware_version() is None

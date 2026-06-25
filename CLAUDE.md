@@ -186,16 +186,18 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 - `info(msg, *args)` / `warning(msg, *args)` / `error(msg, *args)` / `debug(msg, *args)` — log at the corresponding level; supports `%`-style format args
 
 **AcronameHub** (`testcases/common/acroname_hub.py`, `from common.acroname_hub import AcronameHub`):
-- `connect(serial: int | None = None) -> bool` — auto-discover first USB hub or connect to specific serial; returns False on failure
+- `connect(serial: int | None = None) -> bool` — auto-discover first USB hub via USB or connect to specific serial; returns False on failure; brainstem lazy-imported on first call
 - `disconnect() -> None` — release brainstem connection; safe to call without prior connect
-- `set_port_power(port, enable) -> bool` / `get_port_power(port) -> bool | None` — VBUS on/off per port 0–7
-- `set_port_data(port, enable) -> bool` / `get_port_data(port) -> bool | None` — data lines on/off per port
-- `set_port_speed(port, speed) -> bool` — speed ∈ `{'auto','ss','hs','fs','ls'}`; returns False for unknown strings
-- `get_port_current(port) -> float | None` — port current in mA; None on error
-- `get_port_voltage(port) -> float | None` — port voltage in mV; None on error
-- `set_port_boost_charge(port, enable) -> bool` — BC1.2 boost charge per port
-- `hub_serial() -> int | None` — hub serial number; None on error
-- `hub_firmware_version() -> str | None` — firmware version string e.g. `'3.0.0'`; None on error
+- `set_port_power(port, enable) -> bool` / `get_port_power(port) -> bool | None` — VBUS on/off per port 0–7; SDK uses separate `setPowerEnable(ch)` / `setPowerDisable(ch)`; reads via `getPortState()` bitmask (`PORT_MODE_VBUS_ENABLE`)
+- `set_port_data(port, enable) -> bool` / `get_port_data(port) -> bool | None` — data lines on/off per port; SDK uses `setDataEnable(ch)` / `setDataDisable(ch)`; reads via `getPortState()` bitmask (`PORT_MODE_USB2_A_ENABLE`)
+- `set_port_speed(port, speed) -> bool` — speed ∈ `{'auto','ss','hs','fs','ls'}`; controls `setHiSpeedDataEnable/Disable` + `setSuperSpeedDataEnable/Disable` per channel; 'fs'/'ls' disables both (hub falls back to FS/LS); returns False for unknown strings
+- `get_port_current(port) -> float | None` — port current in mA (SDK `getPortCurrent` returns µA; divided by 1000); None on error
+- `get_port_voltage(port) -> float | None` — port voltage in mV (SDK `getPortVoltage` returns µV; divided by 1000); None on error
+- `set_boost_charge(enable) -> bool` — hub-wide BC1.2 boost charge (SDK `setDownstreamBoostMode`): True → BOOST_8_PERCENT, False → BOOST_0_PERCENT; no per-port control
+- `switch_usb_port(port, exclusive=True) -> bool` — switch upstream host port (0 or 1); exclusive=True → `UPSTREAM_MODE_PORT_0/1` (only one host sees hub); exclusive=False → `UPSTREAM_MODE_AUTO` (hub auto-selects, port param ignored)
+- `get_upstream_port() -> int | None` — current active upstream port via `getUpstreamState()` (0 or 1); None on error
+- `hub_serial() -> int | None` — hub serial number as int; None on error
+- `hub_firmware_version() -> str | None` — firmware version (SDK returns raw int, converted via str()); None on error
 
 **utils.py public API** (`from common.utils import ...`):
 - `FFMPEG_DEFAULT` — default path to ffmpeg.exe (`C:\Tools\ffmpeg\bin\ffmpeg.exe`)

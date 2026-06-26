@@ -24,12 +24,13 @@ Typical usage:
   python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --from-host --ports 0 1 2
   python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --meeting-id 123456789 --ports 0 1 2 3 4 5 6 7
   
-  python ./test_mtr_join_with_id_for_multiple_peripherals.py --serial 1882000501 --from-host --ports 0 2
+  python ./test_mtr_join_with_id_for_multiple_peripherals.py --serial 1882000501 --from-host --ports 0 2 --iterations 1
 
 Author: James Yang <james.yang@barco.com>
 """
 
 import argparse
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -45,8 +46,7 @@ from common.utils import FFMPEG_DEFAULT, screenshot_for_debug, screenshot_host_d
 
 _JOIN_PAGE_TIMEOUT = 30
 _IN_CALL_TIMEOUT   = 60
-_PORT_SETTLE_DEFAULT = 3  # seconds to wait after switching USB port
-
+_PORT_SETTLE_DEFAULT = 5  # seconds to wait after switching USB port
 
 # ---------------------------------------------------------------------------
 # TestResult
@@ -239,6 +239,42 @@ def _cleanup(ui) -> None:
         pass
 
 
+def _query_peripheral_name(serial: str, camera_retries: int = 60, camera_retry_interval: float = 1.0) -> str:
+    parts = []
+    _CMD_CAMERA = (
+        "for d in /sys/class/video4linux/video*; do "
+        "path=$(readlink -f $d 2>/dev/null); "
+        "if echo \"$path\" | grep -q usb; then cat $d/name 2>/dev/null && break; fi; "
+        "done"
+    )
+    for _ in range(camera_retries):
+        try:
+            out = subprocess.run(
+                ["adb", "-s", serial, "shell", _CMD_CAMERA],
+                capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+            if out:
+                parts.append(f"camera: {out.splitlines()[0]}")
+                break
+        except Exception:
+            break
+        time.sleep(camera_retry_interval)
+    try:
+        out = subprocess.run(
+            ["adb", "-s", serial, "shell", "cat /proc/asound/cards"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+        for line in out.splitlines():
+            if "USB" in line and "- " in line:
+                name = line.split("- ", 1)[1].strip()
+                if name:
+                    parts.append(f"audio: {name}")
+                    break
+    except Exception:
+        pass
+    return "  |  ".join(parts) if parts else "(none detected)"
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -276,7 +312,7 @@ def parse_args():
     parser.add_argument("--iterations", type=int, default=1, metavar="N",
                         help="Number of rounds per port (default: 1)")
     parser.add_argument("--port-settle", type=int, default=_PORT_SETTLE_DEFAULT, metavar="SEC",
-                        help=f"Seconds to wait after switching port (default: {_PORT_SETTLE_DEFAULT})")
+                        help=f"Seconds to wait after switching port before querying peripheral (default: {_PORT_SETTLE_DEFAULT})")
     parser.add_argument("--hub-serial", type=lambda x: int(x, 0), default=None, metavar="HEX",
                         help="Acroname hub serial number in hex, e.g. 0xDC770118 (default: auto-detect)")
     parser.add_argument("--output-dir", default=None, metavar="DIR",
@@ -356,22 +392,25 @@ def main():
     if args.passcode:
         logger.info(f"  Passcode      : {args.passcode}")
     logger.info(f"  Ports         : {args.ports}")
-    logger.info(f"  Iterations    : {args.iterations} per port  ({total_runs} total)")
+    logger.info(f"  Iterations    : {args.iterations}  ({total_runs} total runs)")
     logger.info(f"  Port settle   : {args.port_settle}s")
     logger.info(f"  Output dir    : {args.output_dir}")
 
     results: list[TestResult] = []
     try:
-        for port in args.ports:
+        for i in range(1, args.iterations + 1):
             logger.info("=" * 60)
-            logger.info(f"Switching to hub port {port}...")
-            if not hub.switch_port(port, exclusive=True):
-                logger.error(f"Failed to switch to port {port} — skipping")
-                continue
-            logger.info(f"Port {port} active. Waiting {args.port_settle}s for peripheral to enumerate...")
-            time.sleep(args.port_settle)
+            logger.info(f"Iteration {i}/{args.iterations}")
+            for port in args.ports:
+                logger.info(f"Switching to hub port {port}...")
+                if not hub.switch_port(port, exclusive=True):
+                    logger.error(f"Failed to switch to port {port} — skipping")
+                    continue
+                logger.info(f"Port {port} active. Waiting {args.port_settle}s for peripheral to enumerate...")
+                time.sleep(args.port_settle)
+                peripheral = _query_peripheral_name(device._serial)
+                logger.info(f"Peripheral on port {port}: {peripheral}")
 
-            for i in range(1, args.iterations + 1):
                 result = runner.run_round(port=port, round_num=i, total_rounds=args.iterations)
                 results.append(result)
                 writer.print_round(result)

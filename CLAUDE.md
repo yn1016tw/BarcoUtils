@@ -43,6 +43,7 @@ python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.
 python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --from-host --ports 0 1 2
 python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --meeting-id 123456789 --ports 0 1 2 3 --iterations 2
 
+
 # Polling-based setup tool (order-independent, handles any FW page order)
 python scripts/setup_tool.py --ip 192.168.1.100
 python scripts/setup_tool.py --serial 1882000501 --admin-password Admin@123

@@ -8,6 +8,7 @@ Author: James Yang <james.yang@barco.com>
 """
 
 import math
+import re
 import struct
 import subprocess
 import tempfile
@@ -212,6 +213,30 @@ class DuvelDevice:
     def clear_camera_tmp(self) -> None:
         """Remove stale remote frame file before a camera test."""
         self._adb_raw(["shell", f"rm -f /data/local/tmp/v4l2_frame_tmp"], timeout=5)
+
+    def camera_client_count(self) -> int | None:
+        """Return the number of active camera clients via dumpsys media.camera.
+
+        Returns the count (0 = idle), or None if the output could not be parsed.
+        """
+        result = self._adb_raw(["shell", "dumpsys", "media.camera"], timeout=10)
+        if result.returncode != 0:
+            return None
+        m = re.search(r"Number of connected clients:\s*(\d+)", result.stdout)
+        return int(m.group(1)) if m else None
+
+    def wait_for_camera_idle(self, timeout: int = 30) -> bool:
+        """Poll until no camera clients are connected (idle) or timeout expires.
+
+        Returns True if camera became idle within timeout, False otherwise.
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            count = self.camera_client_count()
+            if count is not None and count == 0:
+                return True
+            time.sleep(2)
+        return False
 
     def push_peripheral_resources(self) -> None:
         """Push v4l2_stream_test binary and tone WAV to device. Call before peripheral tests."""

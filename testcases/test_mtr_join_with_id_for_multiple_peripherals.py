@@ -211,6 +211,18 @@ class MtrJoinWithIdTestRunner:
                     pass
             r.call_ended = time.time()
             self._logger.info(f"Call ended  (total: {r.total_seconds():.1f}s)")
+
+            # Step 9: Wait for camera to be fully released before next port switch
+            self._logger.info("Waiting for camera to be released...")
+            cam_count = self._device.camera_client_count()
+            self._logger.info(f"Camera clients after hang up: {cam_count}")
+            if cam_count is None or cam_count > 0:
+                idle = self._device.wait_for_camera_idle(timeout=30)
+                if idle:
+                    self._logger.info("Camera released (idle)")
+                else:
+                    cam_count = self._device.camera_client_count()
+                    self._logger.warning(f"Camera not released within 30s (clients={cam_count})")
             r.passed = True
 
         except TimeoutError as e:

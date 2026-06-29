@@ -235,6 +235,8 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 - `barco_board_id()` → `str` — reads `ro.barco.board.id` (e.g. `DVT2`)
 - `barco_build_type()` → `str` — reads `ro.barco.build.type` (`debug`/`test`/`release`)
 - `barco_minimal_version()` → `str` — reads `ro.barco.build.minimal_version`
+- `camera_client_count() -> int | None` — returns number of active Android Camera API clients via `dumpsys media.camera`; parses `Active Camera Clients: []` (0) or non-empty list (≥1); falls back to `Number of connected clients: N` for older Android; returns None if unparseable
+- `wait_for_camera_idle(timeout=30) -> bool` — polls `camera_client_count()` every 2s until 0 or timeout; returns True if camera became idle
 - `ui` → `MtrUi` — lazy property; returns the `MtrUi` instance for this device (same serial, created on first access)
 
 **MtrUi public API** (access via `device.ui` or `common/ui_mtr.py` directly):
@@ -363,14 +365,14 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 **TeamsDesktopController** (`testcases/common/teams_desktop.py`): pywinauto-based automation for the Windows Teams desktop app. Requires `pip install pywinauto pywin32 psutil`.
 - `get_version()` → `str | None` — return running Teams version (e.g. `'26106.1911.4707.3286'`); static method, Teams must be running, requires psutil
 - `connect(launch=True, timeout=30)` — attach to running Teams; launch if not running
-- `create_meeting(timeout=20)` → `str | None` — start Meet Now, copy join link, return URL
+- `create_meeting(timeout=20)` → `str | None` — start Meet Now (Calendar → Meet now → Start meeting → Join now), copy join link, return URL; Meet now button accessible name changed to "Start an instant Teams meeting." in Teams ≥ 26149 — both labels are tried automatically
 - `wait_for_incoming_call(timeout=60)` → `bool` — poll for incoming call toast
 - `accept_call()` / `accept_video_call()` / `decline_call()` → `bool` — interact with incoming call toast
 - `end_call()` → `bool` — hang up active call
 - `mute()` / `toggle_camera()` → `bool` — in-call controls
 
 **Key implementation details:**
-- Camera check uses a two-stage approach: sysfs UVC enumeration (no `v4l2-ctl`) → `v4l2_stream_test` STREAMON + 5s AF/AE warm-up + DQBUF
+- Camera check uses a two-stage approach: sysfs UVC enumeration (no `v4l2-ctl`) → `v4l2_stream_test` STREAMON + 5s AF/AE warm-up + DQBUF; `camera_client_count()` uses Android Camera API (`dumpsys media.camera`), not V4L2 — v4l2_stream_test bypasses it and won't appear in the count
 - Audio card detection reads `/proc/asound/cards` (no root required); prefers USB-Audio cards over internal SOC
 - `_adb_raw()` never raises; `_adb()` raises on non-zero exit. Internal polling uses `_poll_until()` with a 2s interval
 - `connect()` must be called before any device operations; for TCP/IP it runs `adb connect`, for USB it verifies presence in `adb devices`

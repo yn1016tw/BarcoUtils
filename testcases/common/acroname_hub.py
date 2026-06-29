@@ -184,8 +184,7 @@ class AcronameHub:
             usb = self._hub.usb
             if exclusive:
                 for p in range(_PORT_MAX + 1):
-                    if p != port:
-                        usb.setPortDisable(p)
+                    usb.setPortDisable(p)
             return usb.setPortEnable(port) == 0
         except Exception:
             return False

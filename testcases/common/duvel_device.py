@@ -218,11 +218,20 @@ class DuvelDevice:
         """Return the number of active camera clients via dumpsys media.camera.
 
         Returns the count (0 = idle), or None if the output could not be parsed.
+        Supports two formats found across Android versions:
+          - "Active Camera Clients:\n[]"          — this device (idle = empty list)
+          - "Number of connected clients: N"       — older format
         """
         result = self._adb_raw(["shell", "dumpsys", "media.camera"], timeout=10)
         if result.returncode != 0:
             return None
-        m = re.search(r"Number of connected clients:\s*(\d+)", result.stdout)
+        text = result.stdout
+        # Format 1: "Active Camera Clients:\n[]\n" (idle) or non-empty list (active)
+        m = re.search(r"Active Camera Clients:\s*\n\s*(\[.*?\])", text, re.DOTALL)
+        if m:
+            return 0 if m.group(1).strip() == "[]" else 1
+        # Format 2: older Android format
+        m = re.search(r"Number of connected clients:\s*(\d+)", text)
         return int(m.group(1)) if m else None
 
     def wait_for_camera_idle(self, timeout: int = 30) -> bool:

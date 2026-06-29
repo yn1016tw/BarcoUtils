@@ -50,15 +50,17 @@ BarcoUtils/
 │   │   ├── ui_teams_sign_in.py           # TeamsSignInPage — Teams device-code-flow sign-in
 │   │   ├── ui_teams_sign_in_email.py     # TeamsSignInEmailPage — Teams on-device email entry
 │   │   ├── ui_azure_auth_webview.py      # AzureAuthWebViewPage — Azure MSAL WebView (password + registration)
+│   │   ├── acroname_hub.py               # AcronameHub — brainstem SDK wrapper for USBHub3+
 │   │   ├── teams_desktop.py              # TeamsDesktopController — Windows Teams desktop automation
 │   │   ├── teams_meeting_host.py         # Windows host: create Meet Now meeting, auto-accept calls
 │   │   ├── logger.py                     # Logger — write timestamped messages to stdout + file
 │   │   ├── utils.py                      # Shared utilities: screenshot, recording, scrcpy helpers
 │   │   └── version.py                    # VERSION string
-│   ├── test_peripheral.py                              # Peripheral boot-time test (camera / mic / speaker)
-│   ├── test_mtr_meet_now.py                            # MTR Meet Now test (Teams UI → Meet now → screenshot)
-│   ├── test_mtr_join_with_id.py                        # MTR join-with-ID test (join by ID → screenshot → hang up)
-│   └── test_mtr_join_with_id_for_dirty_disconnect.py   # same flow but reboots Duvel after hang up
+│   ├── test_peripheral.py                                        # Peripheral boot-time test (camera / mic / speaker)
+│   ├── test_mtr_meet_now.py                                      # MTR Meet Now test (Teams UI → Meet now → screenshot)
+│   ├── test_mtr_join_with_id.py                                  # MTR join-with-ID test (join by ID → screenshot → hang up)
+│   ├── test_mtr_join_with_id_for_dirty_disconnect.py             # same flow but reboots Duvel after hang up
+│   └── test_mtr_join_with_id_for_multiple_peripherals.py         # same flow iterated over Acroname hub ports
 ├── data/
 │   └── barco_tone_2s.wav          # Pre-generated 1 kHz / 2 s tone (pushed by push_peripheral_resources)
 ├── scripts/
@@ -278,6 +280,55 @@ python testcases/test_mtr_join_with_id_for_dirty_disconnect.py --ip 192.168.1.10
 
 ---
 
+## testcases/test_mtr_join_with_id_for_multiple_peripherals.py
+
+Iterates over Acroname USBHub3+ downstream ports and runs the full join-with-ID flow for each port.  
+Use this to verify that different peripherals (cameras, speakers, mics) plugged into the hub all work correctly during an active Teams call.
+
+Requires an Acroname USBHub3+ connected via USB and the `brainstem` Python package installed.
+
+### Test procedure
+
+| Step | Action |
+|------|--------|
+| 1 | Switch AcronameHub to target port (exclusive — all others disabled) |
+| 2 | Wait for peripheral to enumerate (`--port-settle` seconds) |
+| 3 | Query peripheral name via sysfs / `/proc/asound/cards` |
+| 4–8 | Same join-with-ID flow as `test_mtr_join_with_id.py` |
+| 9 | Wait for camera to be fully released (`dumpsys media.camera`) before next port switch |
+
+### Usage
+
+```bash
+# Terminal 1 — create meeting and auto-accept calls
+python testcases/common/teams_meeting_host.py
+
+# Terminal 2 — run the test
+python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --from-host
+python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --from-host --ports 0 1 2
+python testcases/test_mtr_join_with_id_for_multiple_peripherals.py --ip 192.168.1.100 --meeting-id 123456789 --ports 0 1 2 3 --iterations 2
+```
+
+### CLI options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--serial SERIAL` | — | USB ADB serial number |
+| `--ip IP[:PORT]` | — | ADB over TCP/IP (default port 5555) |
+| `--meeting-id ID` | — | Meeting ID (manual) |
+| `--from-host` | — | Load meeting info from `teams_meeting_host.py` output |
+| `--meeting-info-dir DIR` | — | Load meeting info from `DIR/meeting_info.json` |
+| `--ports N ...` | 0–7 | Hub ports to test |
+| `--iterations N` | 1 | Rounds per port |
+| `--port-settle SEC` | 5 | Seconds to wait after switching port |
+| `--hub-serial HEX` | auto | Acroname hub serial (e.g. `0xDC770118`) |
+| `--output-dir DIR` | auto | Log and screenshot directory |
+| `--device-timeout SEC` | 120 | Max seconds to wait for Teams Rooms UI |
+| `--fail-fast` | off | Stop after the first failed round |
+| `--no-record` | off | Disable ffmpeg desktop recording |
+
+---
+
 ## testcases/common/teams_meeting_host.py
 
 Windows-side host script. Creates a Meet Now meeting in Teams desktop, logs the Teams version,
@@ -369,6 +420,8 @@ ctrl.end_call()
 accessible via UIA. `accept_call()` detects the lobby popup by its Group element bounding rect  
 and clicks at calibrated fractional coordinates.
 
+**Teams version compatibility**: the Meet Now button's UIA accessible name changed from `"Meet now"` to `"Start an instant Teams meeting."` in Teams ≥ 26149. `create_meeting()` tries both labels automatically.
+
 ---
 
 ## common/ui_mtr.py — MtrUi
@@ -447,6 +500,16 @@ device.disconnect()
    - Exit 0 = frame received; exit 1 = timeout (5 s); exit 2 = device error
 
 The binary is pushed to `/data/local/tmp/v4l2_stream_test` by `push_peripheral_resources()`, called once before the test loop in `test_peripheral.py`.
+
+### Camera idle check
+
+After a Teams call ends, the camera may take a moment to be fully released by the Android Camera API.  
+`camera_client_count()` queries `dumpsys media.camera` and parses the `Active Camera Clients` list:
+
+- `[]` → 0 clients (idle)
+- Non-empty list → ≥ 1 client still active
+
+`wait_for_camera_idle(timeout=30)` polls every 2 s until the count reaches 0. Note: `v4l2_stream_test` bypasses the Android Camera API and will not appear in this count.
 
 ### Audio check detail
 

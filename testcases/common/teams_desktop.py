@@ -190,16 +190,18 @@ class TeamsDesktopController:
         time.sleep(2)
 
         # Step 2 — click Meet now
+        # Accessible name changed in Teams ≥ 26149 to "Start an instant Teams meeting."
         main = self._main_window()
         try:
             main.set_focus()
         except Exception:
             pass
         time.sleep(0.3)
-        self._click(main, "Meet now", ctrl_type="Button")
+        if not self._click(main, "Start an instant Teams meeting.", ctrl_type="Button"):
+            self._click(main, "Meet now", ctrl_type="Button")
         time.sleep(10)
 
-        # Step 3 — grab link before entering meeting
+        # Step 3 — grab link before entering meeting (older Teams flow)
         # Refresh main: Teams navigated to a new page after "Meet now", window title changed
         main = self._main_window()
         _clear_clipboard()
@@ -207,16 +209,17 @@ class TeamsDesktopController:
             main.set_focus()
         except Exception:
             pass
-        self._click(main, "Get a link to share", ctrl_type="Button")
-        time.sleep(1.5)
-        self._click(main, "Copy link", ctrl_type="Button")
-        time.sleep(1)
+        # "Get a link to share" only exists in older Teams; skip silently in newer versions
+        if self._click(main, "Get a link to share", ctrl_type="Button"):
+            time.sleep(1.5)
+            self._click(main, "Copy link", ctrl_type="Button")
+            time.sleep(1)
         join_url = _clipboard_text()
         if "teams" not in join_url.lower():
             join_url = ""
 
-        # Step 4 — start meeting
-        # Refresh main again: Teams may have updated the page title
+        # Step 4 — start meeting (older Teams pre-join flow)
+        # Newer Teams may enter the call directly; only click if button exists
         main = self._main_window()
         try:
             main.set_focus()
@@ -500,7 +503,10 @@ class TeamsDesktopController:
                         if re.search(pat, title):
                             app = Application(backend="uia").connect(handle=w.handle)
                             return app.window(handle=w.handle)
-                    # Slow path: look for call-control buttons (pre-join or in-call)
+                    # Slow path: look for call-control buttons (pre-join or in-call).
+                    # Include untitled windows — new Teams may render pre-join with no title.
+                    if title and "Teams" not in title:
+                        continue
                     app = Application(backend="uia").connect(handle=w.handle)
                     w2 = app.window(handle=w.handle)
                     for btn_label in _call_buttons:

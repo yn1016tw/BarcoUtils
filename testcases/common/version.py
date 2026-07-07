@@ -1,4 +1,4 @@
 # Author: James Yang <james.yang@barco.com>
 
-VERSION = "1.21.2"
-VERSION_INFO = (1, 21, 2)
+VERSION = "1.21.3"
+VERSION_INFO = (1, 21, 3)

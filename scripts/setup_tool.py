@@ -46,8 +46,8 @@ _FLOW_TIMEOUT    = 600  # 10 min total budget
 _NETWORK_TIMEOUT = 60   # wait for network connectivity
 
 # ── defaults ──────────────────────────────────────────────────────────────────
-_DEFAULT_EMAIL          = "mtr_p_25@barcomxdev.onmicrosoft.com"
-_DEFAULT_PASSWORD       = "Devel_25"
+_DEFAULT_EMAIL          = "mtr_p_02@barcomxtest.onmicrosoft.com"
+_DEFAULT_PASSWORD       = "Duvel_02"
 _DEFAULT_LANGUAGE       = "English"
 _DEFAULT_TIMEZONE       = "Taipei"
 _DEFAULT_ADMIN_PASSWORD = "Admin@123"

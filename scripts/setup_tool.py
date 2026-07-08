@@ -7,6 +7,7 @@ page-order differences across firmware versions.
 
 Pages handled (in any order):
   - Confirm connection
+  - Choose your provider (selects Microsoft Teams Room)
   - Language selection
   - Network connectivity
   - Date & time / timezone
@@ -81,6 +82,17 @@ def _handle_confirm_connection(ui) -> None:
     if not page.confirm_connection():
         _fail("confirm_connection", "could not tap 'Confirm connection'")
     _ok("confirm_connection")
+
+
+def _handle_provider(ui) -> None:
+    page = ui.setup_provider
+    _log("provider", "selecting Microsoft Teams Room provider")
+    if not page.select_mtr():
+        _fail("provider", "could not select MTR provider")
+    time.sleep(0.5)
+    if not page.click_confirm():
+        _fail("provider", "could not tap Confirm")
+    _ok("provider")
 
 
 def _handle_language(ui, language: str) -> None:
@@ -231,6 +243,11 @@ def _run_flow(ui, args: argparse.Namespace) -> None:
             "confirm_connection",
             lambda: ui.device_setup_wizard.is_visible(),
             lambda: _handle_confirm_connection(ui),
+        ),
+        (
+            "provider",
+            lambda: ui.setup_provider.is_visible(),
+            lambda: _handle_provider(ui),
         ),
         (
             "language",

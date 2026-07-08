@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from common.ui_norden_call import NordenCallPage
     from common.ui_join_with_id import JoinWithIdPage
     from common.ui_device_setup_wizard import DeviceSetupWizardPage
+    from common.ui_device_setup_provider import SetupProviderPage
     from common.ui_device_setup_language import SetupLanguagePage
     from common.ui_device_setup_network import SetupNetworkPage
     from common.ui_device_setup_datetime import SetupDatetimePage
@@ -81,6 +82,7 @@ class MtrUi:
         self._norden_call = None      # lazily created by .norden_call property
         self._join_with_id = None            # lazily created by .join_with_id property
         self._device_setup_wizard = None     # lazily created by .device_setup_wizard property
+        self._setup_provider = None          # lazily created by .setup_provider property
         self._setup_language = None          # lazily created by .setup_language property
         self._setup_network = None           # lazily created by .setup_network property
         self._setup_datetime = None          # lazily created by .setup_datetime property
@@ -249,6 +251,14 @@ class MtrUi:
             from common.ui_device_setup_wizard import DeviceSetupWizardPage
             self._device_setup_wizard = DeviceSetupWizardPage(self)
         return self._device_setup_wizard
+
+    @property
+    def setup_provider(self) -> "SetupProviderPage":
+        """Return the SetupProviderPage page object (created on first access)."""
+        if self._setup_provider is None:
+            from common.ui_device_setup_provider import SetupProviderPage
+            self._setup_provider = SetupProviderPage(self)
+        return self._setup_provider
 
     @property
     def setup_language(self) -> "SetupLanguagePage":

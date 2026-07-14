@@ -318,7 +318,7 @@ exit /b 0
 :GET_IP
 set "DEVICE_IP=Unknown"
 set "IPCIDR="
-for /f "tokens=2" %%A in ('adb shell ip addr show eth0 2^>nul ^| findstr "inet "') do set "IPCIDR=%%A"
+for /f "tokens=2" %%A in ('adb shell ip addr show eth0 2^>nul ^| findstr /C:"inet "') do set "IPCIDR=%%A"
 if defined IPCIDR (
     for /f "tokens=1 delims=/" %%B in ("%IPCIDR%") do set "DEVICE_IP=%%B"
 )

@@ -8,6 +8,8 @@ set "ACTIVATE_URL=http://korgrt13.barco.com"
 set "SN=9752000162"
 set "PART_NUMBER=R9861730WW"
 set "MAC_ADDRESS=00:04:A5:B1:50:1E"
+set "SPFT_DIR=C:\Tools\SP_Flash_Tool_Selector_exe_Windows_v1.2444.00.000\SP_Flash_Tool_V6"
+set "FW_BUILD_DIR=C:\Users\jamyan\OneDrive - Barco N.V\Share\FW\God\2099\debug"
 
 call :GET_IP
 
@@ -21,6 +23,7 @@ echo   Device IP   : %DEVICE_IP%
 echo   SN          : %SN%
 echo   Part Number : %PART_NUMBER%
 echo   MAC Address : %MAC_ADDRESS%
+echo   FW Build Dir: %FW_BUILD_DIR%
 echo.
 echo   [1] Enable Manufacturing Mode (activate)
 echo   [2] Get Current Firmware Version
@@ -30,12 +33,14 @@ echo   [5] Set Ethernet MAC Address
 echo   [6] Install ClickShare Certificate
 echo   [7] Install MDEP Enrollment Certificate
 echo   [8] Install MDEP Platform Certificate
-echo   [9] Run All Steps (1-8 in sequence)
+echo   [9] Enable Secure Boot (SP Flash Tool write-efuse)
+echo   [A] Run All Steps (1-8 in sequence)
 echo   [R] Refresh Device IP (adb)
 echo   [I] Change Device IP manually
 echo   [S] Change Serial Number
 echo   [P] Change Part Number
 echo   [M] Change MAC Address
+echo   [F] Change FW Build Dir
 echo   [0] Exit
 echo.
 echo ============================================================
@@ -49,12 +54,14 @@ if "%CHOICE%"=="5" goto SET_MAC
 if "%CHOICE%"=="6" goto CERT_CLICKSHARE
 if "%CHOICE%"=="7" goto CERT_MDEP_ENROLLMENT
 if "%CHOICE%"=="8" goto CERT_MDEP_PLATFORM
-if "%CHOICE%"=="9" goto RUN_ALL
+if "%CHOICE%"=="9" goto ENABLE_SECURE_BOOT
+if /i "%CHOICE%"=="A" goto RUN_ALL
 if /i "%CHOICE%"=="R" goto REFRESH_IP
 if /i "%CHOICE%"=="I" goto CHANGE_IP
 if /i "%CHOICE%"=="S" goto CHANGE_SN
 if /i "%CHOICE%"=="P" goto CHANGE_PN
 if /i "%CHOICE%"=="M" goto CHANGE_MAC
+if /i "%CHOICE%"=="F" goto CHANGE_FW_DIR
 if "%CHOICE%"=="0" goto EXIT
 echo Invalid option.
 timeout /t 2 >nul
@@ -148,7 +155,33 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 9. Run All Steps ----
+:: ---- 9. Enable Secure Boot ----
+:ENABLE_SECURE_BOOT
+echo.
+echo [9] Enable Secure Boot via SP Flash Tool write-efuse
+echo ------------------------------------------------------------
+echo   Tool dir  : %SPFT_DIR%
+echo   flash.xml : %FW_BUILD_DIR%\download_agent\flash.xml
+echo   efuse.img : %FW_BUILD_DIR%\efuse.img
+echo.
+echo   WARNING: This permanently writes the eFuse (Secure Boot) and
+echo   cannot be undone. Device must be connected in USB BROM/download mode.
+echo.
+set /p "CONFIRM=Type YES to continue: "
+if /i not "%CONFIRM%"=="YES" (
+    echo Cancelled.
+    pause
+    goto MAIN_MENU
+)
+pushd "%SPFT_DIR%"
+SPFlashToolV6.exe -f "%FW_BUILD_DIR%\download_agent\flash.xml" -c write-efuse --file "%FW_BUILD_DIR%\efuse.img" -l USB
+popd
+echo.
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- A. Run All Steps ----
 :RUN_ALL
 echo.
 echo ============================================================
@@ -238,6 +271,15 @@ echo.
 echo Current MAC Address: %MAC_ADDRESS%
 set /p "MAC_ADDRESS=Enter new MAC Address: "
 echo MAC Address changed to %MAC_ADDRESS%
+timeout /t 2 >nul
+goto MAIN_MENU
+
+:: ---- F. Change FW Build Dir ----
+:CHANGE_FW_DIR
+echo.
+echo Current FW Build Dir: %FW_BUILD_DIR%
+set /p "FW_BUILD_DIR=Enter new FW Build Dir: "
+echo FW Build Dir changed to %FW_BUILD_DIR%
 timeout /t 2 >nul
 goto MAIN_MENU
 

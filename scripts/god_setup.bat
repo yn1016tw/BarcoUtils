@@ -35,6 +35,7 @@ echo   [7] Install MDEP Enrollment Certificate
 echo   [8] Install MDEP Platform Certificate
 echo   [9] Enable Secure Boot (SP Flash Tool write-efuse)
 echo   [E] Read Secure Boot Status (SP Flash Tool read-efuse)
+echo   [O] Auto Setup OOBE (MDEP wizard + Teams sign-in)
 echo   [A] Run All Steps (1-8 in sequence)
 echo   [R] Refresh Device IP (adb)
 echo   [I] Change Device IP manually
@@ -57,6 +58,7 @@ if "%CHOICE%"=="7" goto CERT_MDEP_ENROLLMENT
 if "%CHOICE%"=="8" goto CERT_MDEP_PLATFORM
 if "%CHOICE%"=="9" goto ENABLE_SECURE_BOOT
 if /i "%CHOICE%"=="E" goto READ_SECURE_BOOT
+if /i "%CHOICE%"=="O" goto SETUP_OOBE
 if /i "%CHOICE%"=="A" goto RUN_ALL
 if /i "%CHOICE%"=="R" goto REFRESH_IP
 if /i "%CHOICE%"=="I" goto CHANGE_IP
@@ -203,6 +205,16 @@ echo ------------------------------------------------------------
 type read-efuse.log
 popd
 echo.
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- O. Auto Setup OOBE ----
+:SETUP_OOBE
+echo.
+echo [O] Running MDEP setup wizard + Teams sign-in on %DEVICE_IP%...
+echo ------------------------------------------------------------
+python "%~dp0setup_tool.py" --ip %DEVICE_IP%
 echo.
 pause
 goto MAIN_MENU

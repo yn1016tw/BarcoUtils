@@ -34,6 +34,7 @@ echo   [6] Install ClickShare Certificate
 echo   [7] Install MDEP Enrollment Certificate
 echo   [8] Install MDEP Platform Certificate
 echo   [9] Enable Secure Boot (SP Flash Tool write-efuse)
+echo   [E] Read Secure Boot Status (SP Flash Tool read-efuse)
 echo   [A] Run All Steps (1-8 in sequence)
 echo   [R] Refresh Device IP (adb)
 echo   [I] Change Device IP manually
@@ -55,6 +56,7 @@ if "%CHOICE%"=="6" goto CERT_CLICKSHARE
 if "%CHOICE%"=="7" goto CERT_MDEP_ENROLLMENT
 if "%CHOICE%"=="8" goto CERT_MDEP_PLATFORM
 if "%CHOICE%"=="9" goto ENABLE_SECURE_BOOT
+if /i "%CHOICE%"=="E" goto READ_SECURE_BOOT
 if /i "%CHOICE%"=="A" goto RUN_ALL
 if /i "%CHOICE%"=="R" goto REFRESH_IP
 if /i "%CHOICE%"=="I" goto CHANGE_IP
@@ -175,6 +177,30 @@ if /i not "%CONFIRM%"=="YES" (
 )
 pushd "%SPFT_DIR%"
 SPFlashToolV6.exe -f "%FW_BUILD_DIR%\download_agent\flash.xml" -c write-efuse --file "%FW_BUILD_DIR%\efuse.img" -l USB
+popd
+echo.
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- E. Read Secure Boot Status ----
+:READ_SECURE_BOOT
+echo.
+echo [E] Reading Secure Boot (eFuse) status via SP Flash Tool read-efuse
+echo ------------------------------------------------------------
+echo   Tool dir  : %SPFT_DIR%
+echo   flash.xml : %FW_BUILD_DIR%\download_agent\flash.xml
+echo   Log file  : %SPFT_DIR%\read-efuse.log
+echo.
+echo   Device must be connected in USB BROM/download mode.
+echo.
+pushd "%SPFT_DIR%"
+SPFlashToolV6.exe -f "%FW_BUILD_DIR%\download_agent\flash.xml" -c read-efuse --file read-efuse.log -l USB
+echo.
+echo ------------------------------------------------------------
+echo   read-efuse.log contents:
+echo ------------------------------------------------------------
+type read-efuse.log
 popd
 echo.
 echo.

@@ -11,6 +11,10 @@ set "MAC_ADDRESS=00:04:A5:B1:50:1E"
 set "SPFT_DIR=C:\Tools\SP_Flash_Tool_Selector_exe_Windows_v1.2444.00.000\SP_Flash_Tool_V6"
 set "FW_BUILD_DIR=C:\Users\jamyan\OneDrive - Barco N.V\Share\FW\God\2099\debug"
 
+echo Switching adb to root...
+adb root >nul 2>&1
+timeout /t 2 >nul
+
 call :GET_IP
 
 :MAIN_MENU

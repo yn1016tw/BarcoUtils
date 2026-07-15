@@ -29,8 +29,10 @@ echo   [1] Enable Manufacturing Mode (activate)
 echo   [2] Get Current Firmware Version
 echo   [3] Set Serial Number
 echo   [4] Set Part Number
+echo   [N] Read Part Number
 echo   [5] Set Ethernet MAC Address
 echo   [6] Install ClickShare Certificate
+echo   [V] Override ClickShare Certificate
 echo   [7] Install MDEP Enrollment Certificate
 echo   [8] Install MDEP Platform Certificate
 echo   [9] Enable Secure Boot (SP Flash Tool write-efuse)
@@ -52,8 +54,10 @@ if "%CHOICE%"=="1" goto ENABLE_MFG
 if "%CHOICE%"=="2" goto GET_FW
 if "%CHOICE%"=="3" goto SET_SERIAL
 if "%CHOICE%"=="4" goto SET_PART_NUMBER
+if /i "%CHOICE%"=="N" goto READ_PART_NUMBER
 if "%CHOICE%"=="5" goto SET_MAC
 if "%CHOICE%"=="6" goto CERT_CLICKSHARE
+if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
 if "%CHOICE%"=="7" goto CERT_MDEP_ENROLLMENT
 if "%CHOICE%"=="8" goto CERT_MDEP_PLATFORM
 if "%CHOICE%"=="9" goto ENABLE_SECURE_BOOT
@@ -115,6 +119,17 @@ echo.
 pause
 goto MAIN_MENU
 
+:: ---- N. Read Part Number ----
+:READ_PART_NUMBER
+echo.
+echo [N] Reading part number from %DEVICE_IP%...
+echo ------------------------------------------------------------
+curl -X GET %DEVICE_IP%:%PROD_PORT%/article-number
+echo.
+echo.
+pause
+goto MAIN_MENU
+
 :: ---- 5. Set Ethernet MAC Address ----
 :SET_MAC
 echo.
@@ -132,6 +147,17 @@ echo.
 echo [6] Installing ClickShare certificate on %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl -X PUT %DEVICE_IP%:%PROD_PORT%/certificate/clickshare
+echo.
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- V. Override ClickShare Certificate ----
+:CERT_CLICKSHARE_OVERRIDE
+echo.
+echo [V] Overriding ClickShare certificate on %DEVICE_IP%...
+echo ------------------------------------------------------------
+curl -X PUT "%DEVICE_IP%:%PROD_PORT%/certificate/clickshare?override=True"
 echo.
 echo.
 pause

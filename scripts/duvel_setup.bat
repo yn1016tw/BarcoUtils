@@ -9,6 +9,8 @@ set "REST_PORT=4003"
 set "ACTIVATE_URL=http://korgrt13.barco.com"
 set "SN=1882000501"
 
+call :GET_IP
+
 :MAIN_MENU
 cls
 echo ============================================================
@@ -28,7 +30,7 @@ echo   [6] Set SSID
 echo   [7] Setup (MDEP wizard + Teams sign-in)
 echo   [8] Run All Steps (1-6 in sequence)
 echo   [9] Run All Steps + Auto Setup (1-6 then wizard)
-echo   [A] Find Device IP Address (adb)
+echo   [A] Refresh Device IP Address (adb)
 echo   [B] Change Device IP
 echo   [C] Change SN
 echo   [0] Exit
@@ -238,14 +240,12 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- A. Find Device IP Address ----
+:: ---- A. Refresh Device IP Address ----
 :FIND_IP
+call :GET_IP
 echo.
-echo [A] Finding device IP address...
-echo ------------------------------------------------------------
-adb shell ifconfig eth0
-echo.
-pause
+echo Device IP refreshed: %DEVICE_IP%
+timeout /t 2 >nul
 goto MAIN_MENU
 
 :: ---- B. Change Device IP ----
@@ -269,4 +269,13 @@ goto MAIN_MENU
 :EXIT
 echo Bye!
 endlocal
+exit /b 0
+
+:: ---- Subroutine: detect device IP via adb ----
+:GET_IP
+set "IPCIDR="
+for /f "tokens=2" %%A in ('adb shell ip addr show eth0 2^>nul ^| findstr /C:"inet "') do set "IPCIDR=%%A"
+if defined IPCIDR (
+    for /f "tokens=1 delims=/" %%B in ("%IPCIDR%") do set "DEVICE_IP=%%B"
+)
 exit /b 0

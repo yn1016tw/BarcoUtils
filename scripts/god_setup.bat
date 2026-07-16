@@ -52,7 +52,6 @@ echo   [V] Override ClickShare Certificate
 echo   [X] Reboot Device ^& Wait (boot + REST API ready)
 echo   [R] Refresh Device IP (adb)
 echo   [D] Select Device (adb)
-echo   [I] Change Device IP manually
 echo   [S] Change Serial Number
 echo   [P] Change Part Number
 echo   [M] Change MAC Address
@@ -80,7 +79,6 @@ if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
 if /i "%CHOICE%"=="X" goto REBOOT_AND_WAIT
 if /i "%CHOICE%"=="R" goto REFRESH_IP
 if /i "%CHOICE%"=="D" goto RESELECT_DEVICE
-if /i "%CHOICE%"=="I" goto CHANGE_IP
 if /i "%CHOICE%"=="S" goto CHANGE_SN
 if /i "%CHOICE%"=="P" goto CHANGE_PN
 if /i "%CHOICE%"=="M" goto CHANGE_MAC
@@ -372,15 +370,6 @@ if errorlevel 1 goto MAIN_MENU
 call :GET_IP
 echo.
 echo Device selected: %DEVICE_SERIAL%  (IP: %DEVICE_IP%)
-timeout /t 2 >nul
-goto MAIN_MENU
-
-:: ---- I. Change Device IP manually ----
-:CHANGE_IP
-echo.
-echo Current IP: %DEVICE_IP%
-set /p "DEVICE_IP=Enter new device IP: "
-echo Device IP changed to %DEVICE_IP%
 timeout /t 2 >nul
 goto MAIN_MENU
 

@@ -4,6 +4,7 @@ setlocal enabledelayedexpansion
 
 :: Default settings
 set "PROD_PORT=8085"
+set "REST_PORT=4003"
 set "ACTIVATE_URL=http://korgrt13.barco.com"
 set "SN=9752000162"
 set "PART_NUMBER=R9861730WW"
@@ -47,6 +48,7 @@ echo   [E] Read Secure Boot Status (SP Flash Tool read-efuse)
 echo   [G] Get Current Firmware Version
 echo   [N] Read Part Number
 echo   [V] Override ClickShare Certificate
+echo   [X] Reboot Device ^& Wait (boot + REST API ready)
 echo   [R] Refresh Device IP (adb)
 echo   [D] Select Device (adb)
 echo   [I] Change Device IP manually
@@ -73,6 +75,7 @@ if /i "%CHOICE%"=="E" goto READ_SECURE_BOOT
 if /i "%CHOICE%"=="G" goto GET_FW
 if /i "%CHOICE%"=="N" goto READ_PART_NUMBER
 if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
+if /i "%CHOICE%"=="X" goto REBOOT_AND_WAIT
 if /i "%CHOICE%"=="R" goto REFRESH_IP
 if /i "%CHOICE%"=="D" goto RESELECT_DEVICE
 if /i "%CHOICE%"=="I" goto CHANGE_IP
@@ -251,6 +254,39 @@ echo [G] Getting current firmware version from %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl %DEVICE_IP%:%PROD_PORT%/firmware/current
 echo.
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- X. Reboot Device and Wait ----
+:REBOOT_AND_WAIT
+echo.
+echo [X] Rebooting %DEVICE_SERIAL% and waiting for boot + REST API...
+echo ------------------------------------------------------------
+adb -s %DEVICE_SERIAL% reboot
+echo   Waiting for device to leave adb...
+adb -s %DEVICE_SERIAL% wait-for-disconnect >nul 2>&1
+echo   Waiting for adb to reconnect...
+adb -s %DEVICE_SERIAL% wait-for-device
+echo   Waiting for Android boot to complete...
+:WAIT_BOOT_COMPLETED
+for /f %%A in ('adb -s %DEVICE_SERIAL% shell getprop sys.boot_completed 2^>nul') do set "BOOT_COMPLETED=%%A"
+if not "%BOOT_COMPLETED%"=="1" (
+    timeout /t 2 >nul
+    goto WAIT_BOOT_COMPLETED
+)
+echo   Android boot completed!
+call :GET_IP
+echo   Device IP: %DEVICE_IP%
+echo   Waiting for REST API server to come online...
+:WAIT_RESTAPI
+timeout /t 5 >nul
+curl -s -k -o nul https://%DEVICE_IP%:%REST_PORT%/v3/status >nul 2>&1
+if errorlevel 1 (
+    echo   REST API not ready, retrying...
+    goto WAIT_RESTAPI
+)
+echo   REST API server is online!
 echo.
 pause
 goto MAIN_MENU

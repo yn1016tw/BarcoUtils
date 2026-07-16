@@ -3,15 +3,20 @@ TimesSheet Auto-Fill Tool v2 — Edge UI Automation variant.
 
 Uses EdgeController + TimesheetPage (pywinauto / UI Automation, no Playwright)
 to navigate to the SAP Fiori timesheet page, auto-refresh through login pages,
-fill and submit a single day's entry, and report the result to Telegram.
+fill and submit a single day's entry (or backfill Monday..target_date), and
+report the result to Telegram.
 
-If the target date is already Approved / Sent For Approval, the fill is
-skipped and Edge is closed immediately (no edit-mode is entered).
+By default, every weekday from Monday of target_date's week up to and
+including target_date is checked; any day that is not already Approved /
+Sent For Approval is filled too (pass --no-backfill to only touch
+target_date). Days already Approved / Sent For Approval / recorded are
+skipped and Edge is closed without entering edit mode for them.
 
 Usage:
     python src/timesheet/fill_timesheet2.py
     python src/timesheet/fill_timesheet2.py --date 2026-07-22
     python src/timesheet/fill_timesheet2.py --date 2026-07-22 --assignment Duvel --hours 8
+    python src/timesheet/fill_timesheet2.py --date 2026-07-22 --no-backfill
     python src/timesheet/fill_timesheet2.py --skip
 """
 
@@ -65,6 +70,19 @@ DEFAULT_ASSIGNMENT = os.getenv("DEFAULT_ASSIGNMENT", "Duvel")
 DEFAULT_HOURS = float(os.getenv("DEFAULT_HOURS", "8"))
 
 
+def get_week_dates_to_fill(target_date: datetime.date) -> list:
+    """Return weekdays (Mon–Fri) from Monday of target_date's week up to and
+    including target_date — used for backfill mode."""
+    monday = target_date - datetime.timedelta(days=target_date.weekday())
+    dates = []
+    current = monday
+    while current <= target_date:
+        if current.weekday() < 5:
+            dates.append(current)
+        current += datetime.timedelta(days=1)
+    return dates
+
+
 # ---------------------------------------------------------------------------
 # Telegram notification
 # ---------------------------------------------------------------------------
@@ -98,7 +116,13 @@ def send_telegram_result(message: str) -> None:
 @click.option("--assignment", default=None, help="Override assignment.")
 @click.option("--skip", is_flag=True, help="Exit without filling any entry.")
 @click.option("--url", default=None, help="Override the timesheet URL to navigate to.")
-def main(date_str, hours, assignment, skip, url):
+@click.option(
+    "--no-backfill",
+    "no_backfill",
+    is_flag=True,
+    help="Only fill target date; skip auto-fill of earlier weekdays this week.",
+)
+def main(date_str, hours, assignment, skip, url, no_backfill):
     target_date = (
         datetime.date.fromisoformat(date_str) if date_str else datetime.date.today()
     )
@@ -111,6 +135,13 @@ def main(date_str, hours, assignment, skip, url):
         send_telegram_result(f"Timesheet skipped (--skip): {target_date}")
         return
 
+    dates_to_process = [target_date] if no_backfill else get_week_dates_to_fill(target_date)
+    if len(dates_to_process) > 1:
+        _print(
+            f"Backfill mode: checking {len(dates_to_process)} day(s) — "
+            f"{dates_to_process[0]} to {dates_to_process[-1]}"
+        )
+
     ctrl = EdgeController()
     ctrl.connect()
     ts = TimesheetPage(ctrl, url=target_url)
@@ -118,21 +149,21 @@ def main(date_str, hours, assignment, skip, url):
     try:
         ts.open()
 
-        result = ts.autofill_day(target_date, target_assignment, target_hours)
-        time.sleep(1)
-        final_status = ts.row_status(target_date)
-        _print(f"autofill_day result: {result}, row_status: {final_status}")
+        lines = []
+        for d in dates_to_process:
+            result = ts.autofill_day(d, target_assignment, target_hours)
+            time.sleep(1)
+            final_status = ts.row_status(d)
+            _print(f"[{d}] autofill_day result: {result}, row_status: {final_status}")
+            if final_status:
+                lines.append(
+                    f"{d}: {result} ({final_status['recorded']}/{final_status['target']} h, "
+                    f"{final_status['assignment']}, status={final_status['status']})"
+                )
+            else:
+                lines.append(f"{d}: {result}")
 
-        if final_status:
-            message = (
-                f"Timesheet {result} for {target_date}: {final_status['recorded']}/"
-                f"{final_status['target']} h, {final_status['assignment']}, "
-                f"status={final_status['status']}"
-            )
-        else:
-            message = f"Timesheet fill FAILED for {target_date}: result={result}"
-
-        send_telegram_result(message)
+        send_telegram_result("Timesheet results:\n" + "\n".join(lines))
     except LoginPageError as e:
         _print(f"ERROR: {e}")
         send_telegram_result(f"Timesheet fill FAILED for {target_date}: {e}")

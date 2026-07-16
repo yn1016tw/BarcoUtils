@@ -149,6 +149,17 @@ class EdgeController:
         send_keys("{ENTER}")
         return self._wait_for_title_change(timeout)
 
+    def refresh(self, timeout: int = 15) -> bool:
+        """Reload the current tab (F5)."""
+        win = self._main_window()
+        try:
+            win.set_focus()
+        except Exception:
+            pass
+        send_keys("{F5}")
+        time.sleep(0.5)
+        return self._wait_for_title_change(timeout)
+
     def new_tab(self, url: str | None = None) -> bool:
         """Open a new tab (Ctrl+T), optionally navigating it to url."""
         win = self._main_window()

@@ -105,6 +105,7 @@ class EdgeController:
                 self._app = Application(backend="uia").connect(
                     title_re=".*Microsoft.*Edge.*", timeout=3
                 )
+                self._maximize()
                 return
             except Exception:
                 pass
@@ -113,6 +114,7 @@ class EdgeController:
                     class_name="Chrome_WidgetWin_1", timeout=3
                 )
                 if self._is_edge_app(self._app):
+                    self._maximize()
                     return
                 self._app = None
             except Exception:
@@ -245,6 +247,20 @@ class EdgeController:
     def _main_window(self):
         self._ensure_connected()
         return self._app.top_window()
+
+    def _maximize(self) -> None:
+        """Maximize the Edge window so page elements are at predictable
+        coordinates/visible extents for UI Automation."""
+        try:
+            win = self._app.top_window()
+            win.maximize()
+        except Exception:
+            pass
+
+    def maximize(self) -> None:
+        """Public wrapper to maximize the connected Edge window on demand."""
+        self._ensure_connected()
+        self._maximize()
 
     def _wait_for_title_change(self, timeout: int) -> bool:
         deadline = time.time() + timeout

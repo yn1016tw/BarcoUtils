@@ -56,29 +56,24 @@ $baseUrl = "https://${DeviceIp}:${RestPort}"
 
 function Get-ApiKey {
     $webResp = Invoke-WebRequest -Uri "$baseUrl/v3/login/internal" -Method Post -Headers @{ "accept" = "application/json"; "Sec-Fetch-Site" = "same-origin" } -ContentType "application/json" -Body ""
-    Write-Host "  login response body: $($webResp.Content)"
+    $raw = $webResp.Content.Trim()
 
-    # Prefer the real Set-Cookie header (contains the client-session value the
-    # server expects) if present; fall back to a JSON field in the body.
-    $setCookie = $webResp.Headers["Set-Cookie"]
-    if ($setCookie) {
-        if ($setCookie -is [array]) { $setCookie = $setCookie[0] }
-        Write-Host "  Set-Cookie header: $setCookie"
-        if ($setCookie -match "client-session=([^;]+)") {
-            return $matches[1]
-        }
-    }
-
-    $resp = $null
-    try { $resp = $webResp.Content | ConvertFrom-Json } catch { }
+    # The endpoint returns the apikey as either a raw JWT string, a JSON string
+    # (quoted JWT), or a JSON object with an apikey/apiKey/token field.
     $key = $null
-    if ($resp) {
+    if ($raw.StartsWith("{")) {
+        $resp = $raw | ConvertFrom-Json
         $key = $resp.apikey
         if (-not $key) { $key = $resp.apiKey }
         if (-not $key) { $key = $resp.token }
+    } elseif ($raw.StartsWith('"') -and $raw.EndsWith('"')) {
+        $key = $raw.Trim('"')
+    } else {
+        $key = $raw
     }
+
     if (-not $key) {
-        throw "Could not find apikey in /login/internal response. Raw body: $($webResp.Content)"
+        throw "Could not find apikey in /login/internal response. Raw body: $raw"
     }
     return $key
 }
@@ -107,7 +102,7 @@ function Invoke-RestWithDiagnostics {
 
 Write-Host "Logging in to get apikey (for GET)..."
 $apikey1 = Get-ApiKey
-$headers1 = @{ "Cookie" = "client-session=$apikey1"; "Sec-Fetch-Site" = "same-origin" }
+$headers1 = @{ "accept" = "application/json"; "Cookie" = "client-session=$apikey1"; "Sec-Fetch-Site" = "same-origin" }
 
 Write-Host "Reading current wireless config from $baseUrl/v3/network/wireless/1 ..."
 $current = Invoke-RestWithDiagnostics -Uri "$baseUrl/v3/network/wireless/1" -Method "Get" -Headers $headers1
@@ -126,7 +121,7 @@ Write-Host $bodyJson
 
 Write-Host "Logging in to get apikey (for PATCH)..."
 $apikey2 = Get-ApiKey
-$headers2 = @{ "Cookie" = "client-session=$apikey2"; "Sec-Fetch-Site" = "same-origin" }
+$headers2 = @{ "accept" = "*/*"; "Cookie" = "client-session=$apikey2"; "Sec-Fetch-Site" = "same-origin" }
 
 Write-Host "Applying wireless config..."
 $result = Invoke-RestWithDiagnostics -Uri "$baseUrl/v3/network/wireless/1" -Method "Patch" -Headers $headers2 -Body $bodyJson

@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     The v3 REST API requires a fresh one-time API key for every call:
-        1. POST /login/internal  -> returns an apikey
+        1. POST /v3/login/internal  -> returns an apikey
         2. Send it back as Cookie: client-session=<apikey> on the next call
     A new login is performed before each REST call (GET and PATCH), as the
     apikey is single-use.
@@ -55,7 +55,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 $baseUrl = "https://${DeviceIp}:${RestPort}"
 
 function Get-ApiKey {
-    $resp = Invoke-RestMethod -Uri "$baseUrl/login/internal" -Method Post -ContentType "application/json" -Body "{}"
+    $resp = Invoke-RestMethod -Uri "$baseUrl/v3/login/internal" -Method Post -Headers @{ "accept" = "application/json" } -ContentType "application/json" -Body ""
     $key = $resp.apikey
     if (-not $key) { $key = $resp.apiKey }
     if (-not $key) { $key = $resp.token }

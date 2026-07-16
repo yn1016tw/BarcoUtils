@@ -246,13 +246,41 @@ class EdgeController:
 
     def _main_window(self):
         self._ensure_connected()
+        # top_window() returns pywinauto's most-recently-active top-level
+        # window, which can be a stale tooltip/flyout Pane left over from a
+        # hover (e.g. the "Comment" tooltip) rather than the actual browser
+        # window — pick the real Edge window explicitly instead.
+        try:
+            windows = self._app.windows()
+        except Exception:
+            windows = []
+        best = None
+        for w in windows:
+            try:
+                title = w.window_text()
+            except Exception:
+                continue
+            if title and "edge" in title.lower():
+                best = w
+                break
+        if best is not None:
+            return best
+        # Fallback: largest window by area (tooltips/flyouts are tiny).
+        if windows:
+            def _area(w):
+                try:
+                    r = w.rectangle()
+                    return max(0, r.width()) * max(0, r.height())
+                except Exception:
+                    return 0
+            return max(windows, key=_area)
         return self._app.top_window()
 
     def _maximize(self) -> None:
         """Maximize the Edge window so page elements are at predictable
         coordinates/visible extents for UI Automation."""
         try:
-            win = self._app.top_window()
+            win = self._main_window()
             win.maximize()
         except Exception:
             pass

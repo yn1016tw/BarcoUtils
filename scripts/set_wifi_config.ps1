@@ -4,11 +4,18 @@
     via the v3 REST API.
 
 .DESCRIPTION
-    The v3 REST API requires a fresh one-time API key for every call:
-        1. POST /v3/login/internal  -> returns an apikey
-        2. Send it back as Cookie: client-session=<apikey> on the next call
-    A new login is performed before each REST call (GET and PATCH), as the
-    apikey is single-use.
+    The REST API's /v3/login/internal endpoint issues a short-lived (1 minute)
+    session via a real Set-Cookie: client-session=<jwt> response header (it is
+    NOT just the JSON body value used verbatim - see rest-api-apk
+    AuthModule.kt/AuthRouting.kt). Because the apikey is single-use / expires
+    quickly, a fresh login is performed immediately before each REST call
+    (GET and PATCH).
+
+    This script relies on PowerShell's WebRequestSession (-SessionVariable /
+    -WebSession) to capture and resend that cookie automatically, since
+    Invoke-WebRequest/Invoke-RestMethod strip the raw Set-Cookie header out of
+    the visible response Headers collection once it's consumed into the
+    session's cookie container.
 
 .PARAMETER DeviceIp
     IP address of the ClickShare Base Unit.
@@ -53,38 +60,15 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
 $baseUrl = "https://${DeviceIp}:${RestPort}"
-
-function Get-ApiKey {
-    $webResp = Invoke-WebRequest -Uri "$baseUrl/v3/login/internal" -Method Post -Headers @{ "accept" = "application/json"; "Sec-Fetch-Site" = "same-origin" } -ContentType "application/json" -Body ""
-    $raw = $webResp.Content.Trim()
-
-    # The endpoint returns the apikey as either a raw JWT string, a JSON string
-    # (quoted JWT), or a JSON object with an apikey/apiKey/token field.
-    $key = $null
-    if ($raw.StartsWith("{")) {
-        $resp = $raw | ConvertFrom-Json
-        $key = $resp.apikey
-        if (-not $key) { $key = $resp.apiKey }
-        if (-not $key) { $key = $resp.token }
-    } elseif ($raw.StartsWith('"') -and $raw.EndsWith('"')) {
-        $key = $raw.Trim('"')
-    } else {
-        $key = $raw
-    }
-
-    if (-not $key) {
-        throw "Could not find apikey in /login/internal response. Raw body: $raw"
-    }
-    return $key
-}
+$loginHeaders = @{ "accept" = "application/json"; "Sec-Fetch-Site" = "same-origin" }
 
 function Invoke-RestWithDiagnostics {
-    param([string]$Uri, [string]$Method, [hashtable]$Headers, [string]$Body, [string]$ContentType = "application/json")
+    param([string]$Uri, [string]$Method, [hashtable]$Headers, [string]$Body, [Microsoft.PowerShell.Commands.WebRequestSession]$Session)
     try {
         if ($Body) {
-            return Invoke-RestMethod -Uri $Uri -Method $Method -Headers $Headers -ContentType $ContentType -Body $Body
+            return Invoke-RestMethod -Uri $Uri -Method $Method -Headers $Headers -ContentType "application/json" -Body $Body -WebSession $Session
         }
-        return Invoke-RestMethod -Uri $Uri -Method $Method -Headers $Headers
+        return Invoke-RestMethod -Uri $Uri -Method $Method -Headers $Headers -WebSession $Session
     } catch {
         $respBody = $null
         if ($_.Exception.Response) {
@@ -100,12 +84,11 @@ function Invoke-RestWithDiagnostics {
     }
 }
 
-Write-Host "Logging in to get apikey (for GET)..."
-$apikey1 = Get-ApiKey
-$headers1 = @{ "accept" = "application/json"; "Cookie" = "client-session=$apikey1"; "Sec-Fetch-Site" = "same-origin" }
+Write-Host "Logging in (for GET)..."
+Invoke-RestMethod -Uri "$baseUrl/v3/login/internal" -Method Post -Headers $loginHeaders -ContentType "application/json" -Body "" -SessionVariable webSession | Out-Null
 
 Write-Host "Reading current wireless config from $baseUrl/v3/network/wireless/1 ..."
-$current = Invoke-RestWithDiagnostics -Uri "$baseUrl/v3/network/wireless/1" -Method "Get" -Headers $headers1
+$current = Invoke-RestWithDiagnostics -Uri "$baseUrl/v3/network/wireless/1" -Method "Get" -Headers $loginHeaders -Session $webSession
 
 $current.operationMode = $OperationMode
 if (-not $current.accessPoint) {
@@ -119,11 +102,11 @@ $bodyJson = $current | ConvertTo-Json -Depth 10
 Write-Host "New config:"
 Write-Host $bodyJson
 
-Write-Host "Logging in to get apikey (for PATCH)..."
-$apikey2 = Get-ApiKey
-$headers2 = @{ "accept" = "*/*"; "Cookie" = "client-session=$apikey2"; "Sec-Fetch-Site" = "same-origin" }
+Write-Host "Logging in again (for PATCH, apikey is single-use)..."
+Invoke-RestMethod -Uri "$baseUrl/v3/login/internal" -Method Post -Headers $loginHeaders -ContentType "application/json" -Body "" -WebSession $webSession | Out-Null
 
 Write-Host "Applying wireless config..."
-$result = Invoke-RestWithDiagnostics -Uri "$baseUrl/v3/network/wireless/1" -Method "Patch" -Headers $headers2 -Body $bodyJson
+$patchHeaders = @{ "accept" = "*/*"; "Sec-Fetch-Site" = "same-origin" }
+$result = Invoke-RestWithDiagnostics -Uri "$baseUrl/v3/network/wireless/1" -Method "Patch" -Headers $patchHeaders -Body $bodyJson -Session $webSession
 Write-Host "Done:"
 $result | ConvertTo-Json -Depth 10

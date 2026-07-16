@@ -11,8 +11,11 @@ set "MAC_ADDRESS=00:04:A5:B1:50:1E"
 set "SPFT_DIR=C:\Tools\SP_Flash_Tool_Selector_exe_Windows_v1.2444.00.000\SP_Flash_Tool_V6"
 set "FW_BUILD_DIR=C:\Users\jamyan\OneDrive - Barco N.V\Share\FW\God\2099\debug"
 
+call :SELECT_DEVICE
+if errorlevel 1 goto EXIT
+
 echo Switching adb to root...
-adb root >nul 2>&1
+adb -s %DEVICE_SERIAL% root >nul 2>&1
 timeout /t 2 >nul
 
 call :GET_IP
@@ -23,6 +26,7 @@ echo ============================================================
 echo         Wave4 God Mode Device Setup Tool
 echo ============================================================
 echo.
+echo   Device Serial : %DEVICE_SERIAL%
 echo   Device IP   : %DEVICE_IP%
 echo   SN          : %SN%
 echo   Part Number : %PART_NUMBER%
@@ -44,6 +48,7 @@ echo   [E] Read Secure Boot Status (SP Flash Tool read-efuse)
 echo   [O] Auto Setup OOBE (MDEP wizard)
 echo   [A] Run All Steps (1-8 in sequence)
 echo   [R] Refresh Device IP (adb)
+echo   [D] Select Device (adb)
 echo   [I] Change Device IP manually
 echo   [S] Change Serial Number
 echo   [P] Change Part Number
@@ -69,6 +74,7 @@ if /i "%CHOICE%"=="E" goto READ_SECURE_BOOT
 if /i "%CHOICE%"=="O" goto SETUP_OOBE
 if /i "%CHOICE%"=="A" goto RUN_ALL
 if /i "%CHOICE%"=="R" goto REFRESH_IP
+if /i "%CHOICE%"=="D" goto RESELECT_DEVICE
 if /i "%CHOICE%"=="I" goto CHANGE_IP
 if /i "%CHOICE%"=="S" goto CHANGE_SN
 if /i "%CHOICE%"=="P" goto CHANGE_PN
@@ -306,6 +312,16 @@ echo Device IP refreshed: %DEVICE_IP%
 timeout /t 2 >nul
 goto MAIN_MENU
 
+:: ---- D. Select Device ----
+:RESELECT_DEVICE
+call :SELECT_DEVICE
+if errorlevel 1 goto MAIN_MENU
+call :GET_IP
+echo.
+echo Device selected: %DEVICE_SERIAL%  (IP: %DEVICE_IP%)
+timeout /t 2 >nul
+goto MAIN_MENU
+
 :: ---- I. Change Device IP manually ----
 :CHANGE_IP
 echo.
@@ -360,8 +376,47 @@ exit /b 0
 :GET_IP
 set "DEVICE_IP=Unknown"
 set "IPCIDR="
-for /f "tokens=2" %%A in ('adb shell ip addr show eth0 2^>nul ^| findstr /C:"inet "') do set "IPCIDR=%%A"
+for /f "tokens=2" %%A in ('adb -s %DEVICE_SERIAL% shell ip addr show eth0 2^>nul ^| findstr /C:"inet "') do set "IPCIDR=%%A"
 if defined IPCIDR (
     for /f "tokens=1 delims=/" %%B in ("%IPCIDR%") do set "DEVICE_IP=%%B"
 )
+exit /b 0
+
+:: ---- Subroutine: check adb devices list, pick a target if multiple ----
+:SELECT_DEVICE
+set "DEVICE_SERIAL="
+set "DEV_COUNT=0"
+for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
+    if not "%%A"=="" if /i "%%B"=="device" (
+        set /a DEV_COUNT+=1
+        set "DEV_!DEV_COUNT!=%%A"
+    )
+)
+
+if !DEV_COUNT! equ 0 (
+    echo.
+    echo No ADB devices found. Connect a device ^(authorized^) and try again.
+    pause
+    exit /b 1
+)
+
+if !DEV_COUNT! equ 1 (
+    set "DEVICE_SERIAL=!DEV_1!"
+    exit /b 0
+)
+
+echo.
+echo Multiple ADB devices detected:
+echo ------------------------------------------------------------
+for /l %%I in (1,1,!DEV_COUNT!) do echo   [%%I] !DEV_%%I!
+echo ------------------------------------------------------------
+
+:SELECT_DEVICE_PROMPT
+set "DEV_CHOICE="
+set /p "DEV_CHOICE=Select target device number: "
+if not defined DEV_%DEV_CHOICE% (
+    echo Invalid selection.
+    goto SELECT_DEVICE_PROMPT
+)
+set "DEVICE_SERIAL=!DEV_%DEV_CHOICE%!"
 exit /b 0

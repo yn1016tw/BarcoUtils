@@ -55,12 +55,54 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 $baseUrl = "https://${DeviceIp}:${RestPort}"
 
 function Get-ApiKey {
-    $resp = Invoke-RestMethod -Uri "$baseUrl/v3/login/internal" -Method Post -Headers @{ "accept" = "application/json"; "Sec-Fetch-Site" = "same-origin" } -ContentType "application/json" -Body ""
-    $key = $resp.apikey
-    if (-not $key) { $key = $resp.apiKey }
-    if (-not $key) { $key = $resp.token }
-    if (-not $key) { throw "Could not find apikey in /login/internal response: $($resp | ConvertTo-Json -Compress)" }
+    $webResp = Invoke-WebRequest -Uri "$baseUrl/v3/login/internal" -Method Post -Headers @{ "accept" = "application/json"; "Sec-Fetch-Site" = "same-origin" } -ContentType "application/json" -Body ""
+    Write-Host "  login response body: $($webResp.Content)"
+
+    # Prefer the real Set-Cookie header (contains the client-session value the
+    # server expects) if present; fall back to a JSON field in the body.
+    $setCookie = $webResp.Headers["Set-Cookie"]
+    if ($setCookie) {
+        if ($setCookie -is [array]) { $setCookie = $setCookie[0] }
+        Write-Host "  Set-Cookie header: $setCookie"
+        if ($setCookie -match "client-session=([^;]+)") {
+            return $matches[1]
+        }
+    }
+
+    $resp = $null
+    try { $resp = $webResp.Content | ConvertFrom-Json } catch { }
+    $key = $null
+    if ($resp) {
+        $key = $resp.apikey
+        if (-not $key) { $key = $resp.apiKey }
+        if (-not $key) { $key = $resp.token }
+    }
+    if (-not $key) {
+        throw "Could not find apikey in /login/internal response. Raw body: $($webResp.Content)"
+    }
     return $key
+}
+
+function Invoke-RestWithDiagnostics {
+    param([string]$Uri, [string]$Method, [hashtable]$Headers, [string]$Body, [string]$ContentType = "application/json")
+    try {
+        if ($Body) {
+            return Invoke-RestMethod -Uri $Uri -Method $Method -Headers $Headers -ContentType $ContentType -Body $Body
+        }
+        return Invoke-RestMethod -Uri $Uri -Method $Method -Headers $Headers
+    } catch {
+        $respBody = $null
+        if ($_.Exception.Response) {
+            try {
+                $stream = $_.Exception.Response.GetResponseStream()
+                $reader = New-Object System.IO.StreamReader($stream)
+                $respBody = $reader.ReadToEnd()
+            } catch { }
+        }
+        Write-Host "Request to $Uri failed: $($_.Exception.Message)"
+        if ($respBody) { Write-Host "Response body: $respBody" }
+        throw
+    }
 }
 
 Write-Host "Logging in to get apikey (for GET)..."
@@ -68,7 +110,7 @@ $apikey1 = Get-ApiKey
 $headers1 = @{ "Cookie" = "client-session=$apikey1"; "Sec-Fetch-Site" = "same-origin" }
 
 Write-Host "Reading current wireless config from $baseUrl/v3/network/wireless/1 ..."
-$current = Invoke-RestMethod -Uri "$baseUrl/v3/network/wireless/1" -Method Get -Headers $headers1
+$current = Invoke-RestWithDiagnostics -Uri "$baseUrl/v3/network/wireless/1" -Method "Get" -Headers $headers1
 
 $current.operationMode = $OperationMode
 if (-not $current.accessPoint) {
@@ -87,6 +129,6 @@ $apikey2 = Get-ApiKey
 $headers2 = @{ "Cookie" = "client-session=$apikey2"; "Sec-Fetch-Site" = "same-origin" }
 
 Write-Host "Applying wireless config..."
-$result = Invoke-RestMethod -Uri "$baseUrl/v3/network/wireless/1" -Method Patch -Headers $headers2 -ContentType "application/json" -Body $bodyJson
+$result = Invoke-RestWithDiagnostics -Uri "$baseUrl/v3/network/wireless/1" -Method "Patch" -Headers $headers2 -Body $bodyJson
 Write-Host "Done:"
 $result | ConvertTo-Json -Depth 10

@@ -38,7 +38,7 @@ echo   [1] Enable Manufacturing Mode (activate)
 echo   [2] Set Serial Number
 echo   [3] Set Part Number
 echo   [4] Set Ethernet MAC Address
-echo   [5] Set WiFi Configuration (SSID/AP mode via REST API)
+echo   [5] Set WiFi Configuration
 echo   [6] Install ClickShare Certificate
 echo   [7] Install MDEP Enrollment Certificate
 echo   [8] Install MDEP Platform Certificate

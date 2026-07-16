@@ -56,8 +56,10 @@ SAP_URL = os.getenv(
     "https://core.barco.com/sap/bc/ui2/flp?sap-client=100&sap-language=EN#TimeEntry-manageTimesheet",
 )
 
-# Browser tab titles shown by Microsoft's sign-in flow (expired SAP session).
+# Browser tab titles shown when the SAP session is not (yet) authenticated —
+# either SAP's own ABAP "Logon" page or a Microsoft SSO sign-in step.
 _LOGIN_TITLE_MARKERS = (
+    "logon",
     "sign in",
     "pick an account",
     "enter password",

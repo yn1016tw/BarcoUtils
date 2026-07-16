@@ -49,7 +49,7 @@ echo   [E] Read Secure Boot Status (SP Flash Tool read-efuse)
 echo   [G] Get Current Firmware Version
 echo   [N] Read Part Number
 echo   [V] Override ClickShare Certificate
-echo   [X] Reboot Device ^& Wait (boot + REST API ready)
+echo   [X] Reboot Device
 echo   [R] Refresh Device IP (adb)
 echo   [D] Select Device (adb)
 echo   [S] Change Serial Number

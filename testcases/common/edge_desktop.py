@@ -98,17 +98,39 @@ class EdgeController:
         """
         deadline = time.time() + timeout
         while True:
+            # msedge.exe spawns many helper processes (renderer/GPU/etc.) with
+            # no window — connecting by path can attach to one of those, so
+            # match the actual browser window by title/class instead.
             try:
                 self._app = Application(backend="uia").connect(
-                    path="msedge.exe", timeout=3
+                    title_re=".*Microsoft.*Edge.*", timeout=3
                 )
                 return
             except Exception:
                 pass
+            try:
+                self._app = Application(backend="uia").connect(
+                    class_name="Chrome_WidgetWin_1", timeout=3
+                )
+                if self._is_edge_app(self._app):
+                    return
+                self._app = None
+            except Exception:
+                self._app = None
             if not launch or time.time() > deadline:
                 raise ConnectionError("Could not connect to Edge desktop application")
             subprocess.Popen(["cmd", "/c", "start", "msedge"], shell=False)
             time.sleep(3)
+
+    @staticmethod
+    def _is_edge_app(app: "Application") -> bool:
+        try:
+            if not _PSUTIL:
+                return True
+            proc = psutil.Process(app.process)
+            return proc.name().lower() == "msedge.exe"
+        except Exception:
+            return False
 
     # ------------------------------------------------------------------
     # Navigation
@@ -171,19 +193,27 @@ class EdgeController:
             return None
 
     def get_url(self, timeout: int = 5) -> str | None:
-        """Return the current tab URL by reading the address bar (Ctrl+L, copy)."""
+        """Return the current tab URL by reading the address bar text.
+
+        The address bar Edit control (automation_id "view_1021") shows the
+        current URL directly in its window_text() — no Ctrl+L/copy needed.
+        """
         win = self._main_window()
         try:
-            win.set_focus()
+            addr = win.child_window(control_type="Edit", auto_id="view_1021")
+            if addr.exists(timeout=timeout):
+                return addr.window_text() or None
         except Exception:
             pass
         try:
-            addr = win.child_window(control_type="Edit", title_re=".*[Ss]earch or enter.*")
-            if not addr.exists(timeout=timeout):
-                addr = win.child_window(control_type="Edit")
-            return addr.get_value() if hasattr(addr, "get_value") else addr.window_text()
+            edits = win.descendants(control_type="Edit")
+            for e in edits:
+                text = e.window_text()
+                if text:
+                    return text
         except Exception:
-            return None
+            pass
+        return None
 
     def screenshot(self, path: str) -> bool:
         """Save a screenshot of the Edge window to path."""

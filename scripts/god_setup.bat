@@ -24,7 +24,7 @@ call :GET_IP
 :MAIN_MENU
 cls
 echo ============================================================
-echo         Wave4 God Mode Device Setup Tool
+echo         Wave4 God Device Setup Tool
 echo ============================================================
 echo.
 echo   Device Serial : %DEVICE_SERIAL%

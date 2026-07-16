@@ -129,6 +129,19 @@ class TimesheetPage:
     def _win(self):
         return self.ctrl._main_window()
 
+    def _focus_window(self):
+        """Bring the Edge window to the foreground.
+
+        Confirmed via live testing that skipping this can cause clicks to
+        land on whatever window happens to overlap the target screen
+        coordinates (e.g. another visible app) instead of the Edge page.
+        """
+        try:
+            self._win().set_focus()
+            time.sleep(0.3)
+        except Exception:
+            pass
+
     def _find(self, title: str, control_type: Optional[str] = None) -> list:
         win = self._win()
         kwargs = {"title": title}
@@ -182,18 +195,26 @@ class TimesheetPage:
     # ------------------------------------------------------------------
     # Navigation within the timesheet
     # ------------------------------------------------------------------
-    def go_to_week(self, target_date: date) -> bool:
-        """Click the mini-calendar cell for target_date to load its week into the table."""
+    def go_to_week(self, target_date: date, retries: int = 3) -> bool:
+        """Click the mini-calendar cell for target_date to load its week into the table.
+
+        Retries briefly since the calendar may not be fully rendered yet
+        immediately after open()/navigation completes.
+        """
+        self._focus_window()
         label = f"{target_date.strftime('%B')} {target_date.day}, {target_date.year}"
-        cells = self._find(label)
-        if not cells:
-            return False
-        self._invoke(cells[-1])
-        time.sleep(2)
-        return True
+        for attempt in range(retries):
+            cells = self._find(label)
+            if cells:
+                self._invoke(cells[-1])
+                time.sleep(2)
+                return True
+            time.sleep(1.5)
+        return False
 
     def enter_edit_mode(self) -> bool:
         """Click 'Enter Records' to reveal editable Assignment/Hours controls for the visible week."""
+        self._focus_window()
         btns = self._find("Enter Records", control_type="Button")
         if not btns:
             return False
@@ -259,6 +280,7 @@ class TimesheetPage:
         enter_edit_mode() must already have been called (and the correct
         week must be visible via go_to_week()) so the row's edit controls exist.
         """
+        self._focus_window()
         win = self._win()
         rows = self._visible_date_rows()
         label = self._row_label(target_date)
@@ -267,8 +289,7 @@ class TimesheetPage:
         idx = rows.index(label)
 
         combos = win.descendants(control_type="ComboBox")
-        spinners = win.descendants(control_type="Spinner")
-        if idx >= len(combos) or idx >= len(spinners):
+        if idx >= len(combos):
             return False
 
         # Assignment combo — click, type, confirm with Enter
@@ -282,9 +303,15 @@ class TimesheetPage:
         send_keys(assignment.replace(" ", "{SPACE}"))
         time.sleep(1.5)
         send_keys("{ENTER}")
-        time.sleep(0.5)
+        time.sleep(1)
 
-        # Hours field — click, select all, type SAP-style comma value
+        # Re-fetch the Spinner list — selecting the assignment re-renders the
+        # row (adds an Attributes line), which invalidates any Spinner
+        # element handle fetched before this point and causes clicks to land
+        # on stale (shifted) coordinates.
+        spinners = win.descendants(control_type="Spinner")
+        if idx >= len(spinners):
+            return False
         spinner = spinners[idx]
         try:
             spinner.set_focus()
@@ -292,9 +319,22 @@ class TimesheetPage:
             pass
         spinner.click_input()
         time.sleep(0.3)
-        send_keys("^a")
-        value_str = f"{hours:.2f}".replace(".", ",")
-        send_keys(value_str)
+
+        # NOTE: confirmed via live testing that this SAP StepInput widget does
+        # NOT accept direct digit/comma typing via synthetic keyboard events —
+        # only Ctrl+A/Delete and Up/Down arrow keys actually change the value
+        # (Up = +1.00 per press). So only whole-hour values are supported here.
+        if hours != int(hours):
+            raise ValueError(
+                "TimesheetPage.fill_day only supports whole-hour values "
+                f"(SAP's Hours field rejects typed digits, only arrow-key "
+                f"increments of 1.0 work) — got {hours}."
+            )
+        send_keys("^a{DEL}")
+        time.sleep(0.3)
+        for _ in range(int(hours)):
+            send_keys("{UP}")
+            time.sleep(0.15)
         send_keys("{TAB}")
         time.sleep(0.5)
         return True
@@ -304,6 +344,7 @@ class TimesheetPage:
     # ------------------------------------------------------------------
     def submit(self) -> bool:
         """Click 'Submit' to save entered records."""
+        self._focus_window()
         btns = self._find("Submit", control_type="Button")
         if not btns:
             return False
@@ -313,6 +354,7 @@ class TimesheetPage:
 
     def cancel(self) -> bool:
         """Click 'Cancel' to discard unsaved edits and exit edit mode."""
+        self._focus_window()
         btns = self._find("Cancel", control_type="Button")
         if not btns:
             return False

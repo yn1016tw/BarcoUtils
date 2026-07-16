@@ -22,6 +22,9 @@ Pages handled (in any order):
   - Teams email entry
   - Azure auth WebView (password + device registration)
 
+Flow ends once either the MTR home screen (Duvel) or the ClickShare main
+screen (Duvel & god) is reached.
+
 Usage:
     python scripts/setup_tool.py --ip 192.168.1.100
     python scripts/setup_tool.py --serial 1882000501
@@ -326,7 +329,7 @@ def _run_flow(ui, args: argparse.Namespace) -> None:
 
     with ui.ui_dump_cache():
         while time.time() < deadline:
-            if ui.main.is_visible():
+            if ui.main.is_visible() or ui.clickshare_main.is_visible():
                 break
 
             matched = False
@@ -390,8 +393,16 @@ def main() -> None:
 
     _run_flow(device.ui, args)
 
+    ui = device.ui
+    if ui.clickshare_main.is_visible():
+        mode = "ClickShare main"
+    elif ui.main.is_visible():
+        mode = "MTR home"
+    else:
+        mode = "unknown"
+
     print(f"\n{'=' * 60}")
-    print("  Setup flow complete.")
+    print(f"  Setup flow complete. Reached: {mode}")
     print(f"{'=' * 60}\n")
 
 

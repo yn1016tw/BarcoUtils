@@ -50,6 +50,7 @@ BarcoUtils/
 │   │   ├── ui_teams_sign_in.py           # TeamsSignInPage — Teams device-code-flow sign-in
 │   │   ├── ui_teams_sign_in_email.py     # TeamsSignInEmailPage — Teams on-device email entry
 │   │   ├── ui_azure_auth_webview.py      # AzureAuthWebViewPage — Azure MSAL WebView (password + registration)
+│   │   ├── ui_clickshare_main.py         # ClickShareMainPage — ClickShare mode home screen (Duvel & god)
 │   │   ├── acroname_hub.py               # AcronameHub — brainstem SDK wrapper for USBHub3+
 │   │   ├── teams_desktop.py              # TeamsDesktopController — Windows Teams desktop automation
 │   │   ├── teams_meeting_host.py         # Windows host: create Meet Now meeting, auto-accept calls
@@ -464,6 +465,7 @@ ui.in_call.hang_up()
 | `ui.device_settings` | `DeviceSettingsPage` | `ui_device_settings.py` | Android Device Settings |
 | `ui.norden_call` | `NordenCallPage` | `ui_norden_call.py` | Dial screen |
 | `ui.join_with_id` | `JoinWithIdPage` | `ui_join_with_id.py` | Join with an ID dialog |
+| `ui.clickshare_main` | `ClickShareMainPage` | `ui_clickshare_main.py` | ClickShare mode home screen (Duvel & god) |
 
 All page objects inherit `BasePage` (`ui_base.py`) which provides `__init__(ui)` and `_tap(candidates)`.
 
@@ -605,6 +607,8 @@ python scripts/setup_tool.py --ip 192.168.1.100 --email user@domain.com --passwo
 ```
 
 **Pages handled (any order):** confirm connection, language, network, date/time, terms, privacy, firmware update, XMS Cloud (skip), admin password, confirm installation, setup complete, Teams sign-in, Teams email, Azure password, device registration.
+
+**Flow ends** once either the MTR home screen (Duvel) or the ClickShare main screen (Duvel & god) is reached.
 
 **Timeout:** 10 minutes total. Polls every 2 seconds.
 

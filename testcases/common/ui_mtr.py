@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from common.ui_teams_sign_in import TeamsSignInPage
     from common.ui_teams_sign_in_email import TeamsSignInEmailPage
     from common.ui_azure_auth_webview import AzureAuthWebViewPage
+    from common.ui_clickshare_main import ClickShareMainPage
 
 _MTR_PACKAGE = "com.microsoft.skype.teams.ipphone"
 _POLL_INTERVAL = 1  # seconds between element polls
@@ -96,6 +97,7 @@ class MtrUi:
         self._teams_sign_in = None           # lazily created by .teams_sign_in property
         self._teams_sign_in_email = None     # lazily created by .teams_sign_in_email property
         self._azure_auth_webview = None      # lazily created by .azure_auth_webview property
+        self._clickshare_main = None         # lazily created by .clickshare_main property
         self._ui_cache_enabled: bool = False
         self._ui_cache_xml: str = ""
         self._ui_cache_ts: float = 0.0
@@ -283,6 +285,14 @@ class MtrUi:
             from common.ui_device_setup_datetime import SetupDatetimePage
             self._setup_datetime = SetupDatetimePage(self)
         return self._setup_datetime
+
+    @property
+    def clickshare_main(self) -> "ClickShareMainPage":
+        """Return the ClickShareMainPage page object (created on first access)."""
+        if self._clickshare_main is None:
+            from common.ui_clickshare_main import ClickShareMainPage
+            self._clickshare_main = ClickShareMainPage(self)
+        return self._clickshare_main
 
     # ------------------------------------------------------------------
     # ADB transport (mirrors DuvelDevice pattern)

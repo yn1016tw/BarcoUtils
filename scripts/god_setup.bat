@@ -34,19 +34,19 @@ echo   MAC Address : %MAC_ADDRESS%
 echo   FW Build Dir: %FW_BUILD_DIR%
 echo.
 echo   [1] Enable Manufacturing Mode (activate)
-echo   [2] Get Current Firmware Version
-echo   [3] Set Serial Number
-echo   [4] Set Part Number
-echo   [N] Read Part Number
-echo   [5] Set Ethernet MAC Address
-echo   [6] Install ClickShare Certificate
-echo   [V] Override ClickShare Certificate
-echo   [7] Install MDEP Enrollment Certificate
-echo   [8] Install MDEP Platform Certificate
-echo   [9] Enable Secure Boot (SP Flash Tool write-efuse)
+echo   [2] Set Serial Number
+echo   [3] Set Part Number
+echo   [4] Set Ethernet MAC Address
+echo   [5] Install ClickShare Certificate
+echo   [6] Install MDEP Enrollment Certificate
+echo   [7] Install MDEP Platform Certificate
+echo   [8] Auto Setup OOBE (MDEP wizard)
+echo   [9] Run All Steps (1-8 in sequence)
+echo   [B] Enable Secure Boot (SP Flash Tool write-efuse)
 echo   [E] Read Secure Boot Status (SP Flash Tool read-efuse)
-echo   [O] Auto Setup OOBE (MDEP wizard)
-echo   [A] Run All Steps (1-8 in sequence)
+echo   [G] Get Current Firmware Version
+echo   [N] Read Part Number
+echo   [V] Override ClickShare Certificate
 echo   [R] Refresh Device IP (adb)
 echo   [D] Select Device (adb)
 echo   [I] Change Device IP manually
@@ -60,19 +60,19 @@ echo ============================================================
 set /p "CHOICE=Select option: "
 
 if "%CHOICE%"=="1" goto ENABLE_MFG
-if "%CHOICE%"=="2" goto GET_FW
-if "%CHOICE%"=="3" goto SET_SERIAL
-if "%CHOICE%"=="4" goto SET_PART_NUMBER
-if /i "%CHOICE%"=="N" goto READ_PART_NUMBER
-if "%CHOICE%"=="5" goto SET_MAC
-if "%CHOICE%"=="6" goto CERT_CLICKSHARE
-if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
-if "%CHOICE%"=="7" goto CERT_MDEP_ENROLLMENT
-if "%CHOICE%"=="8" goto CERT_MDEP_PLATFORM
-if "%CHOICE%"=="9" goto ENABLE_SECURE_BOOT
+if "%CHOICE%"=="2" goto SET_SERIAL
+if "%CHOICE%"=="3" goto SET_PART_NUMBER
+if "%CHOICE%"=="4" goto SET_MAC
+if "%CHOICE%"=="5" goto CERT_CLICKSHARE
+if "%CHOICE%"=="6" goto CERT_MDEP_ENROLLMENT
+if "%CHOICE%"=="7" goto CERT_MDEP_PLATFORM
+if /i "%CHOICE%"=="8" goto SETUP_OOBE
+if /i "%CHOICE%"=="9" goto RUN_ALL
+if /i "%CHOICE%"=="B" goto ENABLE_SECURE_BOOT
 if /i "%CHOICE%"=="E" goto READ_SECURE_BOOT
-if /i "%CHOICE%"=="O" goto SETUP_OOBE
-if /i "%CHOICE%"=="A" goto RUN_ALL
+if /i "%CHOICE%"=="G" goto GET_FW
+if /i "%CHOICE%"=="N" goto READ_PART_NUMBER
+if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
 if /i "%CHOICE%"=="R" goto REFRESH_IP
 if /i "%CHOICE%"=="D" goto RESELECT_DEVICE
 if /i "%CHOICE%"=="I" goto CHANGE_IP
@@ -96,21 +96,10 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 2. Get Current Firmware Version ----
-:GET_FW
-echo.
-echo [2] Getting current firmware version from %DEVICE_IP%...
-echo ------------------------------------------------------------
-curl %DEVICE_IP%:%PROD_PORT%/firmware/current
-echo.
-echo.
-pause
-goto MAIN_MENU
-
-:: ---- 3. Set Serial Number ----
+:: ---- 2. Set Serial Number ----
 :SET_SERIAL
 echo.
-echo [3] Setting serial number to %SN% on %DEVICE_IP%...
+echo [2] Setting serial number to %SN% on %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl -X PUT -H "Content-Type: text/plain" -d "%SN%" %DEVICE_IP%:%PROD_PORT%/serial-number
 echo.
@@ -118,10 +107,10 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 4. Set Part Number ----
+:: ---- 3. Set Part Number ----
 :SET_PART_NUMBER
 echo.
-echo [4] Setting part number to %PART_NUMBER% on %DEVICE_IP%...
+echo [3] Setting part number to %PART_NUMBER% on %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl -X PUT -H "Content-Type: text/plain" -d "%PART_NUMBER%" %DEVICE_IP%:%PROD_PORT%/article-number
 echo.
@@ -140,10 +129,10 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 5. Set Ethernet MAC Address ----
+:: ---- 4. Set Ethernet MAC Address ----
 :SET_MAC
 echo.
-echo [5] Setting Ethernet MAC address to %MAC_ADDRESS% on %DEVICE_IP%...
+echo [4] Setting Ethernet MAC address to %MAC_ADDRESS% on %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl -X PUT -H "Content-Type: text/plain" -d "%MAC_ADDRESS%" %DEVICE_IP%:%PROD_PORT%/mac-address
 echo.
@@ -151,10 +140,10 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 6. Install ClickShare Certificate ----
+:: ---- 5. Install ClickShare Certificate ----
 :CERT_CLICKSHARE
 echo.
-echo [6] Installing ClickShare certificate on %DEVICE_IP%...
+echo [5] Installing ClickShare certificate on %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl -X PUT %DEVICE_IP%:%PROD_PORT%/certificate/clickshare
 echo.
@@ -173,10 +162,10 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 7. Install MDEP Enrollment Certificate ----
+:: ---- 6. Install MDEP Enrollment Certificate ----
 :CERT_MDEP_ENROLLMENT
 echo.
-echo [7] Installing MDEP enrollment certificate on %DEVICE_IP%...
+echo [6] Installing MDEP enrollment certificate on %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl -X PUT %DEVICE_IP%:%PROD_PORT%/certificate/mdep_enrollment
 echo.
@@ -184,10 +173,10 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 8. Install MDEP Platform Certificate ----
+:: ---- 7. Install MDEP Platform Certificate ----
 :CERT_MDEP_PLATFORM
 echo.
-echo [8] Installing MDEP platform certificate on %DEVICE_IP%...
+echo [7] Installing MDEP platform certificate on %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl -X PUT %DEVICE_IP%:%PROD_PORT%/certificate/mdep_platform
 echo.
@@ -195,10 +184,20 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 9. Enable Secure Boot ----
+:: ---- 8. Auto Setup OOBE ----
+:SETUP_OOBE
+echo.
+echo [8] Running MDEP setup wizard on %DEVICE_IP%...
+echo ------------------------------------------------------------
+python "%~dp0setup_tool.py" --ip %DEVICE_IP%
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- B. Enable Secure Boot ----
 :ENABLE_SECURE_BOOT
 echo.
-echo [9] Enable Secure Boot via SP Flash Tool write-efuse
+echo [B] Enable Secure Boot via SP Flash Tool write-efuse
 echo ------------------------------------------------------------
 echo   Tool dir  : %SPFT_DIR%
 echo   flash.xml : %FW_BUILD_DIR%\download_agent\flash.xml
@@ -245,17 +244,18 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- O. Auto Setup OOBE ----
-:SETUP_OOBE
+:: ---- G. Get Current Firmware Version ----
+:GET_FW
 echo.
-echo [O] Running MDEP setup wizard on %DEVICE_IP%...
+echo [G] Getting current firmware version from %DEVICE_IP%...
 echo ------------------------------------------------------------
-python "%~dp0setup_tool.py" --ip %DEVICE_IP%
+curl %DEVICE_IP%:%PROD_PORT%/firmware/current
+echo.
 echo.
 pause
 goto MAIN_MENU
 
-:: ---- A. Run All Steps ----
+:: ---- 9. Run All Steps ----
 :RUN_ALL
 echo.
 echo ============================================================
@@ -268,32 +268,32 @@ echo [Step 1/8] Enabling manufacturing mode...
 curl -s -X PUT -H "Content-Type: application/x-www-form-urlencoded" -d "url=%ACTIVATE_URL%" %DEVICE_IP%:%PROD_PORT%/activate
 echo.
 
-echo [Step 2/8] Getting current firmware version...
-curl -s %DEVICE_IP%:%PROD_PORT%/firmware/current
-echo.
-
-echo [Step 3/8] Setting serial number to %SN%...
+echo [Step 2/8] Setting serial number to %SN%...
 curl -s -X PUT -H "Content-Type: text/plain" -d "%SN%" %DEVICE_IP%:%PROD_PORT%/serial-number
 echo.
 
-echo [Step 4/8] Setting part number to %PART_NUMBER%...
+echo [Step 3/8] Setting part number to %PART_NUMBER%...
 curl -s -X PUT -H "Content-Type: text/plain" -d "%PART_NUMBER%" %DEVICE_IP%:%PROD_PORT%/article-number
 echo.
 
-echo [Step 5/8] Setting Ethernet MAC address to %MAC_ADDRESS%...
+echo [Step 4/8] Setting Ethernet MAC address to %MAC_ADDRESS%...
 curl -s -X PUT -H "Content-Type: text/plain" -d "%MAC_ADDRESS%" %DEVICE_IP%:%PROD_PORT%/mac-address
 echo.
 
-echo [Step 6/8] Installing ClickShare certificate...
+echo [Step 5/8] Installing ClickShare certificate...
 curl -s -X PUT %DEVICE_IP%:%PROD_PORT%/certificate/clickshare
 echo.
 
-echo [Step 7/8] Installing MDEP enrollment certificate...
+echo [Step 6/8] Installing MDEP enrollment certificate...
 curl -s -X PUT %DEVICE_IP%:%PROD_PORT%/certificate/mdep_enrollment
 echo.
 
-echo [Step 8/8] Installing MDEP platform certificate...
+echo [Step 7/8] Installing MDEP platform certificate...
 curl -s -X PUT %DEVICE_IP%:%PROD_PORT%/certificate/mdep_platform
+echo.
+
+echo [Step 8/8] Running MDEP setup wizard (Auto Setup OOBE)...
+python "%~dp0setup_tool.py" --ip %DEVICE_IP%
 echo.
 
 echo.

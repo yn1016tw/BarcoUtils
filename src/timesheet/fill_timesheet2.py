@@ -1,16 +1,21 @@
 """
 TimesSheet Auto-Fill Tool v2 — Edge UI Automation variant.
 
-Navigates the already-running Windows Edge browser (via EdgeController /
-UI Automation) to the SAP Fiori timesheet page, waits for it to finish
-loading, and auto-refreshes (F5) if a Microsoft sign-in page is shown
-instead (expired SAP session cookie).
+Uses EdgeController + TimesheetPage (pywinauto / UI Automation, no Playwright)
+to navigate to the SAP Fiori timesheet page, auto-refresh through login pages,
+fill and submit a single day's entry, and report the result to Telegram.
+
+If the target date is already Approved / Sent For Approval, the fill is
+skipped and Edge is closed immediately (no edit-mode is entered).
 
 Usage:
     python src/timesheet/fill_timesheet2.py
-    python src/timesheet/fill_timesheet2.py --url "https://core.barco.com/..."
+    python src/timesheet/fill_timesheet2.py --date 2026-07-22
+    python src/timesheet/fill_timesheet2.py --date 2026-07-22 --assignment Duvel --hours 8
+    python src/timesheet/fill_timesheet2.py --skip
 """
 
+import datetime
 import logging
 import os
 import sys
@@ -22,6 +27,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "testcases"))
 from common.edge_desktop import EdgeController  # noqa: E402
+from timesheet_page import LoginPageError, TimesheetPage  # noqa: E402
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
@@ -55,79 +61,88 @@ SAP_URL = os.getenv(
     "SAP_URL",
     "https://core.barco.com/sap/bc/ui2/flp?sap-client=100&sap-language=EN#TimeEntry-manageTimesheet",
 )
-
-# Browser tab titles shown when the SAP session is not (yet) authenticated —
-# either SAP's own ABAP "Logon" page or a Microsoft SSO sign-in step.
-_LOGIN_TITLE_MARKERS = (
-    "logon",
-    "sign in",
-    "pick an account",
-    "enter password",
-    "stay signed in",
-    "verify your identity",
-    "approve sign in",
-    "help us protect your account",
-)
-
-_MAX_REFRESH_RETRIES = 10
-_REFRESH_INTERVAL_S = 10
-_INITIAL_LOAD_WAIT_S = 8
+DEFAULT_ASSIGNMENT = os.getenv("DEFAULT_ASSIGNMENT", "Duvel")
+DEFAULT_HOURS = float(os.getenv("DEFAULT_HOURS", "8"))
 
 
-class LoginPageError(Exception):
-    """Raised when the login page is still shown after all refresh retries."""
+# ---------------------------------------------------------------------------
+# Telegram notification
+# ---------------------------------------------------------------------------
+def send_telegram_result(message: str) -> None:
+    """Send a text message to Telegram via Bot API (no-op if not configured)."""
+    import json
+    import urllib.request
 
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+    if not token or not chat_id:
+        _print("Telegram not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID missing). Skipping.")
+        return
 
-def is_login_page(title: str) -> bool:
-    """Return True if the given browser tab title looks like a Microsoft sign-in page."""
-    t = (title or "").lower()
-    return any(marker in t for marker in _LOGIN_TITLE_MARKERS)
-
-
-def wait_for_timesheet(ctrl: EdgeController, url: str = SAP_URL) -> str:
-    """Navigate to the timesheet page and wait for it to finish loading.
-
-    If a Microsoft login page is shown instead (expired SAP session cookie),
-    refresh the page (F5) and retry up to _MAX_REFRESH_RETRIES times.
-
-    Returns the final page title. Raises LoginPageError if still on the
-    login page after all retries.
-    """
-    _print(f"Navigating to timesheet page: {url}")
-    ctrl.navigate(url, timeout=30)
-    time.sleep(_INITIAL_LOAD_WAIT_S)
-
-    for attempt in range(1, _MAX_REFRESH_RETRIES + 1):
-        title = ctrl.get_title() or ""
-        if not is_login_page(title):
-            _print(f"Timesheet loaded: {title}")
-            return title
-        _print(
-            f"[{attempt}/{_MAX_REFRESH_RETRIES}] Login page detected ('{title}') — refreshing ..."
-        )
-        ctrl.refresh(timeout=30)
-        time.sleep(_REFRESH_INTERVAL_S)
-
-    title = ctrl.get_title() or ""
-    if is_login_page(title):
-        raise LoginPageError(
-            f"Timesheet failed to load after {_MAX_REFRESH_RETRIES} reload(s) "
-            f"— still on login page ('{title}')."
-        )
-    return title
+    payload = json.dumps({"chat_id": chat_id, "text": message}).encode()
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            _print(f"Telegram notification sent (HTTP {resp.status})")
+    except Exception as e:
+        _print(f"WARNING: Telegram notification failed: {e}")
 
 
 @click.command()
+@click.option("--date", "date_str", default=None, help="Date to fill (YYYY-MM-DD). Defaults to today.")
+@click.option("--hours", default=None, type=float, help="Override hours.")
+@click.option("--assignment", default=None, help="Override assignment.")
+@click.option("--skip", is_flag=True, help="Exit without filling any entry.")
 @click.option("--url", default=None, help="Override the timesheet URL to navigate to.")
-def main(url: str | None):
+def main(date_str, hours, assignment, skip, url):
+    target_date = (
+        datetime.date.fromisoformat(date_str) if date_str else datetime.date.today()
+    )
+    target_assignment = assignment or DEFAULT_ASSIGNMENT
+    target_hours = hours if hours is not None else DEFAULT_HOURS
     target_url = url or SAP_URL
+
+    if skip:
+        _print(f"Timesheet fill skipped (--skip): {target_date}")
+        send_telegram_result(f"Timesheet skipped (--skip): {target_date}")
+        return
+
     ctrl = EdgeController()
     ctrl.connect()
+    ts = TimesheetPage(ctrl, url=target_url)
+
     try:
-        wait_for_timesheet(ctrl, target_url)
+        ts.open()
+
+        result = ts.autofill_day(target_date, target_assignment, target_hours)
+        time.sleep(1)
+        final_status = ts.row_status(target_date)
+        _print(f"autofill_day result: {result}, row_status: {final_status}")
+
+        if final_status:
+            message = (
+                f"Timesheet {result} for {target_date}: {final_status['recorded']}/"
+                f"{final_status['target']} h, {final_status['assignment']}, "
+                f"status={final_status['status']}"
+            )
+        else:
+            message = f"Timesheet fill FAILED for {target_date}: result={result}"
+
+        send_telegram_result(message)
     except LoginPageError as e:
         _print(f"ERROR: {e}")
+        send_telegram_result(f"Timesheet fill FAILED for {target_date}: {e}")
         sys.exit(1)
+    except Exception as e:
+        _print(f"ERROR: {e}")
+        send_telegram_result(f"Timesheet fill FAILED for {target_date}: {e}")
+        raise
+    finally:
+        ctrl.close()
 
 
 if __name__ == "__main__":

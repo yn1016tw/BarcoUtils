@@ -195,11 +195,13 @@ class TimesheetPage:
     # ------------------------------------------------------------------
     # Navigation within the timesheet
     # ------------------------------------------------------------------
-    def go_to_week(self, target_date: date, retries: int = 3) -> bool:
+    def go_to_week(self, target_date: date, retries: int = 8) -> bool:
         """Click the mini-calendar cell for target_date to load its week into the table.
 
-        Retries briefly since the calendar may not be fully rendered yet
-        immediately after open()/navigation completes.
+        Retries since the calendar may not be fully rendered yet immediately
+        after open()/navigation completes — on a cold page load the mini
+        calendar widget can take noticeably longer to render than the tab
+        title takes to stabilize.
         """
         self._focus_window()
         label = f"{target_date.strftime('%B')} {target_date.day}, {target_date.year}"

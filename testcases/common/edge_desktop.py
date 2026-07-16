@@ -149,10 +149,19 @@ class EdgeController:
         time.sleep(0.3)
         send_keys(url.replace("%", "{%}"), with_spaces=True)
         send_keys("{ENTER}")
+        time.sleep(0.5)
+        self._dismiss_resubmit_dialog()
         return self._wait_for_title_change(timeout)
 
     def refresh(self, timeout: int = 15) -> bool:
-        """Reload the current tab (F5)."""
+        """Reload the current tab (F5).
+
+        Handles Chromium's native "Resubmit the form?" confirmation dialog
+        (shown when refreshing a page reached via a form POST, e.g. SAP's
+        Logon redirect) by clicking its "Continue" button — otherwise the
+        page silently never actually reloads and refresh() appears to hang
+        the caller in a retry loop.
+        """
         win = self._main_window()
         try:
             win.set_focus()
@@ -160,7 +169,25 @@ class EdgeController:
             pass
         send_keys("{F5}")
         time.sleep(0.5)
+        self._dismiss_resubmit_dialog()
         return self._wait_for_title_change(timeout)
+
+    def _dismiss_resubmit_dialog(self) -> bool:
+        """Click 'Continue' on Chromium's 'Resubmit the form?' dialog if present."""
+        try:
+            win = self._main_window()
+            btns = win.descendants(title="Continue", control_type="Button")
+        except Exception:
+            return False
+        if not btns:
+            return False
+        try:
+            btns[-1].set_focus()
+            btns[-1].click_input()
+            time.sleep(0.5)
+            return True
+        except Exception:
+            return False
 
     def new_tab(self, url: str | None = None) -> bool:
         """Open a new tab (Ctrl+T), optionally navigating it to url."""

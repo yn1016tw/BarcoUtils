@@ -34,7 +34,7 @@ echo   Part Number : %PART_NUMBER%
 echo   MAC Address : %MAC_ADDRESS%
 echo   FW Build Dir: %FW_BUILD_DIR%
 echo.
-echo   [1] Enable Manufacturing Mode (activate)
+echo   [1] Enable Manufacturing Mode
 echo   [2] Set Serial Number
 echo   [3] Set Part Number
 echo   [4] Set Ethernet MAC Address
@@ -42,10 +42,10 @@ echo   [5] Set WiFi Configuration
 echo   [6] Install ClickShare Certificate
 echo   [7] Install MDEP Enrollment Certificate
 echo   [8] Install MDEP Platform Certificate
-echo   [9] Auto Setup OOBE (MDEP wizard)
+echo   [9] Setup OOBE
 echo   [10] Run All Steps (1-9 in sequence)
-echo   [B] Enable Secure Boot (SP Flash Tool write-efuse)
-echo   [E] Read Secure Boot Status (SP Flash Tool read-efuse)
+echo   [B] Enable Secure Boot
+echo   [E] Read Secure Boot Status
 echo   [G] Get Current Firmware Version
 echo   [N] Read Part Number
 echo   [V] Override ClickShare Certificate

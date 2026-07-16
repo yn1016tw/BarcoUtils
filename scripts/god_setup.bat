@@ -48,6 +48,7 @@ echo   [E] Read Secure Boot Status (SP Flash Tool read-efuse)
 echo   [G] Get Current Firmware Version
 echo   [N] Read Part Number
 echo   [V] Override ClickShare Certificate
+echo   [W] Set WiFi Configuration (SSID/AP mode via REST API)
 echo   [X] Reboot Device ^& Wait (boot + REST API ready)
 echo   [R] Refresh Device IP (adb)
 echo   [D] Select Device (adb)
@@ -75,6 +76,7 @@ if /i "%CHOICE%"=="E" goto READ_SECURE_BOOT
 if /i "%CHOICE%"=="G" goto GET_FW
 if /i "%CHOICE%"=="N" goto READ_PART_NUMBER
 if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
+if /i "%CHOICE%"=="W" goto SET_WIFI
 if /i "%CHOICE%"=="X" goto REBOOT_AND_WAIT
 if /i "%CHOICE%"=="R" goto REFRESH_IP
 if /i "%CHOICE%"=="D" goto RESELECT_DEVICE
@@ -160,6 +162,17 @@ echo.
 echo [V] Overriding ClickShare certificate on %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl -X PUT "%DEVICE_IP%:%PROD_PORT%/certificate/clickshare?override=True"
+echo.
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- W. Set WiFi Configuration ----
+:SET_WIFI
+echo.
+echo [W] Setting WiFi configuration (SSID: Clickshare-%SN%) on %DEVICE_IP%...
+echo ------------------------------------------------------------
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0set_wifi_config.ps1" -DeviceIp %DEVICE_IP% -RestPort %REST_PORT% -Ssid "Clickshare-%SN%" -Channel 7 -FrequencyBand "2.4 GHz" -OperationMode "AccessPoint"
 echo.
 echo.
 pause

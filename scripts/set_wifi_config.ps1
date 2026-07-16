@@ -55,7 +55,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
 $baseUrl = "https://${DeviceIp}:${RestPort}"
 
 function Get-ApiKey {
-    $resp = Invoke-RestMethod -Uri "$baseUrl/v3/login/internal" -Method Post -Headers @{ "accept" = "application/json" } -ContentType "application/json" -Body ""
+    $resp = Invoke-RestMethod -Uri "$baseUrl/v3/login/internal" -Method Post -Headers @{ "accept" = "application/json"; "Sec-Fetch-Site" = "same-origin" } -ContentType "application/json" -Body ""
     $key = $resp.apikey
     if (-not $key) { $key = $resp.apiKey }
     if (-not $key) { $key = $resp.token }
@@ -65,7 +65,7 @@ function Get-ApiKey {
 
 Write-Host "Logging in to get apikey (for GET)..."
 $apikey1 = Get-ApiKey
-$headers1 = @{ "Cookie" = "client-session=$apikey1" }
+$headers1 = @{ "Cookie" = "client-session=$apikey1"; "Sec-Fetch-Site" = "same-origin" }
 
 Write-Host "Reading current wireless config from $baseUrl/v3/network/wireless/1 ..."
 $current = Invoke-RestMethod -Uri "$baseUrl/v3/network/wireless/1" -Method Get -Headers $headers1
@@ -84,7 +84,7 @@ Write-Host $bodyJson
 
 Write-Host "Logging in to get apikey (for PATCH)..."
 $apikey2 = Get-ApiKey
-$headers2 = @{ "Cookie" = "client-session=$apikey2" }
+$headers2 = @{ "Cookie" = "client-session=$apikey2"; "Sec-Fetch-Site" = "same-origin" }
 
 Write-Host "Applying wireless config..."
 $result = Invoke-RestMethod -Uri "$baseUrl/v3/network/wireless/1" -Method Patch -Headers $headers2 -ContentType "application/json" -Body $bodyJson

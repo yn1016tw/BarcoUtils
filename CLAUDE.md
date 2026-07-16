@@ -97,6 +97,22 @@ python src/timesheet/fill_timesheet.py --skip              # exit without fillin
 
 Requires `src/timesheet/.env` with at minimum `SAP_URL`. Uses the Edge User Data profile at `%LOCALAPPDATA%\Microsoft\Edge\User Data`; if the SAP session has expired, automatically opens a headed window for SSO refresh. Logs to `src/timesheet/log/fill_timesheet.log`; screenshots to `src/timesheet/log/debug_*.png`.
 
+**Timesheet auto-fill v2** (`src/timesheet/fill_timesheet2.py` + `src/timesheet/timesheet_page.py`): same goal as `fill_timesheet.py`, but driven through `common.edge_desktop.EdgeController` + `TimesheetPage` (pure UI Automation via pywinauto — no Playwright, no browser profile). `TimesheetPage.open()` navigates and auto-refreshes (F5) through SAP's own Logon page or Microsoft SSO pages until the timesheet loads, up to 10 retries. By default every weekday from Monday of the target week through the target date is checked (`get_week_dates_to_fill()`); any day not already Approved / Sent For Approval / recorded is filled via `autofill_day()`, others are skipped.
+
+```bash
+pip install pywinauto pywin32 click python-dotenv
+
+python src/timesheet/fill_timesheet2.py
+python src/timesheet/fill_timesheet2.py --date 2026-07-22
+python src/timesheet/fill_timesheet2.py --date 2026-07-22 --assignment Duvel --hours 8
+python src/timesheet/fill_timesheet2.py --date 2026-07-22 --no-backfill
+python src/timesheet/fill_timesheet2.py --skip
+```
+
+`TimesheetPage.fill_day()` only supports whole-hour values — SAP's Hours `Spinner` (StepInput widget) rejects typed digits via synthetic keyboard events; only Up/Down arrow-key increments of 1.0 actually change the value. Logs to `src/timesheet/log/fill_timesheet2.log`.
+
+⚠️ Both timesheet tools operate on a real SAP account — `submit()` saves entered records with no dry-run mode.
+
 **HID test** (`src/hid-test/`): Windows x64 C++ tool to enumerate ClickShare Gen4 (PID=0x00CE) and Gen5 (PID=0x0185) Buttons (VID=0x0600) and verify HID open access ([A]–[D] CreateFile tests).
 
 ```bat
@@ -147,7 +163,10 @@ testcases/common/ui_device_setup_complete.py — SetupCompletePage page object (
 testcases/common/ui_teams_sign_in.py         — TeamsSignInPage page object (Teams device-code-flow sign-in screen)
 testcases/common/ui_teams_sign_in_email.py   — TeamsSignInEmailPage page object (Teams on-device email/username entry)
 testcases/common/ui_azure_auth_webview.py    — AzureAuthWebViewPage page object (Azure Authenticator MSAL WebView: password entry + device registration steps)
+testcases/common/ui_device_setup_provider.py — SetupProviderPage page object (MDEP "Choose your provider" wizard step)
+testcases/common/ui_clickshare_main.py       — ClickShareMainPage page object (ClickShare mode home screen, Duvel & god)
 testcases/common/teams_desktop.py     — TeamsDesktopController: pywinauto-based automation for Windows Teams desktop (create meeting, accept/decline/end call)
+testcases/common/edge_desktop.py      — EdgeController: pywinauto-based automation for Windows Edge desktop app (navigate, refresh, tabs, screenshot); used by src/timesheet tools
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, log Teams version, auto-accept incoming calls; writes meeting_info.json to logs/teams_meeting_host/ by default
 testcases/common/logger.py            — Logger class: write timestamped messages to stdout and {output_dir}/logs.txt simultaneously; methods: info/warning/error/debug
 testcases/common/acroname_hub.py      — AcronameHub class: brainstem SDK wrapper for Acroname USBHub3+ (USB module mode); controls port power/data/speed, measures current/voltage, manages boost charge and reports hub info
@@ -164,6 +183,8 @@ scripts/                 — Windows helper scripts (ADB key switcher, Duvel dev
 scripts/adb_key_switch.bat  — Switch active ADB vendor key between Duvel / Fruitesse
 scripts/app_tool.bat        — Interactive menu: manage CLICKSHARE_DEBUG env var (ON/OFF/clear) to control ClickShare desktop app log output
 scripts/duvel_setup.bat     — Interactive Duvel device provisioning; options 1-6: mfg mode/SN/reboot/cert/SSID; [7] MDEP setup wizard; [8] run all 1-6; [9] run all 1-6 + auto setup wizard
+scripts/god_setup.bat       — God-mode production API device setup (separate from ADB-based duvel_setup.bat): mfg mode/SN/part number/MAC/WiFi/certs/OOBE via REST; [10] run all 1-9; also secure boot enable/read, FW version, part number read
+scripts/set_wifi_config.ps1 — Configure Base Unit WiFi AP (SSID/channel/band) via v3 REST API; called by god_setup.bat [5]; fresh /v3/login/internal login before each call since the client-session cookie is short-lived (1 min)
 scripts/wave4_tool.bat      — Interactive menu: ethernet up/down, network info, Barco APK version listing
 scripts/setup_tool.bat      — Interactive launcher for setup_tool.py (prompts for IP / serial, then runs Python)
 scripts/setup_tool.py       — Polling-based MDEP setup wizard + Teams sign-in automation; detects active page every 2s and handles it regardless of FW page order; adds sys.path for testcases/common imports
@@ -252,7 +273,7 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 - `launch(package, activity)` / `force_stop(package)`
 - `launch_teams()` / `is_teams_foreground()` / `end_call()` — MTR-specific helpers; `end_call()` delegates to `in_call.hang_up()`
 - `go_to_main_page(timeout=15)` → `bool` — navigate to Teams Rooms home screen from any state (hang up if in-call → BACK up to 5× → launch_teams() fallback)
-- All page objects accessible as lazy properties (e.g. `ui.main`, `ui.in_call`, `ui.join_with_id`, `ui.more_menu`, `ui.settings`, `ui.device_settings`, `ui.norden_call`, `ui.invite_people`); setup wizard pages follow `ui.setup_*` / `ui.device_setup_wizard`; sign-in pages: `ui.teams_sign_in`, `ui.teams_sign_in_email`, `ui.azure_auth_webview`
+- All page objects accessible as lazy properties (e.g. `ui.main`, `ui.in_call`, `ui.join_with_id`, `ui.more_menu`, `ui.settings`, `ui.device_settings`, `ui.norden_call`, `ui.invite_people`, `ui.clickshare_main`); setup wizard pages follow `ui.setup_*` (including `ui.setup_provider`) / `ui.device_setup_wizard`; sign-in pages: `ui.teams_sign_in`, `ui.teams_sign_in_email`, `ui.azure_auth_webview`
 
 **Page object base** (`testcases/common/ui_base.py`): all page objects inherit `BasePage` — provides `__init__(ui)` and `_tap(candidates: list[dict]) -> bool` (tries each kwarg dict against `tap_element` in order).
 
@@ -298,6 +319,12 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 - `is_visible()` → bool
 - `get_title()` / `get_selected_language()` / `get_ip_address()` / `get_serial_number()` / `get_version()` → str | None
 - `select_language(language)` / `click_continue()` / `click_back()` / `click_accessibility_settings()` → bool
+
+**SetupProviderPage** (`testcases/common/ui_device_setup_provider.py`, access via `device.ui.setup_provider`):
+- `is_visible()` → bool; `get_title()` → str | None
+- `select_clickshare()` / `select_mtr()` / `click_confirm()` → bool
+- `get_ip_address()` / `get_serial_number()` / `get_version()` / `get_build_type()` → str | None
+- Note: on FW `04.04.00.master-2073`, resource-ids and their displayed text are swapped — `clickshareProviderCard` shows "ClickShare" but `mtrProviderCard`/`select_mtr()` shows "Microsoft Teams Rooms" text; methods are named after the resource-id (actual provider selected), not the mislabeled text
 
 **SetupNetworkPage** (`testcases/common/ui_device_setup_network.py`, access via `device.ui.setup_network`):
 - `is_visible()` → bool; `is_connected()` → bool
@@ -361,6 +388,17 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 - `is_visible()` → bool; `is_password_page()` / `is_device_registration_page()` → bool — detect current sub-step
 - Password step: `get_display_name()` → str | None; `enter_password(password)` / `click_sign_in()` / `click_back()` / `click_forgot_password()` / `click_sign_in_with_another_account()` / `click_terms_of_use()` / `click_privacy_cookies()` → bool
 - Registration step: `get_heading()` / `get_description()` → str | None; `click_register()` / `click_more_details()` → bool
+
+**EdgeController** (`testcases/common/edge_desktop.py`, `from common.edge_desktop import EdgeController`): pywinauto-based automation for the Windows Microsoft Edge desktop app (`msedge.exe`). Requires `pip install pywinauto pywin32` (`psutil` too for `get_version()`).
+- `connect(launch=True, timeout=30)` — attach to the real Edge browser window (matched by title/class, not `top_window()`, since `msedge.exe` spawns many windowless helper processes); launches and waits if not running; maximizes the window
+- `navigate(url, timeout=15)` → bool — load a URL via the address bar (Ctrl+L)
+- `refresh(timeout=15)` → bool — reload (F5); auto-dismisses Chromium's "Resubmit the form?" dialog (shown after a form POST, e.g. SAP's Logon redirect), otherwise refresh silently never completes
+- `new_tab(url=None)` / `close_tab()` / `close()` → bool / None
+- `get_title()` / `get_url(timeout=5)` → str | None — URL read directly from the address bar Edit control (automation_id `view_1021`)
+- `screenshot(path)` → bool
+- `maximize()` — public wrapper to re-maximize on demand
+- `get_version()` → str | None — static method; reads FileVersion from the running `msedge.exe` path via `psutil` + `win32api`
+- `_main_window()` picks the real Edge window by title match, falling back to the largest window by area — `top_window()` can return a stale tooltip/flyout pane left over from a hover instead of the browser window
 
 **TeamsDesktopController** (`testcases/common/teams_desktop.py`): pywinauto-based automation for the Windows Teams desktop app. Requires `pip install pywinauto pywin32 psutil`.
 - `get_version()` → `str | None` — return running Teams version (e.g. `'26106.1911.4707.3286'`); static method, Teams must be running, requires psutil

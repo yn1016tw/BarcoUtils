@@ -50,10 +50,12 @@ BarcoUtils/
 │   │   ├── ui_teams_sign_in.py           # TeamsSignInPage — Teams device-code-flow sign-in
 │   │   ├── ui_teams_sign_in_email.py     # TeamsSignInEmailPage — Teams on-device email entry
 │   │   ├── ui_azure_auth_webview.py      # AzureAuthWebViewPage — Azure MSAL WebView (password + registration)
+│   │   ├── ui_device_setup_provider.py   # SetupProviderPage — "Choose your provider" wizard step
 │   │   ├── ui_clickshare_main.py         # ClickShareMainPage — ClickShare mode home screen (Duvel & god)
 │   │   ├── acroname_hub.py               # AcronameHub — brainstem SDK wrapper for USBHub3+
 │   │   ├── teams_desktop.py              # TeamsDesktopController — Windows Teams desktop automation
 │   │   ├── teams_meeting_host.py         # Windows host: create Meet Now meeting, auto-accept calls
+│   │   ├── edge_desktop.py               # EdgeController — Windows Edge desktop automation (pywinauto)
 │   │   ├── logger.py                     # Logger — write timestamped messages to stdout + file
 │   │   ├── utils.py                      # Shared utilities: screenshot, recording, scrcpy helpers
 │   │   └── version.py                    # VERSION string
@@ -68,11 +70,30 @@ BarcoUtils/
 │   ├── adb_key_switch.bat         # Switch active ADB key between Duvel / Fruitesse
 │   ├── app_tool.bat               # Manage CLICKSHARE_DEBUG env var (ON/OFF/clear) for desktop app log
 │   ├── duvel_setup.bat            # Interactive Duvel device setup helper
+│   ├── god_setup.bat              # God-mode production API device setup (mfg mode, SN, certs, WiFi, OOBE)
+│   ├── set_wifi_config.ps1        # Configure Base Unit WiFi AP (SSID/channel/band) via v3 REST API
 │   ├── wave4_tool.bat             # Interactive menu to control ethernet (up/down) via ADB
 │   ├── setup_tool.bat             # Launcher: interactive menu → calls setup_tool.py
 │   ├── setup_tool.py              # MDEP setup wizard + Teams sign-in (polling-based, order-independent)
 │   ├── record_tool.bat            # Launcher: calls record_tool.ps1
-│   └── record_tool.ps1            # Screen recording tool using ffmpeg gdigrab
+│   ├── record_tool.ps1            # Screen recording tool using ffmpeg gdigrab
+│   ├── diagnose-hid-binding.ps1   # Inspect USB/HID registry driver bindings for Gen5 Button
+│   ├── find-hid-holder.ps1        # Enumerate processes holding open handles to the Gen5 Button HID device
+│   ├── fix-barco-driver.ps1       # Remove duplicate BarcoClickShareDrv entries via pnputil (admin)
+│   └── test-hid-clickshare.ps1    # Open/read/write Gen5 Button HID device from PowerShell
+├── src/
+│   ├── timesheet/
+│   │   ├── fill_timesheet.py      # SAP Fiori CATS timesheet auto-fill via Playwright + Edge persistent profile
+│   │   ├── fill_timesheet2.py     # Same, via EdgeController + TimesheetPage (pywinauto, no Playwright)
+│   │   ├── timesheet_page.py      # TimesheetPage — UI-Automation page object for SAP Fiori "My Timesheet"
+│   │   └── 2026_holidays.csv      # Taiwan public holidays used for holiday-vs-workday classification
+│   ├── hid-test/
+│   │   ├── hid_test.cpp           # Windows C++ tool: enumerate Gen4/Gen5 Button HID devices, test CreateFile access
+│   │   └── build.bat              # MSVC build script (auto-detects VS 2017/2019/2022)
+│   └── hid-desc/
+│       ├── hid_desc_tool.bat      # ADB menu tool: backup/restore/patch the Button's HID report descriptor
+│       ├── parse_hid_desc.py      # Parse and pretty-print a HID report descriptor .bin file
+│       └── patch_hid_desc.py      # Patch Usage Page / Usage in a HID report descriptor .bin file
 └── tools/
     ├── v4l2_stream_test.c         # Minimal V4L2 streaming test (source)
     └── v4l2_stream_test           # Precompiled static ARM64 binary (Android 26+)
@@ -425,6 +446,30 @@ and clicks at calibrated fractional coordinates.
 
 ---
 
+## common/edge_desktop.py — EdgeController
+
+pywinauto-based automation for the Windows Microsoft Edge desktop app (`msedge.exe`). Drives the page purely through the UI Automation tree — no DOM access. Used by the timesheet tools (below) to navigate SAP Fiori pages.
+
+```python
+from common.edge_desktop import EdgeController
+
+ctrl = EdgeController()
+ctrl.connect()                        # attach to running Edge, launch if not running; maximizes window
+ctrl.navigate("https://example.com")
+print(ctrl.get_title(), ctrl.get_url())
+ctrl.refresh()                         # F5; auto-dismisses Chromium's "Resubmit the form?" dialog
+ctrl.new_tab("https://example.com")
+ctrl.close_tab()
+ctrl.screenshot("C:/logs/edge.png")
+ctrl.close()
+```
+
+Requires `pip install pywinauto pywin32` (`pip install psutil` too for `get_version()`).
+
+`connect()` matches the real browser window by title/class instead of `top_window()`, since `msedge.exe` spawns many windowless helper processes (renderer/GPU/etc.) that a naive attach could latch onto. `_main_window()` similarly rejects stale tooltip/flyout panes left over from a hover, picking the actual Edge window by title match (falling back to the largest window by area).
+
+---
+
 ## common/ui_mtr.py — MtrUi
 
 ADB-based UI controller for Microsoft Teams Rooms. Wraps raw ADB input, UI hierarchy queries,  
@@ -466,6 +511,7 @@ ui.in_call.hang_up()
 | `ui.norden_call` | `NordenCallPage` | `ui_norden_call.py` | Dial screen |
 | `ui.join_with_id` | `JoinWithIdPage` | `ui_join_with_id.py` | Join with an ID dialog |
 | `ui.clickshare_main` | `ClickShareMainPage` | `ui_clickshare_main.py` | ClickShare mode home screen (Duvel & god) |
+| `ui.setup_provider` | `SetupProviderPage` | `ui_device_setup_provider.py` | MDEP "Choose your provider" wizard step |
 
 All page objects inherit `BasePage` (`ui_base.py`) which provides `__init__(ui)` and `_tap(candidates)`.
 
@@ -606,7 +652,7 @@ python scripts/setup_tool.py --serial 1882000501 --admin-password Admin@123
 python scripts/setup_tool.py --ip 192.168.1.100 --email user@domain.com --password MyPW
 ```
 
-**Pages handled (any order):** confirm connection, language, network, date/time, terms, privacy, firmware update, XMS Cloud (skip), admin password, confirm installation, setup complete, Teams sign-in, Teams email, Azure password, device registration.
+**Pages handled (any order):** confirm connection, provider selection, language, network, date/time, terms, privacy, firmware update, XMS Cloud (skip), admin password, confirm installation, setup complete, Teams sign-in, Teams email, Azure password, device registration.
 
 **Flow ends** once either the MTR home screen (Duvel) or the ClickShare main screen (Duvel & god) is reached.
 
@@ -640,6 +686,121 @@ scripts\duvel_setup.bat
 | `[A]` | Find Device IP Address (adb) |
 | `[B]` | Change Device IP |
 | `[C]` | Change SN |
+
+### god_setup.bat
+
+Interactive helper for production-line device setup via the Base Unit's God-mode REST API (separate from ADB-based `duvel_setup.bat`).
+
+```
+scripts\god_setup.bat
+```
+
+**Menu options:**
+
+| Option | Description |
+|--------|--------------|
+| `[1]` | Enable Manufacturing Mode |
+| `[2]` | Set Serial Number |
+| `[3]` | Set Part Number |
+| `[4]` | Set Ethernet MAC Address |
+| `[5]` | Set WiFi Configuration (calls `set_wifi_config.ps1`) |
+| `[6]` | Install ClickShare Certificate |
+| `[7]` | Install MDEP Enrollment Certificate |
+| `[8]` | Install MDEP Platform Certificate |
+| `[9]` | Setup OOBE |
+| `[10]` | Run All Steps (1–9 in sequence) |
+| `[B]` | Enable Secure Boot |
+| `[E]` | Read Secure Boot Status |
+| `[G]` | Get Current Firmware Version |
+| `[N]` | Read Part Number |
+| `[V]` | Override ClickShare Certificate |
+| `[X]` | Reboot Device |
+| `[R]` / `[D]` | Refresh / Select Device (adb) |
+| `[S]` / `[P]` / `[M]` / `[F]` | Change Serial Number / Part Number / MAC Address / FW Build Dir |
+
+### set_wifi_config.ps1
+
+Configures the Base Unit's WiFi Access Point (SSID, channel, band) via the v3 REST API (port 4003 by default). Called by `god_setup.bat` option `[5]`, or standalone:
+
+```powershell
+scripts\set_wifi_config.ps1 -DeviceIp 192.168.1.100 -Ssid Clickshare-9752000162 -Channel 7
+```
+
+The `/v3/login/internal` endpoint returns a short-lived (1 minute) session via a `Set-Cookie: client-session=<jwt>` header — a fresh login is performed immediately before each REST call, and PowerShell's `WebRequestSession` (`-SessionVariable`/`-WebSession`) captures/resends that cookie automatically.
+
+### HID diagnostic scripts
+
+Standalone PowerShell tools for troubleshooting the Gen5 ClickShare Button (VID=0600 PID=0185) HID binding on Windows:
+
+| Script | Purpose |
+|--------|---------|
+| `diagnose-hid-binding.ps1` | Inspect USB/HID registry driver bindings for the Gen5 Button; run with `BarcoClickShareAutorunService` disabled |
+| `find-hid-holder.ps1` | Enumerate which processes hold open handles to the Gen5 Button HID device |
+| `fix-barco-driver.ps1` | Remove duplicate `BarcoClickShareDrv` registry entries via `pnputil` (requires Administrator) |
+| `test-hid-clickshare.ps1` | Open/read/write the Gen5 Button HID device from PowerShell directly (no build required) |
+
+---
+
+## src/ utilities
+
+Standalone tools that don't fit the ADB test-case flow above. Not covered by `testcases/`'s `sys.path` resolution — each is self-contained or adds its own path.
+
+### src/timesheet — Timesheet Auto-Fill
+
+Automates SAP Fiori CATS time entry so weekly hours don't have to be filled manually.
+
+**fill_timesheet.py** — Playwright-based, logs in via the Edge persistent profile:
+
+```bash
+pip install playwright click python-dotenv
+playwright install msedge
+
+python src/timesheet/fill_timesheet.py                     # fill today (headed, with backfill Mon-today)
+python src/timesheet/fill_timesheet.py --date 2026-05-30   # specific date
+python src/timesheet/fill_timesheet.py --hidden            # headless Edge
+python src/timesheet/fill_timesheet.py --no-backfill       # only fill the target date
+python src/timesheet/fill_timesheet.py --skip              # exit without filling (notifies Telegram)
+```
+
+**fill_timesheet2.py** — same behaviour, driven instead through `common.edge_desktop.EdgeController` + `timesheet_page.TimesheetPage` (pure UI Automation, no Playwright/browser profile):
+
+```bash
+pip install pywinauto pywin32 click python-dotenv
+
+python src/timesheet/fill_timesheet2.py
+python src/timesheet/fill_timesheet2.py --date 2026-07-22
+python src/timesheet/fill_timesheet2.py --date 2026-07-22 --assignment Duvel --hours 8
+python src/timesheet/fill_timesheet2.py --date 2026-07-22 --no-backfill
+python src/timesheet/fill_timesheet2.py --skip
+```
+
+By default every weekday from Monday of the target week up to the target date is checked; any day not already Approved / Sent For Approval / recorded is filled. `TimesheetPage.fill_day()` only supports whole-hour values — SAP's Hours field rejects typed digits and only accepts Up/Down arrow-key increments of 1.0.
+
+Both variants require `src/timesheet/.env` with at least `SAP_URL` (plus `DEFAULT_ASSIGNMENT`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` for notifications — not committed). Logs to `src/timesheet/log/`.
+
+⚠️ These operate on a real SAP account — `submit()` saves entered records with no dry-run mode.
+
+### src/hid-test — HID open-access test
+
+Windows x64 C++ tool to enumerate ClickShare Gen4 (PID=0x00CE) and Gen5 (PID=0x0185) Buttons (VID=0x0600) and verify HID open access.
+
+```bat
+src\hid-test\build.bat   :: compile with MSVC (auto-detects VS 2017/2019/2022)
+src\hid-test\hid_test.exe
+```
+
+### src/hid-desc — HID descriptor tool
+
+ADB-based menu tool to inspect, backup/restore, and patch the ClickShare Button's HID report descriptor (`/clickshare/hid*.bin`, accessed as root via `adb` — Button must be USB-connected).
+
+```bat
+src\hid-desc\hid_desc_tool.bat
+```
+
+```bash
+python src/hid-desc/parse_hid_desc.py <file.bin> [file2.bin ...]
+python src/hid-desc/patch_hid_desc.py <file.bin> --usage-page 0x0081 --usage 0x83
+```
 
 ---
 

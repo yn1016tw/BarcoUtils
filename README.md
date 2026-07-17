@@ -776,6 +776,8 @@ python src/timesheet/fill_timesheet2.py --skip
 
 By default every weekday from Monday of the target week up to the target date is checked; any day not already Approved / Sent For Approval / recorded is filled. `TimesheetPage.fill_day()` only supports whole-hour values — SAP's Hours field rejects typed digits and only accepts Up/Down arrow-key increments of 1.0.
 
+The Telegram notification reports only the target date's outcome (not the whole backfilled week), prefixed with an OK (✅) or FAIL (❌) icon and a screenshot of the Edge window attached. It's OK whenever the target date ends up filled this run or was already filled/approved before this run; FAIL only when the row can't be located or an exception is raised.
+
 Both variants require `src/timesheet/.env` with at least `SAP_URL` (plus `DEFAULT_ASSIGNMENT`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` for notifications — not committed). Logs to `src/timesheet/log/`.
 
 ⚠️ These operate on a real SAP account — `submit()` saves entered records with no dry-run mode.

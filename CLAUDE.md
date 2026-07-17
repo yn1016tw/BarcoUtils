@@ -111,6 +111,8 @@ python src/timesheet/fill_timesheet2.py --skip
 
 `TimesheetPage.fill_day()` only supports whole-hour values — SAP's Hours `Spinner` (StepInput widget) rejects typed digits via synthetic keyboard events; only Up/Down arrow-key increments of 1.0 actually change the value. Logs to `src/timesheet/log/fill_timesheet2.log`.
 
+`send_telegram_result(message, image_path=None)` sends a text message, or (when `image_path` exists) a `sendPhoto` multipart request with the message as caption. The final notification reports only `target_date`'s outcome (not the whole backfilled week), built by `_build_ok_or_fail_message()`: prefixed ✅ when `target_date` was filled this run or was already filled/approved before this run (`filled` / `skipped_already_filled`), ❌ only when the row couldn't be located (`row_not_found`) or an exception was raised — each case attaches a screenshot of the Edge window (`ctrl.screenshot()`) taken at report time.
+
 ⚠️ Both timesheet tools operate on a real SAP account — `submit()` saves entered records with no dry-run mode.
 
 **HID test** (`src/hid-test/`): Windows x64 C++ tool to enumerate ClickShare Gen4 (PID=0x00CE) and Gen5 (PID=0x0185) Buttons (VID=0x0600) and verify HID open access ([A]–[D] CreateFile tests).

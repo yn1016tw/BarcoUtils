@@ -121,7 +121,8 @@ function renderNode(node) {
     const li = document.createElement("li");
     if (child.entry) {
       li.appendChild(renderLeafRow(child.entry));
-    } else {
+    }
+    if (child.children && Object.keys(child.children).length > 0) {
       const label = document.createElement("span");
       label.className = "tree-group";
       label.textContent = `▾ ${name}`;

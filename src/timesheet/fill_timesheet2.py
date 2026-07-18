@@ -4,7 +4,12 @@ TimesSheet Auto-Fill Tool v2 — Edge UI Automation variant.
 Uses EdgeController + TimesheetPage (pywinauto / UI Automation, no Playwright)
 to navigate to the SAP Fiori timesheet page, auto-refresh through login pages,
 fill and submit a single day's entry (or backfill Monday..target_date), and
-report the result to Telegram.
+report the result for target_date to Telegram with an OK (✅) / FAIL (❌) icon,
+attaching a screenshot of the Edge window at the time of reporting.
+The message is OK when target_date was filled this run or was already
+filled/approved before this run (skipped_already_filled); it's only
+reported as FAIL when the row itself couldn't be located or an exception
+was raised.
 
 By default, every weekday from Monday of target_date's week up to and
 including target_date is checked; any day that is not already Approved /
@@ -86,8 +91,9 @@ def get_week_dates_to_fill(target_date: datetime.date) -> list:
 # ---------------------------------------------------------------------------
 # Telegram notification
 # ---------------------------------------------------------------------------
-def send_telegram_result(message: str) -> None:
-    """Send a text message to Telegram via Bot API (no-op if not configured)."""
+def send_telegram_result(message: str, image_path: Path | None = None) -> None:
+    """Send a text message (and optional photo) to Telegram via Bot API
+    (no-op if not configured)."""
     import json
     import urllib.request
 
@@ -97,17 +103,60 @@ def send_telegram_result(message: str) -> None:
         _print("Telegram not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID missing). Skipping.")
         return
 
-    payload = json.dumps({"chat_id": chat_id, "text": message}).encode()
-    req = urllib.request.Request(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-    )
+    base = f"https://api.telegram.org/bot{token}"
+
+    if image_path and image_path.exists():
+        with open(image_path, "rb") as f:
+            img_data = f.read()
+        boundary = "----TGBoundary"
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="chat_id"\r\n\r\n{chat_id}\r\n'
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="caption"\r\n\r\n{message}\r\n'
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="photo"; filename="result.png"\r\n'
+            f"Content-Type: image/png\r\n\r\n"
+        ).encode() + img_data + f"\r\n--{boundary}--\r\n".encode()
+        req = urllib.request.Request(
+            f"{base}/sendPhoto",
+            data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        )
+    else:
+        payload = json.dumps({"chat_id": chat_id, "text": message}).encode()
+        req = urllib.request.Request(
+            f"{base}/sendMessage",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             _print(f"Telegram notification sent (HTTP {resp.status})")
     except Exception as e:
         _print(f"WARNING: Telegram notification failed: {e}")
+
+
+def _build_ok_or_fail_message(target_date, result, status) -> str:
+    """Build a short Telegram confirmation for target_date, prefixed with
+    an OK/FAIL icon. Considered OK whenever the day ended up filled this run
+    ("filled") or was already filled/approved before this run
+    ("skipped_already_filled") — i.e. any outcome other than a failure to
+    even locate the row ("row_not_found")."""
+    status_text = (status or {}).get("status", "").strip()
+    ok = result in ("filled", "skipped_already_filled")
+
+    icon = "✅" if ok else "❌"
+    if status:
+        detail = (
+            f"{status['recorded']}/{status['target']} h, {status['assignment']}, "
+            f"status={status_text or 'unknown'}"
+        )
+    else:
+        detail = "no row status available"
+
+    return f"{icon} Timesheet {target_date} — result={result} ({detail})"
 
 
 @click.command()
@@ -149,28 +198,39 @@ def main(date_str, hours, assignment, skip, url, no_backfill):
     try:
         ts.open()
 
-        lines = []
+        target_result = None
+        target_final_status = None
         for d in dates_to_process:
             result = ts.autofill_day(d, target_assignment, target_hours)
             time.sleep(1)
             final_status = ts.row_status(d)
             _print(f"[{d}] autofill_day result: {result}, row_status: {final_status}")
-            if final_status:
-                lines.append(
-                    f"{d}: {result} ({final_status['recorded']}/{final_status['target']} h, "
-                    f"{final_status['assignment']}, status={final_status['status']})"
-                )
-            else:
-                lines.append(f"{d}: {result}")
+            if d == target_date:
+                target_result = result
+                target_final_status = final_status
 
-        send_telegram_result("Timesheet results:\n" + "\n".join(lines))
+        screenshot_path = _LOG_DIR / f"debug_{target_date}.png"
+        if ctrl.screenshot(str(screenshot_path)):
+            _print(f"Screenshot saved: {screenshot_path}")
+        else:
+            screenshot_path = None
+        send_telegram_result(
+            _build_ok_or_fail_message(target_date, target_result, target_final_status),
+            image_path=screenshot_path,
+        )
     except LoginPageError as e:
         _print(f"ERROR: {e}")
-        send_telegram_result(f"Timesheet fill FAILED for {target_date}: {e}")
+        screenshot_path = _LOG_DIR / f"debug_{target_date}_error.png"
+        if not ctrl.screenshot(str(screenshot_path)):
+            screenshot_path = None
+        send_telegram_result(f"❌ Timesheet fill FAILED for {target_date}: {e}", image_path=screenshot_path)
         sys.exit(1)
     except Exception as e:
         _print(f"ERROR: {e}")
-        send_telegram_result(f"Timesheet fill FAILED for {target_date}: {e}")
+        screenshot_path = _LOG_DIR / f"debug_{target_date}_error.png"
+        if not ctrl.screenshot(str(screenshot_path)):
+            screenshot_path = None
+        send_telegram_result(f"❌ Timesheet fill FAILED for {target_date}: {e}", image_path=screenshot_path)
         raise
     finally:
         ctrl.close()

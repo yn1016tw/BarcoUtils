@@ -1,3 +1,4 @@
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from backend.adb_devices import Device, connect_ip, list_devices, parse_devices_output
@@ -53,3 +54,33 @@ def test_connect_ip_failure(mock_run):
     success, message = connect_ip("1.2.3.4:5555")
     assert success is False
     assert "unable to connect" in message
+
+
+@patch("backend.adb_devices.subprocess.run")
+def test_list_devices_returns_empty_on_timeout(mock_run):
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd="adb devices -l", timeout=5.0)
+    devices = list_devices()
+    assert devices == []
+
+
+@patch("backend.adb_devices.subprocess.run")
+def test_list_devices_returns_empty_when_adb_missing(mock_run):
+    mock_run.side_effect = FileNotFoundError("adb not found")
+    devices = list_devices()
+    assert devices == []
+
+
+@patch("backend.adb_devices.subprocess.run")
+def test_connect_ip_returns_failure_on_timeout(mock_run):
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd="adb connect", timeout=5.0)
+    success, message = connect_ip("192.168.1.100:5555")
+    assert success is False
+    assert message
+
+
+@patch("backend.adb_devices.subprocess.run")
+def test_connect_ip_returns_failure_when_adb_missing(mock_run):
+    mock_run.side_effect = FileNotFoundError("adb not found")
+    success, message = connect_ip("192.168.1.100:5555")
+    assert success is False
+    assert message

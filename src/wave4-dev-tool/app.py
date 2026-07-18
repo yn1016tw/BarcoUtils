@@ -21,11 +21,13 @@ class Api:
 
     def list_config(self, domain: str):
         if domain == "clickshare":
-            entries = config_provider.list_clickshare(self.serial)
+            ok, entries = config_provider.list_clickshare(self.serial)
         elif domain == "system":
-            entries = config_provider.list_system(self.serial)
+            ok, entries = config_provider.list_system(self.serial)
         else:
             return {"success": False, "error": f"domain '{domain}' has no list API"}
+        if not ok:
+            return {"success": False, "error": "無法連接裝置"}
         return {"success": True, "entries": [e.__dict__ for e in entries]}
 
     def get_mdep(self, key: str):

@@ -33,22 +33,28 @@ def parse_devices_output(output: str) -> list[Device]:
 
 
 def list_devices(adb_path: str = "adb", timeout: float = 5.0) -> list[Device]:
-    result = subprocess.run(
-        [adb_path, "devices", "-l"],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        result = subprocess.run(
+            [adb_path, "devices", "-l"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
     return parse_devices_output(result.stdout)
 
 
 def connect_ip(ip_port: str, adb_path: str = "adb", timeout: float = 5.0) -> tuple[bool, str]:
-    result = subprocess.run(
-        [adb_path, "connect", ip_port],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        result = subprocess.run(
+            [adb_path, "connect", ip_port],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False, "adb not found or timed out"
     output = (result.stdout or "") + (result.stderr or "")
     success = "connected to" in output.lower()
     return success, output.strip()

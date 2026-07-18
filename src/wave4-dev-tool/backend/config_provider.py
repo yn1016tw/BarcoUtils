@@ -22,6 +22,10 @@ def parse_content_query_output(output: str) -> list[tuple[str, str]]:
     return rows
 
 
+def _shell_quote(s: str) -> str:
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
 def _adb_cmd(serial: str | None, shell_args: list[str], adb_path: str = "adb") -> list[str]:
     cmd = [adb_path]
     if serial:
@@ -39,8 +43,8 @@ def _run(cmd: list[str], timeout: float = 5.0) -> tuple[bool, str]:
     return result.returncode == 0, output
 
 
-def list_clickshare(serial: str | None, prefix: str = "", adb_path: str = "adb") -> list[ConfigEntry]:
-    uri = f"content://{AUTHORITY}/clickshare/{prefix}"
+def list_clickshare(serial: str | None, prefix: str = "", adb_path: str = "adb") -> tuple[bool, list[ConfigEntry]]:
+    uri = f"content://{AUTHORITY}/clickshare/{_shell_quote(prefix)}" if prefix else f"content://{AUTHORITY}/clickshare/"
     cmd = _adb_cmd(
         serial,
         ["content", "query", "--uri", uri, "--projection", "key:value"],
@@ -48,30 +52,40 @@ def list_clickshare(serial: str | None, prefix: str = "", adb_path: str = "adb")
     )
     ok, output = _run(cmd)
     if not ok:
-        return []
-    return [
+        return False, []
+    entries = [
         ConfigEntry(domain="clickshare", key=key, value=value, editable=True)
         for key, value in parse_content_query_output(output)
     ]
+    return True, entries
 
 
 def update_clickshare(serial: str | None, key: str, value: str, adb_path: str = "adb") -> tuple[bool, str]:
-    uri = f"content://{AUTHORITY}/clickshare/{key}"
-    cmd = _adb_cmd(serial, ["content", "update", "--uri", uri, "--bind", f"value:s:{value}"], adb_path)
-    ok, output = _run(cmd)
-    if ok and "0 rows" not in output.lower():
-        return True, output
+    ok, existing = list_clickshare(serial, prefix=key, adb_path=adb_path)
+    exists = ok and any(e.key == key for e in existing)
+    if exists:
+        uri = f"content://{AUTHORITY}/clickshare/{_shell_quote(key)}"
+        cmd = _adb_cmd(
+            serial,
+            ["content", "update", "--uri", uri, "--bind", _shell_quote(f"value:s:{value}")],
+            adb_path,
+        )
+        return _run(cmd)
     return insert_clickshare(serial, key, value, adb_path)
 
 
 def insert_clickshare(serial: str | None, key: str, value: str, adb_path: str = "adb") -> tuple[bool, str]:
-    uri = f"content://{AUTHORITY}/clickshare/{key}"
-    cmd = _adb_cmd(serial, ["content", "insert", "--uri", uri, "--bind", f"value:s:{value}"], adb_path)
+    uri = f"content://{AUTHORITY}/clickshare/{_shell_quote(key)}"
+    cmd = _adb_cmd(
+        serial,
+        ["content", "insert", "--uri", uri, "--bind", _shell_quote(f"value:s:{value}")],
+        adb_path,
+    )
     return _run(cmd)
 
 
 def delete_clickshare(serial: str | None, key: str, adb_path: str = "adb") -> tuple[bool, str]:
-    uri = f"content://{AUTHORITY}/clickshare/{key}"
+    uri = f"content://{AUTHORITY}/clickshare/{_shell_quote(key)}"
     cmd = _adb_cmd(serial, ["content", "delete", "--uri", uri], adb_path)
     return _run(cmd)
 
@@ -122,34 +136,48 @@ SYSTEM_KEYS: dict[str, bool] = {
 }
 
 
-def get_system_value(serial: str | None, logical_key: str, adb_path: str = "adb") -> str | None:
-    uri = f"content://{AUTHORITY}/system/{logical_key}"
+def _query_single_value(serial: str | None, uri: str, adb_path: str) -> tuple[bool, str | None]:
     cmd = _adb_cmd(serial, ["content", "query", "--uri", uri], adb_path)
     ok, output = _run(cmd)
     if not ok:
-        return None
+        return False, None
     rows = parse_content_query_output(output)
-    return rows[0][1] if rows else None
+    return True, (rows[0][1] if rows else None)
 
 
-def list_system(serial: str | None, adb_path: str = "adb") -> list[ConfigEntry]:
+def get_system_value(serial: str | None, logical_key: str, adb_path: str = "adb") -> str | None:
+    uri = f"content://{AUTHORITY}/system/{_shell_quote(logical_key)}"
+    ok, value = _query_single_value(serial, uri, adb_path)
+    return value if ok else None
+
+
+def list_system(serial: str | None, adb_path: str = "adb") -> tuple[bool, list[ConfigEntry]]:
     entries = []
-    for logical_key, editable in SYSTEM_KEYS.items():
-        value = get_system_value(serial, logical_key, adb_path) or ""
-        entries.append(ConfigEntry(domain="system", key=logical_key, value=value, editable=editable))
-    return entries
+    for i, (logical_key, editable) in enumerate(SYSTEM_KEYS.items()):
+        uri = f"content://{AUTHORITY}/system/{_shell_quote(logical_key)}"
+        ok, value = _query_single_value(serial, uri, adb_path)
+        if not ok:
+            if i == 0:
+                return False, []
+            value = None
+        entries.append(ConfigEntry(domain="system", key=logical_key, value=value or "", editable=editable))
+    return True, entries
 
 
 def update_system(serial: str | None, logical_key: str, value: str, adb_path: str = "adb") -> tuple[bool, str]:
     if not SYSTEM_KEYS.get(logical_key, False):
         return False, f"{logical_key} is read-only"
-    uri = f"content://{AUTHORITY}/system/{logical_key}"
-    cmd = _adb_cmd(serial, ["content", "update", "--uri", uri, "--bind", f"value:s:{value}"], adb_path)
+    uri = f"content://{AUTHORITY}/system/{_shell_quote(logical_key)}"
+    cmd = _adb_cmd(
+        serial,
+        ["content", "update", "--uri", uri, "--bind", _shell_quote(f"value:s:{value}")],
+        adb_path,
+    )
     return _run(cmd)
 
 
 def get_mdep_value(serial: str | None, key: str, adb_path: str = "adb") -> ConfigEntry | None:
-    uri = f"content://{AUTHORITY}/mdep/{key}"
+    uri = f"content://{AUTHORITY}/mdep/{_shell_quote(key)}"
     cmd = _adb_cmd(serial, ["content", "query", "--uri", uri], adb_path)
     ok, output = _run(cmd)
     if not ok:
@@ -161,6 +189,10 @@ def get_mdep_value(serial: str | None, key: str, adb_path: str = "adb") -> Confi
 
 
 def update_mdep(serial: str | None, key: str, value: str, adb_path: str = "adb") -> tuple[bool, str]:
-    uri = f"content://{AUTHORITY}/mdep/{key}"
-    cmd = _adb_cmd(serial, ["content", "update", "--uri", uri, "--bind", f"value:s:{value}"], adb_path)
+    uri = f"content://{AUTHORITY}/mdep/{_shell_quote(key)}"
+    cmd = _adb_cmd(
+        serial,
+        ["content", "update", "--uri", uri, "--bind", _shell_quote(f"value:s:{value}")],
+        adb_path,
+    )
     return _run(cmd)

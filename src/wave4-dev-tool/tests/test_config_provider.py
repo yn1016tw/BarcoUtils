@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from backend.config_provider import (
     AUTHORITY,
+    _shell_quote,
     delete_clickshare,
     export_clickshare_config,
     insert_clickshare,
@@ -38,11 +39,12 @@ def test_parse_content_query_output_value_contains_comma():
 @patch("backend.config_provider.subprocess.run")
 def test_list_clickshare_builds_expected_command(mock_run):
     mock_run.return_value = MagicMock(returncode=0, stdout=SAMPLE_QUERY_OUTPUT, stderr="")
-    entries = list_clickshare(serial="1882000501")
+    ok, entries = list_clickshare(serial="1882000501")
     called_cmd = mock_run.call_args[0][0]
     assert called_cmd[:4] == ["adb", "-s", "1882000501", "shell"]
     assert "content" in called_cmd
     assert f"content://{AUTHORITY}/clickshare/" in " ".join(called_cmd)
+    assert ok is True
     assert len(entries) == 2
     assert entries[0].domain == "clickshare"
     assert entries[0].key == "clickshare.button.timeout"
@@ -62,27 +64,43 @@ def test_list_clickshare_no_serial_omits_dash_s(mock_run):
 @patch("backend.config_provider.subprocess.run")
 def test_list_clickshare_returns_empty_on_adb_failure(mock_run):
     mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error: no devices/emulators found")
-    entries = list_clickshare(serial="missing-serial")
+    ok, entries = list_clickshare(serial="missing-serial")
+    assert ok is False
     assert entries == []
 
 
 @patch("backend.config_provider.subprocess.run")
-def test_update_clickshare_existing_key(mock_run):
-    mock_run.return_value = MagicMock(returncode=0, stdout="1 row updated\n", stderr="")
-    ok, msg = update_clickshare("1882000501", "clickshare.button.timeout", "45")
+def test_list_clickshare_prefix_is_shell_quoted(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    list_clickshare(serial="1882000501", prefix="clickshare.button timeout")
     called_cmd = mock_run.call_args[0][0]
-    assert "update" in called_cmd
-    assert "--bind" in called_cmd
-    assert "value:s:45" in called_cmd
+    called_str = " ".join(called_cmd)
+    assert _shell_quote("clickshare.button timeout") in called_str
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_update_clickshare_existing_key(mock_run):
+    # First call: list_clickshare query finds the key already exists.
+    # Second call: update succeeds.
+    mock_run.side_effect = [
+        MagicMock(returncode=0, stdout="Row: 0 key=clickshare.button.timeout, value=30\n", stderr=""),
+        MagicMock(returncode=0, stdout="", stderr=""),
+    ]
+    ok, msg = update_clickshare("1882000501", "clickshare.button.timeout", "45")
+    assert mock_run.call_count == 2
+    update_cmd = mock_run.call_args_list[1][0][0]
+    assert "update" in update_cmd
+    assert "--bind" in update_cmd
+    assert _shell_quote("value:s:45") in update_cmd
     assert ok is True
 
 
 @patch("backend.config_provider.subprocess.run")
 def test_update_clickshare_falls_back_to_insert_when_key_missing(mock_run):
-    # First call: update reports 0 rows updated (key doesn't exist yet).
+    # First call: list_clickshare query finds no matching key.
     # Second call: insert succeeds.
     mock_run.side_effect = [
-        MagicMock(returncode=0, stdout="0 rows updated\n", stderr=""),
+        MagicMock(returncode=0, stdout="", stderr=""),
         MagicMock(returncode=0, stdout="", stderr=""),
     ]
     ok, msg = update_clickshare("1882000501", "clickshare.new.key", "value")
@@ -98,8 +116,20 @@ def test_insert_clickshare_builds_expected_command(mock_run):
     ok, msg = insert_clickshare("1882000501", "clickshare.new.key", "42")
     called_cmd = mock_run.call_args[0][0]
     assert "insert" in called_cmd
-    assert "value:s:42" in called_cmd
+    assert _shell_quote("value:s:42") in called_cmd
     assert ok is True
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_insert_clickshare_value_with_space_is_single_quoted_token(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    insert_clickshare("1882000501", "clickshare.room.name", "My Room")
+    called_cmd = mock_run.call_args[0][0]
+    # The value (with its embedded space) must arrive as a single quoted argv token,
+    # not as two separate unquoted tokens.
+    assert "'value:s:My Room'" in called_cmd
+    assert "My" not in called_cmd
+    assert "Room'" not in called_cmd
 
 
 @patch("backend.config_provider.subprocess.run")
@@ -161,13 +191,23 @@ def test_get_system_value_returns_none_on_failure(mock_run):
 @patch("backend.config_provider.subprocess.run")
 def test_list_system_queries_every_key_and_marks_editable(mock_run):
     mock_run.return_value = MagicMock(returncode=0, stdout="Row: 0 key=x, value=some-value\n", stderr="")
-    entries = list_system("1882000501")
+    ok, entries = list_system("1882000501")
+    assert ok is True
     assert mock_run.call_count == len(SYSTEM_KEYS)
     assert len(entries) == len(SYSTEM_KEYS)
     by_key = {e.key: e for e in entries}
     assert by_key["Settings.ScreenOffTimeout"].editable is True
     assert by_key["Properties.ModelName"].editable is False
     assert all(e.domain == "system" for e in entries)
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_list_system_short_circuits_when_first_key_query_fails(mock_run):
+    mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error: no devices/emulators found")
+    ok, entries = list_system("missing-serial")
+    assert ok is False
+    assert entries == []
+    assert mock_run.call_count == 1
 
 
 @patch("backend.config_provider.subprocess.run")
@@ -184,7 +224,7 @@ def test_update_system_writes_editable_setting(mock_run):
     ok, msg = update_system("1882000501", "Settings.ScreenOffTimeout", "300000")
     called_cmd = mock_run.call_args[0][0]
     assert "update" in called_cmd
-    assert "value:s:300000" in called_cmd
+    assert _shell_quote("value:s:300000") in called_cmd
     assert ok is True
 
 
@@ -224,5 +264,5 @@ def test_update_mdep_builds_expected_command(mock_run):
     ok, msg = update_mdep("1882000501", "mdep.narrator.enabled", "Disabled")
     called_cmd = mock_run.call_args[0][0]
     assert "update" in called_cmd
-    assert "value:s:Disabled" in called_cmd
+    assert _shell_quote("value:s:Disabled") in called_cmd
     assert ok is True

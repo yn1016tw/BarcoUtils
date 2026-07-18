@@ -17,6 +17,7 @@ async function init() {
   document.getElementById("search-input").addEventListener("input", () => render());
   document.getElementById("add-key-btn").addEventListener("click", onAddKey);
   document.getElementById("mdep-query-btn").addEventListener("click", onMdepQuery);
+  document.getElementById("export-btn").addEventListener("click", onExport);
   await loadDomain("clickshare");
 }
 
@@ -279,4 +280,16 @@ async function onMdepQuery() {
   }
   hideStatus();
   renderFlatTable([result.entry], "mdep-table");
+}
+
+async function onExport() {
+  const result = await pywebview.api.export_config();
+  if (!result.success) {
+    showStatus(`匯出失敗: ${result.error}`);
+    return;
+  }
+  const saveResult = await pywebview.api.save_json_to_file(result.json);
+  if (!saveResult.success && saveResult.error !== "cancelled") {
+    showStatus(`儲存失敗: ${saveResult.error}`);
+  }
 }

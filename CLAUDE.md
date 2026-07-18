@@ -151,8 +151,10 @@ src\wave4-dev-tool\build.bat            # build dist\wave4-dev-tool.exe
 `backend/config_provider.py` covers three ContentProvider subtrees:
 `clickshare/*` (arbitrary key-value store, full CRUD + `export_config` call
 method for a full JSON dump), `system/*` (fixed key table in `SYSTEM_KEYS` —
-`Settings.*` read/write, `Properties.*` read-only because the APK itself
-rejects writes to that prefix), `mdep/*` (single-key get/set, no list API).
+`Settings.*` read/write; `Properties.*` read-only, since the tool refuses to
+write `Properties.*` client-side — the APK's own `SystemManagerImpl.kt` also
+rejects such writes, per the APK source reviewed during design), `mdep/*`
+(single-key get/set, no list API).
 The `system/*` key table has no enumeration API on the APK side and must be
 hand-updated in `SYSTEM_KEYS` if `configuration-manager-apk`'s
 `SystemManagerImpl.kt` changes. UI: `ui/index.html` + `ui/app.js` render the

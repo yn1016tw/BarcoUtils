@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>Wave4 Dev Tool</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="toolbar">
+    <label>裝置:
+      <select id="device-select"></select>
+    </label>
+    <button id="rescan-btn">重新掃描</button>
+    <input id="connect-ip-input" placeholder="IP:port" />
+    <button id="connect-ip-btn">Connect</button>
+  </div>
+
+  <div id="tabs">
+    <button class="tab-btn active" data-domain="clickshare">ClickShare</button>
+    <button class="tab-btn" data-domain="system">System</button>
+    <button class="tab-btn" data-domain="mdep">MDEP</button>
+    <button id="export-btn">匯出 JSON</button>
+  </div>
+
+  <div id="search-bar">
+    <input id="search-input" placeholder="搜尋 key..." />
+  </div>
+
+  <div id="content-area">
+    <div id="clickshare-panel" class="panel active">
+      <div id="clickshare-tree"></div>
+      <button id="add-key-btn">+ 新增 key</button>
+    </div>
+    <div id="system-panel" class="panel">
+      <table id="system-table"><tbody></tbody></table>
+    </div>
+    <div id="mdep-panel" class="panel">
+      <div id="mdep-query">
+        <input id="mdep-key-input" placeholder="輸入 MDEP key..." />
+        <button id="mdep-query-btn">查詢</button>
+      </div>
+      <table id="mdep-table"><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div id="status-banner" class="hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

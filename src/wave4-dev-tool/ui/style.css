@@ -1,0 +1,88 @@
+body {
+  font-family: "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+#toolbar, #tabs, #search-bar {
+  padding: 8px 12px;
+  border-bottom: 1px solid #ccc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-btn {
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  font-weight: bold;
+  border-bottom: 2px solid #0078d4;
+}
+
+#export-btn {
+  margin-left: auto;
+}
+
+.panel {
+  display: none;
+  padding: 12px;
+}
+
+.panel.active {
+  display: block;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table td, table th {
+  padding: 4px 8px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+
+ul {
+  list-style: none;
+  padding-left: 16px;
+}
+
+.leaf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.leaf-key {
+  min-width: 160px;
+}
+
+.leaf-value {
+  flex: 1;
+}
+
+.tree-group {
+  font-weight: bold;
+  display: block;
+  padding: 2px 0;
+}
+
+.row-error {
+  color: #c00;
+  font-size: 0.85em;
+}
+
+#status-banner {
+  background: #fdecea;
+  color: #611a15;
+  padding: 8px 12px;
+}
+
+#status-banner.hidden {
+  display: none;
+}

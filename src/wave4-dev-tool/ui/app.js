@@ -14,6 +14,8 @@ async function init() {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.domain));
   });
+  document.getElementById("search-input").addEventListener("input", () => render());
+  await loadDomain("clickshare");
 }
 
 async function refreshDevices() {
@@ -54,6 +56,9 @@ function switchTab(domain) {
   document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
   document.getElementById(`${domain}-panel`).classList.add("active");
   document.getElementById("export-btn").style.display = domain === "clickshare" ? "" : "none";
+  if (domain !== "mdep") {
+    loadDomain(domain);
+  }
 }
 
 function showStatus(msg) {
@@ -64,4 +69,83 @@ function showStatus(msg) {
 
 function hideStatus() {
   document.getElementById("status-banner").classList.add("hidden");
+}
+
+async function loadDomain(domain) {
+  hideStatus();
+  const result = await pywebview.api.list_config(domain);
+  if (!result.success) {
+    showStatus(result.error || "無法連接裝置");
+    state.entries = [];
+  } else {
+    state.entries = result.entries;
+  }
+  render();
+}
+
+function render() {
+  if (state.domain === "clickshare") {
+    renderTree(state.entries);
+  }
+}
+
+function buildTree(entries) {
+  const root = { children: {} };
+  entries.forEach((entry) => {
+    const parts = entry.key.split(".");
+    let node = root;
+    parts.forEach((part, i) => {
+      if (!node.children) node.children = {};
+      if (!node.children[part]) node.children[part] = {};
+      node = node.children[part];
+      if (i === parts.length - 1) {
+        node.entry = entry;
+      }
+    });
+  });
+  return root;
+}
+
+function renderTree(entries) {
+  const container = document.getElementById("clickshare-tree");
+  container.innerHTML = "";
+  const filter = document.getElementById("search-input").value.trim().toLowerCase();
+  const filtered = filter ? entries.filter((e) => e.key.toLowerCase().includes(filter)) : entries;
+  const tree = buildTree(filtered);
+  container.appendChild(renderNode(tree));
+}
+
+function renderNode(node) {
+  const ul = document.createElement("ul");
+  Object.entries(node.children || {}).forEach(([name, child]) => {
+    const li = document.createElement("li");
+    if (child.entry) {
+      li.appendChild(renderLeafRow(child.entry));
+    } else {
+      const label = document.createElement("span");
+      label.className = "tree-group";
+      label.textContent = `▾ ${name}`;
+      li.appendChild(label);
+      li.appendChild(renderNode(child));
+    }
+    ul.appendChild(li);
+  });
+  return ul;
+}
+
+function renderLeafRow(entry) {
+  const row = document.createElement("div");
+  row.className = "leaf-row";
+
+  const keyLabel = document.createElement("span");
+  keyLabel.className = "leaf-key";
+  keyLabel.textContent = entry.key.split(".").pop();
+  row.appendChild(keyLabel);
+
+  const valueSpan = document.createElement("span");
+  valueSpan.className = "leaf-value";
+  valueSpan.textContent = entry.value;
+  row.appendChild(valueSpan);
+
+  return row;
 }

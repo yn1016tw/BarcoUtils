@@ -87,6 +87,13 @@ function hideStatus() {
 async function loadDomain(domain) {
   hideStatus();
   const result = await pywebview.api.list_config(domain);
+  if (domain !== state.domain) {
+    // A newer tab switch superseded this request while it was in flight
+    // (e.g. System's ~20 sequential key queries are much slower than
+    // ClickShare's single call) — applying it now would overwrite the
+    // currently active tab's data with a stale domain's response.
+    return;
+  }
   if (!result.success) {
     showStatus(result.error || "無法連接裝置");
     state.entries = [];

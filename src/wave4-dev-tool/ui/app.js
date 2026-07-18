@@ -22,18 +22,25 @@ async function init() {
 }
 
 async function refreshDevices() {
-  const devices = await pywebview.api.list_devices();
-  const select = document.getElementById("device-select");
-  select.innerHTML = "";
-  devices.forEach((d) => {
-    const opt = document.createElement("option");
-    opt.value = d.serial;
-    opt.textContent = `${d.serial} (${d.model})`;
-    select.appendChild(opt);
-  });
-  if (devices.length > 0) {
-    state.serial = devices[0].serial;
-    await pywebview.api.select_device(state.serial);
+  try {
+    const devices = await pywebview.api.list_devices();
+    const select = document.getElementById("device-select");
+    select.innerHTML = "";
+    devices.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.serial;
+      opt.textContent = `${d.serial} (${d.model})`;
+      select.appendChild(opt);
+    });
+    if (devices.length > 0) {
+      state.serial = devices[0].serial;
+      await pywebview.api.select_device(state.serial);
+      if (state.domain !== "mdep") {
+        await loadDomain(state.domain);
+      }
+    }
+  } catch (err) {
+    showStatus(`裝置掃描失敗: ${err}`);
   }
 }
 
@@ -51,6 +58,9 @@ async function onConnectIp() {
 async function onDeviceChange(e) {
   state.serial = e.target.value;
   await pywebview.api.select_device(state.serial);
+  if (state.domain !== "mdep") {
+    await loadDomain(state.domain);
+  }
 }
 
 function switchTab(domain) {
@@ -131,8 +141,13 @@ function renderNode(node) {
       const label = document.createElement("span");
       label.className = "tree-group";
       label.textContent = `▾ ${name}`;
+      const childUl = renderNode(child);
+      label.addEventListener("click", () => {
+        const collapsed = childUl.classList.toggle("collapsed");
+        label.textContent = `${collapsed ? "▸" : "▾"} ${name}`;
+      });
       li.appendChild(label);
-      li.appendChild(renderNode(child));
+      li.appendChild(childUl);
     }
     ul.appendChild(li);
   });

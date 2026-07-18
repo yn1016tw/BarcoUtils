@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 
@@ -44,7 +45,28 @@ def _run(cmd: list[str], timeout: float = 5.0) -> tuple[bool, str]:
 
 
 def list_clickshare(serial: str | None, prefix: str = "", adb_path: str = "adb") -> tuple[bool, list[ConfigEntry]]:
-    uri = f"content://{AUTHORITY}/clickshare/{_shell_quote(prefix)}" if prefix else f"content://{AUTHORITY}/clickshare/"
+    if not prefix:
+        # The real ContentProvider's query() bails out ("No key found from
+        # query uri") whenever the URI has no key segment past "clickshare"
+        # — confirmed against a real device: `clickshare/` and `clickshare`
+        # both return zero rows even though the device has ~90 real entries,
+        # while `clickshare/<any-prefix>` works fine. export_config is the
+        # APK's own reliable way to get everything, so listing-all goes
+        # through it instead of a direct content query.
+        ok, payload = export_clickshare_config(serial, adb_path)
+        if not ok:
+            return False, []
+        try:
+            config = json.loads(payload).get("config", {})
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            return False, []
+        entries = [
+            ConfigEntry(domain="clickshare", key=key, value=str(value), editable=True)
+            for key, value in config.items()
+        ]
+        return True, entries
+
+    uri = f"content://{AUTHORITY}/clickshare/{_shell_quote(prefix)}"
     cmd = _adb_cmd(
         serial,
         ["content", "query", "--uri", uri, "--projection", "key:value"],

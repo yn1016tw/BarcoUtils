@@ -37,24 +37,37 @@ def test_parse_content_query_output_value_contains_comma():
 
 
 @patch("backend.config_provider.subprocess.run")
-def test_list_clickshare_builds_expected_command(mock_run):
-    mock_run.return_value = MagicMock(returncode=0, stdout=SAMPLE_QUERY_OUTPUT, stderr="")
+def test_list_clickshare_no_prefix_uses_export_config(mock_run):
+    # The real device's ContentProvider rejects a "clickshare/" URI with no
+    # key segment (confirmed empirically), so listing everything must go
+    # through export_config's Bundle/JSON payload instead of a direct query.
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=(
+            'Result: Bundle[{success=true, json={"schemaVersion":1,"config":'
+            '{"BaseUnit.Audio.Enabled":"true","BaseUnit.Standby.StandbyTime":"10"}}}]\n'
+        ),
+        stderr="",
+    )
     ok, entries = list_clickshare(serial="1882000501")
     called_cmd = mock_run.call_args[0][0]
     assert called_cmd[:4] == ["adb", "-s", "1882000501", "shell"]
-    assert "content" in called_cmd
-    assert f"content://{AUTHORITY}/clickshare/" in " ".join(called_cmd)
+    assert "call" in called_cmd
+    assert "export_config" in called_cmd
     assert ok is True
     assert len(entries) == 2
-    assert entries[0].domain == "clickshare"
-    assert entries[0].key == "clickshare.button.timeout"
-    assert entries[0].value == "30"
-    assert entries[0].editable is True
+    by_key = {e.key: e for e in entries}
+    assert by_key["BaseUnit.Audio.Enabled"].value == "true"
+    assert by_key["BaseUnit.Audio.Enabled"].domain == "clickshare"
+    assert by_key["BaseUnit.Audio.Enabled"].editable is True
+    assert by_key["BaseUnit.Standby.StandbyTime"].value == "10"
 
 
 @patch("backend.config_provider.subprocess.run")
 def test_list_clickshare_no_serial_omits_dash_s(mock_run):
-    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout='Result: Bundle[{success=true, json={"config":{}}}]\n', stderr="",
+    )
     list_clickshare(serial=None)
     called_cmd = mock_run.call_args[0][0]
     assert called_cmd[0] == "adb"
@@ -65,6 +78,14 @@ def test_list_clickshare_no_serial_omits_dash_s(mock_run):
 def test_list_clickshare_returns_empty_on_adb_failure(mock_run):
     mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error: no devices/emulators found")
     ok, entries = list_clickshare(serial="missing-serial")
+    assert ok is False
+    assert entries == []
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_list_clickshare_returns_empty_when_export_json_is_malformed(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="unexpected format with no json field\n", stderr="")
+    ok, entries = list_clickshare(serial="1882000501")
     assert ok is False
     assert entries == []
 

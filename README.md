@@ -804,6 +804,28 @@ python src/hid-desc/parse_hid_desc.py <file.bin> [file2.bin ...]
 python src/hid-desc/patch_hid_desc.py <file.bin> --usage-page 0x0081 --usage 0x83
 ```
 
+### Wave4 Dev Tool (`src/wave4-dev-tool/`)
+
+Standalone Windows GUI for browsing and editing `configuration-manager-apk`
+settings over ADB, across multiple connected devices. Built with
+Python + pywebview (HTML/CSS/JS UI) and packaged as a single `.exe` via
+PyInstaller.
+
+```bash
+# Run from source
+pip install -r src/wave4-dev-tool/requirements.txt
+python src/wave4-dev-tool/app.py
+
+# Build a standalone .exe
+src\wave4-dev-tool\build.bat
+```
+
+Three tabs: **ClickShare** (full CRUD, tree view grouped by `.`-separated
+key prefix, supports add/delete/export-to-JSON), **System** (fixed set of OS
+settings/properties — `Settings.*` editable, `Properties.*` read-only),
+**MDEP** (single-key lookup, no list API). Device dropdown lists all
+`adb devices -l` output; supports connecting to a new device by `IP:port`.
+
 ---
 
 ## tools/v4l2_stream_test

@@ -135,6 +135,32 @@ python src/hid-desc/patch_hid_desc.py <file.bin> --usage-page 0x0081 --usage 0x8
 
 `hid_desc_tool.bat` runs `adb root` once on startup (retries until adb reconnects), then all subsequent `adb` calls omit `-s` (single connected device assumed). Menu option [5] lists `/clickshare/hid*.bin` on the device and, for each file, prompts separately for a new Usage Page / Usage (Enter on both = skip that file, value is not carried over to the next file), pulls it to `src/hid-desc/device_files/` (gitignored), patches in place via `patch_hid_desc.py --out <same path>`, then pushes back over the original device path. Options [3]/[4] (backup/recover) and [7] (clear backup) list matching files on-device first and operate per-file (a single `cp`/`rm` with a glob source and non-directory target fails when multiple files match) — do not touch the host. Reboot uses `adb shell reboot`, not `adb reboot` (this device's adbd doesn't implement the latter). Option [6] reboots and waits for the device to reconnect as root afterward (reuses the same `WAIT_FOR_ROOT` routine as startup); option [2] (remount RW) just remounts and returns to the menu immediately, no reboot. `WAIT_FOR_ROOT` also auto-remounts RW (`mount -o remount,rw /`) every time it confirms root, so startup and every post-[6] reboot already leave the device RW — [2] exists as a manual re-run if needed. Option [8] lists `/clickshare/hid*.bin`, pulls each to `device_files/` (read-only — does not push anything back), and runs `parse_hid_desc.py` on it to print the decoded descriptor. `adb shell "ls ..."` output on this device has a trailing CR per line (PTY artifact); every loop over that output strips it via a `copy /Z` self-reference trick (`CR` variable set near the top of the script) before using the path, otherwise `cp`/`rm`/`pull` fail with a literal `\r` appended to the filename.
 
+**Wave4 dev tool** (`src/wave4-dev-tool/`): Standalone Windows GUI (Python +
+pywebview + PyInstaller `--onefile`) for browsing/editing
+`configuration-manager-apk` settings over ADB across multiple connected
+devices. Talks to the APK's `ContentProvider`
+(`com.barco.clickshare.configurationmanager.provider`) via
+`adb shell content query/insert/update/delete/call` — no root required.
+
+```bash
+pip install -r src/wave4-dev-tool/requirements.txt
+python src/wave4-dev-tool/app.py       # run from source
+src\wave4-dev-tool\build.bat            # build dist\wave4-dev-tool.exe
+```
+
+`backend/config_provider.py` covers three ContentProvider subtrees:
+`clickshare/*` (arbitrary key-value store, full CRUD + `export_config` call
+method for a full JSON dump), `system/*` (fixed key table in `SYSTEM_KEYS` —
+`Settings.*` read/write, `Properties.*` read-only because the APK itself
+rejects writes to that prefix), `mdep/*` (single-key get/set, no list API).
+The `system/*` key table has no enumeration API on the APK side and must be
+hand-updated in `SYSTEM_KEYS` if `configuration-manager-apk`'s
+`SystemManagerImpl.kt` changes. UI: `ui/index.html` + `ui/app.js` render the
+ClickShare tab as a collapsible tree (grouped by splitting keys on `.`) and
+the System/MDEP tabs as flat tables; edits are inline (Save/Cancel, no
+confirmation dialog, no backup of the previous value) via
+`pywebview.api.update_config(domain, key, value)`.
+
 ## Architecture
 
 All Python source lives under `testcases/` (import root = `testcases/` at runtime).

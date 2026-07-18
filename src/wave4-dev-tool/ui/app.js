@@ -236,8 +236,11 @@ async function onAddKey() {
 function renderFlatTable(entries, tableId) {
   const tbody = document.querySelector(`#${tableId} tbody`);
   tbody.innerHTML = "";
-  const filter = document.getElementById("search-input").value.trim().toLowerCase();
-  const filtered = filter ? entries.filter((e) => e.key.toLowerCase().includes(filter)) : entries;
+  let filtered = entries;
+  if (tableId === "system-table") {
+    const filter = document.getElementById("search-input").value.trim().toLowerCase();
+    filtered = filter ? entries.filter((e) => e.key.toLowerCase().includes(filter)) : entries;
+  }
   filtered.forEach((entry) => {
     const tr = document.createElement("tr");
 
@@ -246,14 +249,16 @@ function renderFlatTable(entries, tableId) {
     tr.appendChild(keyTd);
 
     const valueTd = document.createElement("td");
-    valueTd.textContent = entry.value;
+    const valueSpan = document.createElement("span");
+    valueSpan.textContent = entry.value;
+    valueTd.appendChild(valueSpan);
     tr.appendChild(valueTd);
 
     const actionTd = document.createElement("td");
     if (entry.editable) {
       const editBtn = document.createElement("button");
       editBtn.textContent = "✎";
-      editBtn.addEventListener("click", () => startEdit(tr, entry, valueTd));
+      editBtn.addEventListener("click", () => startEdit(valueTd, entry, valueSpan));
       actionTd.appendChild(editBtn);
     }
     tr.appendChild(actionTd);

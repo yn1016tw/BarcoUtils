@@ -146,3 +146,21 @@ def update_system(serial: str | None, logical_key: str, value: str, adb_path: st
     uri = f"content://{AUTHORITY}/system/{logical_key}"
     cmd = _adb_cmd(serial, ["content", "update", "--uri", uri, "--bind", f"value:s:{value}"], adb_path)
     return _run(cmd)
+
+
+def get_mdep_value(serial: str | None, key: str, adb_path: str = "adb") -> ConfigEntry | None:
+    uri = f"content://{AUTHORITY}/mdep/{key}"
+    cmd = _adb_cmd(serial, ["content", "query", "--uri", uri], adb_path)
+    ok, output = _run(cmd)
+    if not ok:
+        return None
+    rows = parse_content_query_output(output)
+    if not rows:
+        return None
+    return ConfigEntry(domain="mdep", key=key, value=rows[0][1], editable=True)
+
+
+def update_mdep(serial: str | None, key: str, value: str, adb_path: str = "adb") -> tuple[bool, str]:
+    uri = f"content://{AUTHORITY}/mdep/{key}"
+    cmd = _adb_cmd(serial, ["content", "update", "--uri", uri, "--bind", f"value:s:{value}"], adb_path)
+    return _run(cmd)

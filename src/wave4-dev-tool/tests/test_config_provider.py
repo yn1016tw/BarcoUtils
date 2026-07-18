@@ -186,3 +186,43 @@ def test_update_system_writes_editable_setting(mock_run):
     assert "update" in called_cmd
     assert "value:s:300000" in called_cmd
     assert ok is True
+
+
+from backend.config_provider import get_mdep_value, update_mdep
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_get_mdep_value_found(mock_run):
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout="Row: 0 key=mdep.narrator.enabled, value=Enabled\n", stderr="",
+    )
+    entry = get_mdep_value("1882000501", "mdep.narrator.enabled")
+    assert entry is not None
+    assert entry.domain == "mdep"
+    assert entry.key == "mdep.narrator.enabled"
+    assert entry.value == "Enabled"
+    assert entry.editable is True
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_get_mdep_value_not_found(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    entry = get_mdep_value("1882000501", "mdep.unknown.key")
+    assert entry is None
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_get_mdep_value_adb_failure(mock_run):
+    mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
+    entry = get_mdep_value("1882000501", "mdep.narrator.enabled")
+    assert entry is None
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_update_mdep_builds_expected_command(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    ok, msg = update_mdep("1882000501", "mdep.narrator.enabled", "Disabled")
+    called_cmd = mock_run.call_args[0][0]
+    assert "update" in called_cmd
+    assert "value:s:Disabled" in called_cmd
+    assert ok is True

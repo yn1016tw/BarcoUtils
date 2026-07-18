@@ -16,6 +16,7 @@ async function init() {
   });
   document.getElementById("search-input").addEventListener("input", () => render());
   document.getElementById("add-key-btn").addEventListener("click", onAddKey);
+  document.getElementById("mdep-query-btn").addEventListener("click", onMdepQuery);
   await loadDomain("clickshare");
 }
 
@@ -87,6 +88,8 @@ async function loadDomain(domain) {
 function render() {
   if (state.domain === "clickshare") {
     renderTree(state.entries);
+  } else if (state.domain === "system") {
+    renderFlatTable(state.entries, "system-table");
   }
 }
 
@@ -228,4 +231,47 @@ async function onAddKey() {
   } else {
     showStatus(`新增失敗: ${result.error}`);
   }
+}
+
+function renderFlatTable(entries, tableId) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = "";
+  const filter = document.getElementById("search-input").value.trim().toLowerCase();
+  const filtered = filter ? entries.filter((e) => e.key.toLowerCase().includes(filter)) : entries;
+  filtered.forEach((entry) => {
+    const tr = document.createElement("tr");
+
+    const keyTd = document.createElement("td");
+    keyTd.textContent = entry.key;
+    tr.appendChild(keyTd);
+
+    const valueTd = document.createElement("td");
+    valueTd.textContent = entry.value;
+    tr.appendChild(valueTd);
+
+    const actionTd = document.createElement("td");
+    if (entry.editable) {
+      const editBtn = document.createElement("button");
+      editBtn.textContent = "✎";
+      editBtn.addEventListener("click", () => startEdit(tr, entry, valueTd));
+      actionTd.appendChild(editBtn);
+    }
+    tr.appendChild(actionTd);
+
+    tbody.appendChild(tr);
+  });
+}
+
+async function onMdepQuery() {
+  const key = document.getElementById("mdep-key-input").value.trim();
+  if (!key) return;
+  const result = await pywebview.api.get_mdep(key);
+  const tbody = document.querySelector("#mdep-table tbody");
+  tbody.innerHTML = "";
+  if (!result.success) {
+    showStatus(result.error);
+    return;
+  }
+  hideStatus();
+  renderFlatTable([result.entry], "mdep-table");
 }

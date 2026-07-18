@@ -15,6 +15,7 @@ async function init() {
     btn.addEventListener("click", () => switchTab(btn.dataset.domain));
   });
   document.getElementById("search-input").addEventListener("input", () => render());
+  document.getElementById("add-key-btn").addEventListener("click", onAddKey);
   await loadDomain("clickshare");
 }
 
@@ -148,5 +149,83 @@ function renderLeafRow(entry) {
   valueSpan.textContent = entry.value;
   row.appendChild(valueSpan);
 
+  if (entry.editable) {
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "✎";
+    editBtn.addEventListener("click", () => startEdit(row, entry, valueSpan));
+    row.appendChild(editBtn);
+  }
+
+  if (entry.domain === "clickshare") {
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "🗑";
+    delBtn.addEventListener("click", () => onDelete(entry.key));
+    row.appendChild(delBtn);
+  }
+
   return row;
+}
+
+function startEdit(row, entry, valueEl) {
+  const input = document.createElement("input");
+  input.value = entry.value;
+
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = "Save";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.textContent = "Cancel";
+
+  saveBtn.addEventListener("click", async () => {
+    const result = await pywebview.api.update_config(entry.domain, entry.key, input.value);
+    if (result.success) {
+      entry.value = input.value;
+      valueEl.textContent = entry.value;
+      row.replaceChild(valueEl, input);
+      saveBtn.remove();
+      cancelBtn.remove();
+    } else {
+      showRowError(row, result.error);
+    }
+  });
+
+  cancelBtn.addEventListener("click", () => {
+    row.replaceChild(valueEl, input);
+    saveBtn.remove();
+    cancelBtn.remove();
+  });
+
+  row.replaceChild(input, valueEl);
+  row.appendChild(saveBtn);
+  row.appendChild(cancelBtn);
+}
+
+function showRowError(row, message) {
+  let errEl = row.querySelector(".row-error");
+  if (!errEl) {
+    errEl = document.createElement("span");
+    errEl.className = "row-error";
+    row.appendChild(errEl);
+  }
+  errEl.textContent = message || "儲存失敗";
+}
+
+async function onDelete(key) {
+  const result = await pywebview.api.delete_clickshare(key);
+  if (result.success) {
+    await loadDomain("clickshare");
+  } else {
+    showStatus(`刪除失敗: ${result.error}`);
+  }
+}
+
+async function onAddKey() {
+  const key = prompt("新 key 名稱:");
+  if (!key) return;
+  const value = prompt("初始值:") || "";
+  const result = await pywebview.api.insert_clickshare(key, value);
+  if (result.success) {
+    await loadDomain("clickshare");
+  } else {
+    showStatus(`新增失敗: ${result.error}`);
+  }
 }

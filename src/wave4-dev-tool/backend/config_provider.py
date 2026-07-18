@@ -53,3 +53,46 @@ def list_clickshare(serial: str | None, prefix: str = "", adb_path: str = "adb")
         ConfigEntry(domain="clickshare", key=key, value=value, editable=True)
         for key, value in parse_content_query_output(output)
     ]
+
+
+def update_clickshare(serial: str | None, key: str, value: str, adb_path: str = "adb") -> tuple[bool, str]:
+    uri = f"content://{AUTHORITY}/clickshare/{key}"
+    cmd = _adb_cmd(serial, ["content", "update", "--uri", uri, "--bind", f"value:s:{value}"], adb_path)
+    ok, output = _run(cmd)
+    if ok and "0 rows" not in output.lower():
+        return True, output
+    return insert_clickshare(serial, key, value, adb_path)
+
+
+def insert_clickshare(serial: str | None, key: str, value: str, adb_path: str = "adb") -> tuple[bool, str]:
+    uri = f"content://{AUTHORITY}/clickshare/{key}"
+    cmd = _adb_cmd(serial, ["content", "insert", "--uri", uri, "--bind", f"value:s:{value}"], adb_path)
+    return _run(cmd)
+
+
+def delete_clickshare(serial: str | None, key: str, adb_path: str = "adb") -> tuple[bool, str]:
+    uri = f"content://{AUTHORITY}/clickshare/{key}"
+    cmd = _adb_cmd(serial, ["content", "delete", "--uri", uri], adb_path)
+    return _run(cmd)
+
+
+def _extract_json_field(output: str) -> str | None:
+    idx = output.find("json=")
+    if idx == -1:
+        return None
+    remainder = output[idx + len("json="):].strip()
+    if remainder.endswith("}]"):
+        remainder = remainder[:-2]
+    return remainder.strip() or None
+
+
+def export_clickshare_config(serial: str | None, adb_path: str = "adb") -> tuple[bool, str]:
+    uri = f"content://{AUTHORITY}/clickshare"
+    cmd = _adb_cmd(serial, ["content", "call", "--uri", uri, "--method", "export_config"], adb_path)
+    ok, output = _run(cmd)
+    if not ok:
+        return False, output
+    json_payload = _extract_json_field(output)
+    if json_payload is None:
+        return False, output
+    return True, json_payload

@@ -6,7 +6,7 @@ from backend import adb_devices, config_provider
 class Api:
     def __init__(self):
         self.serial: str | None = None
-        self.window: webview.Window | None = None
+        self._window: webview.Window | None = None
 
     def list_devices(self):
         return [d.__dict__ for d in adb_devices.list_devices()]
@@ -60,9 +60,9 @@ class Api:
         return {"success": ok, "json": payload if ok else None, "error": None if ok else payload}
 
     def save_json_to_file(self, json_str: str):
-        if self.window is None:
+        if self._window is None:
             return {"success": False, "error": "window not ready"}
-        file_path = self.window.create_file_dialog(
+        file_path = self._window.create_file_dialog(
             webview.SAVE_DIALOG, save_filename="clickshare_config.json",
         )
         if not file_path:
@@ -82,7 +82,14 @@ def main():
         width=1100,
         height=750,
     )
-    api.window = window
+    # Must stay private (leading underscore): pywebview's inject_pywebview()
+    # walks every public, non-callable attribute of js_api to auto-discover
+    # exposed methods. A public `window` attribute pulls in the whole
+    # WinForms native control graph, and pythonnet's dynamic wrapping of
+    # self-referential .NET properties (e.g. Rectangle.Empty) defeats the
+    # walker's id()-based cycle detection, recursing until Python's stack
+    # limit hits and floods the log — freezing the window's message loop.
+    api._window = window
     webview.start()
 
 

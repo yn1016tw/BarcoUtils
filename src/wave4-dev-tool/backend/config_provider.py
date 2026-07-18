@@ -96,3 +96,53 @@ def export_clickshare_config(serial: str | None, adb_path: str = "adb") -> tuple
     if json_payload is None:
         return False, output
     return True, json_payload
+
+
+SYSTEM_KEYS: dict[str, bool] = {
+    "Settings.ScreenOffTimeout": True,
+    "Settings.SetupWizardHasRun": True,
+    "Properties.SystemBuildDate": False,
+    "Properties.SystemBuildVersion": False,
+    "Properties.SystemBuildMinimalVersion": False,
+    "Properties.ProductName": False,
+    "Properties.ModelName": False,
+    "Properties.DeviceName": False,
+    "Properties.Brand": False,
+    "Properties.Manufacturer": False,
+    "Properties.SN": False,
+    "Properties.BarcoDefaultSN": False,
+    "Properties.BarcoPlatformName": False,
+    "Properties.BarcoProductName": False,
+    "Properties.BarcoArticleNumber": False,
+    "Properties.BarcoFirstBoot": False,
+    "Properties.BarcoCountryCode": False,
+    "Properties.BarcoPlatform": False,
+    "Properties.SysWlan0Mac": False,
+    "Properties.MdepBuildId": False,
+}
+
+
+def get_system_value(serial: str | None, logical_key: str, adb_path: str = "adb") -> str | None:
+    uri = f"content://{AUTHORITY}/system/{logical_key}"
+    cmd = _adb_cmd(serial, ["content", "query", "--uri", uri], adb_path)
+    ok, output = _run(cmd)
+    if not ok:
+        return None
+    rows = parse_content_query_output(output)
+    return rows[0][1] if rows else None
+
+
+def list_system(serial: str | None, adb_path: str = "adb") -> list[ConfigEntry]:
+    entries = []
+    for logical_key, editable in SYSTEM_KEYS.items():
+        value = get_system_value(serial, logical_key, adb_path) or ""
+        entries.append(ConfigEntry(domain="system", key=logical_key, value=value, editable=editable))
+    return entries
+
+
+def update_system(serial: str | None, logical_key: str, value: str, adb_path: str = "adb") -> tuple[bool, str]:
+    if not SYSTEM_KEYS.get(logical_key, False):
+        return False, f"{logical_key} is read-only"
+    uri = f"content://{AUTHORITY}/system/{logical_key}"
+    cmd = _adb_cmd(serial, ["content", "update", "--uri", uri, "--bind", f"value:s:{value}"], adb_path)
+    return _run(cmd)

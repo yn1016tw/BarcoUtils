@@ -129,3 +129,60 @@ def test_export_clickshare_config_returns_raw_output_on_parse_failure(mock_run):
     ok, payload = export_clickshare_config("1882000501")
     assert ok is False
     assert payload == "unexpected format\n"
+
+
+from backend.config_provider import SYSTEM_KEYS, get_system_value, list_system, update_system
+
+
+def test_system_keys_table_has_expected_entries():
+    assert SYSTEM_KEYS["Settings.ScreenOffTimeout"] is True
+    assert SYSTEM_KEYS["Settings.SetupWizardHasRun"] is True
+    assert SYSTEM_KEYS["Properties.SystemBuildVersion"] is False
+    assert SYSTEM_KEYS["Properties.ModelName"] is False
+    assert len(SYSTEM_KEYS) == 20
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_get_system_value_parses_single_row(mock_run):
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout="Row: 0 key=Settings.ScreenOffTimeout, value=600000\n", stderr="",
+    )
+    value = get_system_value("1882000501", "Settings.ScreenOffTimeout")
+    assert value == "600000"
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_get_system_value_returns_none_on_failure(mock_run):
+    mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
+    value = get_system_value("1882000501", "Settings.ScreenOffTimeout")
+    assert value is None
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_list_system_queries_every_key_and_marks_editable(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="Row: 0 key=x, value=some-value\n", stderr="")
+    entries = list_system("1882000501")
+    assert mock_run.call_count == len(SYSTEM_KEYS)
+    assert len(entries) == len(SYSTEM_KEYS)
+    by_key = {e.key: e for e in entries}
+    assert by_key["Settings.ScreenOffTimeout"].editable is True
+    assert by_key["Properties.ModelName"].editable is False
+    assert all(e.domain == "system" for e in entries)
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_update_system_rejects_readonly_property(mock_run):
+    ok, msg = update_system("1882000501", "Properties.ModelName", "new-value")
+    mock_run.assert_not_called()
+    assert ok is False
+    assert "read-only" in msg
+
+
+@patch("backend.config_provider.subprocess.run")
+def test_update_system_writes_editable_setting(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    ok, msg = update_system("1882000501", "Settings.ScreenOffTimeout", "300000")
+    called_cmd = mock_run.call_args[0][0]
+    assert "update" in called_cmd
+    assert "value:s:300000" in called_cmd
+    assert ok is True

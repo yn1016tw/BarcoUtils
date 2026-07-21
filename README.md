@@ -662,7 +662,25 @@ python scripts/setup_tool.py --ip 192.168.1.100 --email user@domain.com --passwo
 
 ### adb_key_switch.bat
 
-Switches the active ADB vendor key between Duvel and Fruitesse devices.
+Switches the active ADB vendor key between Duvel, Fruitesse, and God devices.
+
+```
+scripts\adb_key_switch.bat
+```
+
+**Menu options:**
+
+| Option | Description |
+|--------|-------------|
+| `[1]` | Duvel — copies `duvel\adb_private_key` to the active key path |
+| `[2]` | Fruitesse (GEN5 Button) — copies `fruitesse\adb_private_key` to the active key path |
+| `[3]` | God — copies `god\adb_private_key` to the active key path |
+| `[4]` | Duvel + Fruitesse (GEN5 Button) — sets `ADB_VENDOR_KEYS` to both key paths so both devices authorize simultaneously |
+| `[5]` | God + Fruitesse (GEN5 Button) — sets `ADB_VENDOR_KEYS` to both key paths |
+| `[6]` | All — sets `ADB_VENDOR_KEYS` to all three key paths |
+| `[7]` | Exit |
+
+Options `[1]`–`[3]` copy a single key file to the active key path and clear any previously set `ADB_VENDOR_KEYS` (used when only one device type is connected). Options `[4]`–`[6]` instead point the `ADB_VENDOR_KEYS` environment variable (semicolon-separated list) at multiple key files at once — needed when a Base Unit and a Gen5 ClickShare Button (which uses the Fruitesse key) are connected together and must both authorize. All options restart the adb server (`adb kill-server` / `adb start-server`) afterward. The "Current:" label at the top of the menu is read from `ADB_VENDOR_KEYS` first (so combo modes display correctly) and falls back to comparing the active key file otherwise.
 
 ### duvel_setup.bat
 

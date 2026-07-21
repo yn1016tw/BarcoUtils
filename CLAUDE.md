@@ -211,7 +211,7 @@ testcases/test_mtr_join_with_id_for_multiple_peripherals.py — iterates over Ac
 tools/v4l2_stream_test   — Static ARM64 binary; pushed by push_peripheral_resources() (peripheral test only)
 data/barco_tone_2s.wav   — 1 kHz / 2 s tone WAV; generated locally if absent, pushed by push_peripheral_resources()
 scripts/                 — Windows helper scripts (ADB key switcher, Duvel device setup, ethernet control, setup automation)
-scripts/adb_key_switch.bat  — Switch active ADB vendor key between Duvel / Fruitesse
+scripts/adb_key_switch.bat  — Switch active ADB vendor key between Duvel / Fruitesse / God; options [4]-[6] set ADB_VENDOR_KEYS to multiple key paths (Duvel+Fruitesse, God+Fruitesse, or all three) so a Base Unit and Gen5 Button (Fruitesse key) can authorize simultaneously; options [1]-[3] clear ADB_VENDOR_KEYS so single-key mode isn't masked by a stale combo value; "Current:" detection checks ADB_VENDOR_KEYS against the three combo strings before falling back to comparing the active key file
 scripts/app_tool.bat        — Interactive menu: manage CLICKSHARE_DEBUG env var (ON/OFF/clear) to control ClickShare desktop app log output
 scripts/duvel_setup.bat     — Interactive Duvel device provisioning; options 1-6: mfg mode/SN/reboot/cert/SSID; [7] MDEP setup wizard; [8] run all 1-6; [9] run all 1-6 + auto setup wizard
 scripts/god_setup.bat       — God-mode production API device setup (separate from ADB-based duvel_setup.bat): mfg mode/SN/part number/MAC/WiFi/certs/OOBE via REST; [10] run all 1-9; also secure boot enable/read, FW version, part number read

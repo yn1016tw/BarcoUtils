@@ -738,6 +738,8 @@ scripts\god_setup.bat
 | `[R]` / `[D]` | Refresh / Select Device (adb) |
 | `[S]` / `[P]` / `[M]` / `[F]` | Change Serial Number / Part Number / MAC Address / FW Build Dir |
 
+The device-selection step filters connected adb devices down to God devices only (`getprop ro.barco.platform` == `w4god`; detection also checks `which g5configcli` first to quickly rule out a Gen5 Button) — other connected devices (Duvel, Gen5 Button) are excluded from the list and from auto-selection.
+
 ### set_wifi_config.ps1
 
 Configures the Base Unit's WiFi Access Point (SSID, channel, band) via the v3 REST API (port 4003 by default). Called by `god_setup.bat` option `[5]`, or standalone:

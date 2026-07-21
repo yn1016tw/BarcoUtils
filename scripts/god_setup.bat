@@ -424,20 +424,29 @@ if defined IPCIDR (
 )
 exit /b 0
 
-:: ---- Subroutine: check adb devices list, pick a target if multiple ----
+:: ---- Subroutine: check adb devices list, keep only God devices, pick a target if multiple ----
 :SELECT_DEVICE
 set "DEVICE_SERIAL="
-set "DEV_COUNT=0"
+set "RAW_COUNT=0"
 for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
     if not "%%A"=="" if /i "%%B"=="device" (
+        set /a RAW_COUNT+=1
+        set "RAW_!RAW_COUNT!=%%A"
+    )
+)
+
+set "DEV_COUNT=0"
+for /l %%I in (1,1,!RAW_COUNT!) do (
+    call :DETECT_DEVICE_LABEL !RAW_%%I!
+    if /i "!DEVICE_LABEL!"=="God" (
         set /a DEV_COUNT+=1
-        set "DEV_!DEV_COUNT!=%%A"
+        set "DEV_!DEV_COUNT!=!RAW_%%I!"
     )
 )
 
 if !DEV_COUNT! equ 0 (
     echo.
-    echo No ADB devices found. Connect a device ^(authorized^) and try again.
+    echo No God devices found ^(ro.barco.platform=w4god^). Connect a God device ^(authorized^) and try again.
     pause
     exit /b 1
 )
@@ -448,7 +457,7 @@ if !DEV_COUNT! equ 1 (
 )
 
 echo.
-echo Multiple ADB devices detected:
+echo Multiple God devices detected:
 echo ------------------------------------------------------------
 for /l %%I in (1,1,!DEV_COUNT!) do echo   [%%I] !DEV_%%I!
 echo ------------------------------------------------------------
@@ -461,4 +470,16 @@ if not defined DEV_%DEV_CHOICE% (
     goto SELECT_DEVICE_PROMPT
 )
 set "DEVICE_SERIAL=!DEV_%DEV_CHOICE%!"
+exit /b 0
+
+:: ---- Subroutine: detect device type label (GEN5 Button / God / Duvel) via adb ----
+:DETECT_DEVICE_LABEL
+set "DEVICE_LABEL=Unknown"
+for /f "usebackq delims=" %%G in (`adb -s %1 shell which g5configcli 2^>nul`) do if not "%%G"=="" set "DEVICE_LABEL=GEN5 Button"
+if "%DEVICE_LABEL%"=="Unknown" (
+    for /f "usebackq delims=" %%P in (`adb -s %1 shell getprop ro.barco.platform 2^>nul`) do (
+        if /i "%%P"=="w4god" set "DEVICE_LABEL=God"
+        if /i "%%P"=="w4duvel" set "DEVICE_LABEL=Duvel"
+    )
+)
 exit /b 0

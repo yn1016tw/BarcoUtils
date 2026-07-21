@@ -200,6 +200,7 @@ testcases/common/edge_desktop.py      — EdgeController: pywinauto-based automa
 testcases/common/teams_meeting_host.py  — Windows-side host: create Meet Now meeting, log Teams version, auto-accept incoming calls; writes meeting_info.json to logs/teams_meeting_host/ by default
 testcases/common/logger.py            — Logger class: write timestamped messages to stdout and {output_dir}/logs.txt simultaneously; methods: info/warning/error/debug
 testcases/common/acroname_hub.py      — AcronameHub class: brainstem SDK wrapper for Acroname USBHub3+ (USB module mode); controls port power/data/speed, measures current/voltage, manages boost charge and reports hub info
+testcases/common/clickshare_button.py — ClickShareButton class: ADB wrapper for the Gen5 ClickShare Button, simulates short/long presses via g5configcli
 testcases/common/utils.py             — Shared test utilities: screenshot_for_debug, screenshot_host_desktop, start_recording, stop_recording, start_ui_with_scrcpy, FFMPEG_DEFAULT, SCRCPY_DEFAULT
 testcases/common/version.py           — VERSION string (bump manually on releases)
 testcases/test_peripheral.py          — CLI entry point + TestResult / ResultWriter / PeripheralTestRunner
@@ -258,6 +259,11 @@ src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT
 - `UpstreamMode` — `IntEnum` exported from `acroname_hub`: `NONE=255`, `PORT_0=0`, `PORT_1=1`, `AUTO=2`
 - `hub_serial() -> int | None` — hub serial number as int; None on error
 - `hub_firmware_version() -> str | None` — firmware version (SDK returns raw int, converted via str()); None on error
+
+**ClickShareButton public API** (`testcases/common/clickshare_button.py`, `from common.clickshare_button import ClickShareButton`):
+- `ClickShareButton(serial: str, is_ip: bool)` — Gen5 only; button must expose its own ADB serial (USB or TCP/IP), independent of the base unit
+- `connect()` / `disconnect()` — same serial-vs-ip semantics as `DuvelDevice`
+- `press(long_press=False, timeout=None)` — simulate a short (`SHORT_PRESS_DURATION=0.2s`) or long (`LONG_PRESS_DURATION=3s`) press by sending `ringButton.pressed` then, after a sleep, `ringButton.released` via `g5configcli -E`; `timeout` overrides the hold duration in seconds
 
 **utils.py public API** (`from common.utils import ...`):
 - `FFMPEG_DEFAULT` — default path to ffmpeg.exe (`C:\Tools\ffmpeg\bin\ffmpeg.exe`)

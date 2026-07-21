@@ -706,6 +706,9 @@ scripts\duvel_setup.bat
 | `[A]` | Find Device IP Address (adb) |
 | `[B]` | Change Device IP |
 | `[C]` | Change SN |
+| `[D]` | Select Device (adb) |
+
+On launch, and via `[D]`, the device-selection step filters connected adb devices down to Duvel devices only (`getprop ro.barco.platform` == `w4duvel`; detection also checks `which g5configcli` first to quickly rule out a Gen5 Button) — other connected devices (God, Gen5 Button) are excluded from the list and from auto-selection.
 
 ### god_setup.bat
 

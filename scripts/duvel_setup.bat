@@ -9,6 +9,9 @@ set "REST_PORT=4003"
 set "ACTIVATE_URL=http://korgrt13.barco.com"
 set "SN=1882000501"
 
+call :SELECT_DEVICE
+if errorlevel 1 goto EXIT
+
 call :GET_IP
 
 :MAIN_MENU
@@ -17,6 +20,7 @@ echo ============================================================
 echo         Wave4 Duvel Device Setup Tool
 echo ============================================================
 echo.
+echo   Device Serial : %DEVICE_SERIAL%
 echo   Device IP : %DEVICE_IP%
 echo   SN        : %SN%
 echo   SSID      : ClickShare-%SN%
@@ -33,6 +37,7 @@ echo   [9] Run All Steps + Auto Setup (1-6 then wizard)
 echo   [A] Refresh Device IP Address (adb)
 echo   [B] Change Device IP
 echo   [C] Change SN
+echo   [D] Select Device (adb)
 echo   [0] Exit
 echo.
 echo ============================================================
@@ -50,6 +55,7 @@ if "%CHOICE%"=="9" goto RUN_ALL_SETUP
 if /i "%CHOICE%"=="A" goto FIND_IP
 if /i "%CHOICE%"=="B" goto CHANGE_IP
 if /i "%CHOICE%"=="C" goto CHANGE_SN
+if /i "%CHOICE%"=="D" goto RESELECT_DEVICE
 if "%CHOICE%"=="0" goto EXIT
 echo Invalid option.
 timeout /t 2 >nul
@@ -82,7 +88,7 @@ goto MAIN_MENU
 echo.
 echo [3] Rebooting base unit...
 echo ------------------------------------------------------------
-adb reboot
+adb -s %DEVICE_SERIAL% reboot
 echo   Waiting for device to come back online...
 :WAIT_REBOOT_MENU
 timeout /t 5 >nul
@@ -147,7 +153,7 @@ curl -s -X PUT -H "Content-Type: text/plain" -d "%SN%" %DEVICE_IP%:%PROD_PORT%/s
 echo.
 
 echo [Step 3/6] Rebooting and waiting for device...
-adb reboot
+adb -s %DEVICE_SERIAL% reboot
 echo   Waiting for device to come back online...
 :WAIT_REBOOT
 timeout /t 5 >nul
@@ -206,7 +212,7 @@ curl -s -X PUT -H "Content-Type: text/plain" -d "%SN%" %DEVICE_IP%:%PROD_PORT%/s
 echo.
 
 echo [Step 3/6] Rebooting and waiting for device...
-adb reboot
+adb -s %DEVICE_SERIAL% reboot
 echo   Waiting for device to come back online...
 :WAIT_REBOOT2
 timeout /t 5 >nul
@@ -248,6 +254,16 @@ echo Device IP refreshed: %DEVICE_IP%
 timeout /t 2 >nul
 goto MAIN_MENU
 
+:: ---- D. Select Device (adb) ----
+:RESELECT_DEVICE
+call :SELECT_DEVICE
+if errorlevel 1 goto MAIN_MENU
+call :GET_IP
+echo.
+echo Device selected: %DEVICE_SERIAL%  (IP: %DEVICE_IP%)
+timeout /t 2 >nul
+goto MAIN_MENU
+
 :: ---- B. Change Device IP ----
 :CHANGE_IP
 echo.
@@ -274,8 +290,68 @@ exit /b 0
 :: ---- Subroutine: detect device IP via adb ----
 :GET_IP
 set "IPCIDR="
-for /f "tokens=2" %%A in ('adb shell ip addr show eth0 2^>nul ^| findstr /C:"inet "') do set "IPCIDR=%%A"
+for /f "tokens=2" %%A in ('adb -s %DEVICE_SERIAL% shell ip addr show eth0 2^>nul ^| findstr /C:"inet "') do set "IPCIDR=%%A"
 if defined IPCIDR (
     for /f "tokens=1 delims=/" %%B in ("%IPCIDR%") do set "DEVICE_IP=%%B"
+)
+exit /b 0
+
+:: ---- Subroutine: check adb devices list, keep only Duvel devices, pick a target if multiple ----
+:SELECT_DEVICE
+set "DEVICE_SERIAL="
+set "RAW_COUNT=0"
+for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
+    if not "%%A"=="" if /i "%%B"=="device" (
+        set /a RAW_COUNT+=1
+        set "RAW_!RAW_COUNT!=%%A"
+    )
+)
+
+set "DEV_COUNT=0"
+for /l %%I in (1,1,!RAW_COUNT!) do (
+    call :DETECT_DEVICE_LABEL !RAW_%%I!
+    if /i "!DEVICE_LABEL!"=="Duvel" (
+        set /a DEV_COUNT+=1
+        set "DEV_!DEV_COUNT!=!RAW_%%I!"
+    )
+)
+
+if !DEV_COUNT! equ 0 (
+    echo.
+    echo No Duvel devices found ^(ro.barco.platform=w4duvel^). Connect a Duvel device ^(authorized^) and try again.
+    pause
+    exit /b 1
+)
+
+if !DEV_COUNT! equ 1 (
+    set "DEVICE_SERIAL=!DEV_1!"
+    exit /b 0
+)
+
+echo.
+echo Multiple Duvel devices detected:
+echo ------------------------------------------------------------
+for /l %%I in (1,1,!DEV_COUNT!) do echo   [%%I] !DEV_%%I!
+echo ------------------------------------------------------------
+
+:SELECT_DEVICE_PROMPT
+set "DEV_CHOICE="
+set /p "DEV_CHOICE=Select target device number: "
+if not defined DEV_%DEV_CHOICE% (
+    echo Invalid selection.
+    goto SELECT_DEVICE_PROMPT
+)
+set "DEVICE_SERIAL=!DEV_%DEV_CHOICE%!"
+exit /b 0
+
+:: ---- Subroutine: detect device type label (GEN5 Button / God / Duvel) via adb ----
+:DETECT_DEVICE_LABEL
+set "DEVICE_LABEL=Unknown"
+for /f "usebackq delims=" %%G in (`adb -s %1 shell which g5configcli 2^>nul`) do if not "%%G"=="" set "DEVICE_LABEL=GEN5 Button"
+if "%DEVICE_LABEL%"=="Unknown" (
+    for /f "usebackq delims=" %%P in (`adb -s %1 shell getprop ro.barco.platform 2^>nul`) do (
+        if /i "%%P"=="w4god" set "DEVICE_LABEL=God"
+        if /i "%%P"=="w4duvel" set "DEVICE_LABEL=Duvel"
+    )
 )
 exit /b 0

@@ -225,6 +225,8 @@ scripts/diagnose-hid-binding.ps1 — Inspect USB/HID registry driver bindings fo
 scripts/find-hid-holder.ps1      — Enumerate which processes hold open handles to the Gen5 Button HID device
 scripts/fix-barco-driver.ps1     — Remove duplicate BarcoClickShareDrv entries via pnputil; requires Administrator
 scripts/test-hid-clickshare.ps1  — Open/read/write Gen5 Button HID device from PowerShell (no build required)
+scripts/gen5_button.bat          — Interactive menu: auto-detect Gen5 Button over adb (via `which g5configcli`), then simulate short/long press
+scripts/gen5_button_press.py     — CLI wrapper around `ClickShareButton.press()`; adds `testcases/` to sys.path for `common.clickshare_button` import
 src/hid-test/hid_test.cpp  — Windows C++ tool: enumerate ClickShare Gen4/Gen5 HID devices and test CreateFile open access
 src/hid-test/build.bat     — MSVC build script for hid_test.cpp (auto-detects VS 2017/2019/2022)
 src/hid-desc/hid_desc_tool.bat  — ADB menu tool: enable rootfsoverlay, remount RW, backup/recover/patch HID descriptor, reboot Button

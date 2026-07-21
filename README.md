@@ -80,7 +80,9 @@ BarcoUtils/
 │   ├── diagnose-hid-binding.ps1   # Inspect USB/HID registry driver bindings for Gen5 Button
 │   ├── find-hid-holder.ps1        # Enumerate processes holding open handles to the Gen5 Button HID device
 │   ├── fix-barco-driver.ps1       # Remove duplicate BarcoClickShareDrv entries via pnputil (admin)
-│   └── test-hid-clickshare.ps1    # Open/read/write Gen5 Button HID device from PowerShell
+│   ├── test-hid-clickshare.ps1    # Open/read/write Gen5 Button HID device from PowerShell
+│   ├── gen5_button.bat            # Interactive menu: auto-detect Gen5 Button over adb, simulate short/long press
+│   └── gen5_button_press.py       # CLI wrapper around ClickShareButton.press()
 ├── src/
 │   ├── timesheet/
 │   │   ├── fill_timesheet.py      # SAP Fiori CATS timesheet auto-fill via Playwright + Edge persistent profile
@@ -738,6 +740,26 @@ Standalone PowerShell tools for troubleshooting the Gen5 ClickShare Button (VID=
 | `find-hid-holder.ps1` | Enumerate which processes hold open handles to the Gen5 Button HID device |
 | `fix-barco-driver.ps1` | Remove duplicate `BarcoClickShareDrv` registry entries via `pnputil` (requires Administrator) |
 | `test-hid-clickshare.ps1` | Open/read/write the Gen5 Button HID device from PowerShell directly (no build required) |
+
+### gen5_button.bat
+
+Interactive menu to simulate a short or long press on a Gen5 ClickShare Button over adb — no HID hardware access required.
+
+```
+scripts\gen5_button.bat
+```
+
+Auto-detects the button's ADB serial by checking `which g5configcli` on each connected device, clears the screen, then shows a menu:
+- `[1]` Short press
+- `[2]` Long press
+- `[0]` Exit
+
+Each option calls `gen5_button_press.py --serial <serial> [--long]`, a thin CLI wrapper around `ClickShareButton.press()`:
+
+```bash
+python scripts/gen5_button_press.py --serial 1200602466
+python scripts/gen5_button_press.py --serial 1200602466 --long
+```
 
 ---
 

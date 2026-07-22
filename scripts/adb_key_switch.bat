@@ -60,66 +60,84 @@ goto detect
 
 :duvel
 copy /Y "%DUVEL_KEY%" "%DEST_KEY%" >nul
-reg delete "HKCU\Environment" /v ADB_VENDOR_KEYS /f >nul 2>&1
-set "ADB_VENDOR_KEYS="
+powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('ADB_VENDOR_KEYS','%DEST_KEY%','User')" >nul
+set "ADB_VENDOR_KEYS=%DEST_KEY%"
 echo Switched to Duvel key.
 adb kill-server >nul 2>&1
 adb start-server >nul 2>&1
 echo ADB server restarted.
+call :ROOT_DEVICES
 echo.
 goto detect
 
 :fruitesse
 copy /Y "%FRUITESSE_KEY%" "%DEST_KEY%" >nul
-reg delete "HKCU\Environment" /v ADB_VENDOR_KEYS /f >nul 2>&1
-set "ADB_VENDOR_KEYS="
+powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('ADB_VENDOR_KEYS','%DEST_KEY%','User')" >nul
+set "ADB_VENDOR_KEYS=%DEST_KEY%"
 echo Switched to Fruitesse key.
 adb kill-server >nul 2>&1
 adb start-server >nul 2>&1
 echo ADB server restarted.
+call :ROOT_DEVICES
 echo.
 goto detect
 
 :god
 copy /Y "%GOD_KEY%" "%DEST_KEY%" >nul
-reg delete "HKCU\Environment" /v ADB_VENDOR_KEYS /f >nul 2>&1
-set "ADB_VENDOR_KEYS="
+powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('ADB_VENDOR_KEYS','%DEST_KEY%','User')" >nul
+set "ADB_VENDOR_KEYS=%DEST_KEY%"
 echo Switched to God key.
 adb kill-server >nul 2>&1
 adb start-server >nul 2>&1
 echo ADB server restarted.
+call :ROOT_DEVICES
 echo.
 goto detect
 
 :duvel_fruitesse
-setx ADB_VENDOR_KEYS "%DUVEL_KEY%;%FRUITESSE_KEY%" >nul
+powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('ADB_VENDOR_KEYS','%DUVEL_KEY%;%FRUITESSE_KEY%','User')" >nul
 set "ADB_VENDOR_KEYS=%DUVEL_KEY%;%FRUITESSE_KEY%"
 echo Set ADB_VENDOR_KEYS to Duvel + Fruitesse (GEN5 Button).
 adb kill-server >nul 2>&1
 adb start-server >nul 2>&1
 echo ADB server restarted.
+call :ROOT_DEVICES
 echo.
 goto detect
 
 :god_fruitesse
-setx ADB_VENDOR_KEYS "%GOD_KEY%;%FRUITESSE_KEY%" >nul
+powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('ADB_VENDOR_KEYS','%GOD_KEY%;%FRUITESSE_KEY%','User')" >nul
 set "ADB_VENDOR_KEYS=%GOD_KEY%;%FRUITESSE_KEY%"
 echo Set ADB_VENDOR_KEYS to God + Fruitesse (GEN5 Button).
 adb kill-server >nul 2>&1
 adb start-server >nul 2>&1
 echo ADB server restarted.
+call :ROOT_DEVICES
 echo.
 goto detect
 
 :all
-setx ADB_VENDOR_KEYS "%DUVEL_KEY%;%FRUITESSE_KEY%;%GOD_KEY%" >nul
+powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('ADB_VENDOR_KEYS','%DUVEL_KEY%;%FRUITESSE_KEY%;%GOD_KEY%','User')" >nul
 set "ADB_VENDOR_KEYS=%DUVEL_KEY%;%FRUITESSE_KEY%;%GOD_KEY%"
 echo Set ADB_VENDOR_KEYS to Duvel + Fruitesse + God (all keys).
 adb kill-server >nul 2>&1
 adb start-server >nul 2>&1
 echo ADB server restarted.
+call :ROOT_DEVICES
 echo.
 goto detect
 
 :end
 echo Exiting...
+goto :eof
+
+:: ---- Subroutine: run adb root on every authorized connected device ----
+:ROOT_DEVICES
+timeout /t 2 >nul
+for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
+    if /i "%%B"=="device" (
+        echo Running adb root on %%A...
+        adb -s %%A root >nul 2>&1
+    )
+)
+exit /b 0

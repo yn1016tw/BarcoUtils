@@ -680,7 +680,13 @@ scripts\adb_key_switch.bat
 | `[6]` | All — sets `ADB_VENDOR_KEYS` to all three key paths |
 | `[7]` | Exit |
 
-Options `[1]`–`[3]` copy a single key file to the active key path and clear any previously set `ADB_VENDOR_KEYS` (used when only one device type is connected). Options `[4]`–`[6]` instead point the `ADB_VENDOR_KEYS` environment variable (semicolon-separated list) at multiple key files at once — needed when a Base Unit and a Gen5 ClickShare Button (which uses the Fruitesse key) are connected together and must both authorize. All options restart the adb server (`adb kill-server` / `adb start-server`) afterward. The "Current:" label at the top of the menu is read from `ADB_VENDOR_KEYS` first (so combo modes display correctly) and falls back to comparing the active key file otherwise.
+`ADB_VENDOR_KEYS` pointing at the fixed path `C:\barco\wave4\keys\adb_private_key` (the active key path, `DEST_KEY`) is the baseline this whole tool depends on — adb only looks at that one path unless told otherwise. Options `[1]`–`[3]` copy the chosen key file to that active key path and **repoint** `ADB_VENDOR_KEYS` back at it (used when only one device type is connected). Options `[4]`–`[6]` instead point `ADB_VENDOR_KEYS` (semicolon-separated list) at multiple key files at once — needed when a Base Unit and a Gen5 ClickShare Button (which uses the Fruitesse key) are connected together and must both authorize. All options restart the adb server (`adb kill-server` / `adb start-server`) afterward. The "Current:" label at the top of the menu is read from `ADB_VENDOR_KEYS` first (so combo modes display correctly) and falls back to comparing the active key file otherwise.
+
+Setting `ADB_VENDOR_KEYS` goes through `powershell -Command "[Environment]::SetEnvironmentVariable(...,'User')"` rather than `setx`/`reg delete` — the raw registry tools don't broadcast the `WM_SETTINGCHANGE` message, so Explorer (and any shell it later spawns) keeps its cached copy of the variable.
+
+After every option restarts the adb server, it waits 2 seconds then runs `adb root` on each device currently listed as `device` (authorized) in `adb devices` — so the newly-active key is immediately usable without a separate manual `adb root` step.
+
+⚠️ Options `[1]`–`[3]` must repoint `ADB_VENDOR_KEYS` at `DEST_KEY`, never clear it outright — clearing it makes adb fall back to its own default keypair (`~/.android/adbkey`), which the device has never authorized, surfacing as `unauthorized` in `adb devices`.
 
 ### duvel_setup.bat
 

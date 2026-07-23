@@ -115,6 +115,17 @@ python src/timesheet/fill_timesheet2.py --skip
 
 ⚠️ Both timesheet tools operate on a real SAP account — `submit()` saves entered records with no dry-run mode.
 
+**Chrome Remote Desktop auto-login** (`src/chrome-remote-desktop/remote_login.py`): Playwright-based automation for an existing CRD "Remote Access" host — connects to a named remote computer via PIN, logs into Windows on the remote screen, launches a program via Win+R, then disconnects.
+
+```bash
+pip install playwright pytesseract pillow
+playwright install chrome
+
+python src/chrome-remote-desktop/remote_login.py --computer-name "MyPC" --program-path "C:\tools\myapp.exe"
+```
+
+Uses a dedicated Chrome persistent profile (`src/chrome-remote-desktop/chrome_profile/`, gitignored, sign into Google manually once before first use — only the PIN step is automated). PIN/Windows password are read via `getpass` if not passed as CLI args, never logged. The remote screen is a bare `<canvas>` stream with no DOM, so Windows login/desktop readiness is judged via OCR (`pytesseract`) polling canvas screenshots against `--login-keywords` / `--desktop-keywords`; OCR timeout logs a warning and proceeds rather than hanging. `--debug-pause {connect,pin,login,launch}` opens the Playwright Inspector before that step. CRD's exact DOM (computer entry, PIN input, Disconnect button) is undocumented and unverified against a live session — expect to need selector adjustments via `--debug-pause` on first real run. Requires Tesseract-OCR installed separately (with `chi_tra`+`eng` language data); pass `--tesseract-cmd` if not in PATH.
+
 **HID test** (`src/hid-test/`): Windows x64 C++ tool to enumerate ClickShare Gen4 (PID=0x00CE) and Gen5 (PID=0x0185) Buttons (VID=0x0600) and verify HID open access ([A]–[D] CreateFile tests).
 
 ```bat

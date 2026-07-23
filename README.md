@@ -92,10 +92,12 @@ BarcoUtils/
 │   ├── hid-test/
 │   │   ├── hid_test.cpp           # Windows C++ tool: enumerate Gen4/Gen5 Button HID devices, test CreateFile access
 │   │   └── build.bat              # MSVC build script (auto-detects VS 2017/2019/2022)
-│   └── hid-desc/
-│       ├── hid_desc_tool.bat      # ADB menu tool: backup/restore/patch the Button's HID report descriptor
-│       ├── parse_hid_desc.py      # Parse and pretty-print a HID report descriptor .bin file
-│       └── patch_hid_desc.py      # Patch Usage Page / Usage in a HID report descriptor .bin file
+│   ├── hid-desc/
+│   │   ├── hid_desc_tool.bat      # ADB menu tool: backup/restore/patch the Button's HID report descriptor
+│   │   ├── parse_hid_desc.py      # Parse and pretty-print a HID report descriptor .bin file
+│   │   └── patch_hid_desc.py      # Patch Usage Page / Usage in a HID report descriptor .bin file
+│   └── chrome-remote-desktop/
+│       └── remote_login.py        # Automate CRD: connect via PIN, Windows login, run a program, disconnect
 └── tools/
     ├── v4l2_stream_test.c         # Minimal V4L2 streaming test (source)
     └── v4l2_stream_test           # Precompiled static ARM64 binary (Android 26+)
@@ -854,6 +856,24 @@ src\hid-desc\hid_desc_tool.bat
 python src/hid-desc/parse_hid_desc.py <file.bin> [file2.bin ...]
 python src/hid-desc/patch_hid_desc.py <file.bin> --usage-page 0x0081 --usage 0x83
 ```
+
+### src/chrome-remote-desktop — Chrome Remote Desktop auto-login
+
+Automates connecting to an existing Chrome Remote Desktop (CRD) "Remote Access" host: opens Chrome, connects to a named remote computer via PIN, logs into Windows on the remote screen, launches a program via Win+R, then disconnects.
+
+```bash
+pip install playwright pytesseract pillow
+playwright install chrome
+# Also install Tesseract-OCR separately (with chi_tra + eng language data) and
+# either put tesseract.exe in PATH or pass --tesseract-cmd
+
+python src/chrome-remote-desktop/remote_login.py --computer-name "MyPC" --program-path "C:\tools\myapp.exe"
+python src/chrome-remote-desktop/remote_login.py --computer-name "MyPC" --pin 123456 --windows-password "..." --program-path "notepad.exe"
+```
+
+Uses a dedicated Chrome persistent profile (`src/chrome-remote-desktop/chrome_profile/`, gitignored) so the Google account layer is out of scope — sign into that profile manually once before first use; only the CRD PIN step is automated. PIN and Windows password are read via `getpass` if not passed as arguments (never logged). The remote screen is a `<canvas>` video stream with no DOM, so Windows login/desktop readiness is judged by OCR (`pytesseract`) polling screenshots of that canvas against `--login-keywords` / `--desktop-keywords`; if OCR times out it logs a warning and proceeds anyway rather than hanging indefinitely. `--debug-pause {connect,pin,login,launch}` opens the Playwright Inspector before that step — useful since remotedesktop.google.com's exact DOM (computer entry, PIN input, Disconnect button) isn't documented and may need selector adjustments against the live page. Logs to `src/chrome-remote-desktop/log/`.
+
+⚠️ Selectors for the CRD web app (computer list entry, PIN input, Disconnect button) are best-effort text/role matches, not verified against a live session — expect to adjust them via `--debug-pause` on first real run.
 
 ### Wave4 Dev Tool (`src/wave4-dev-tool/`)
 

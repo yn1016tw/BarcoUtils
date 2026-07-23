@@ -859,21 +859,23 @@ python src/hid-desc/patch_hid_desc.py <file.bin> --usage-page 0x0081 --usage 0x8
 
 ### src/chrome-remote-desktop — Chrome Remote Desktop auto-login
 
-Automates connecting to an existing Chrome Remote Desktop (CRD) "Remote Access" host: opens Chrome, connects to a named remote computer via PIN, logs into Windows on the remote screen, launches a program via Win+R, then disconnects.
+Automates connecting to an existing Chrome Remote Desktop (CRD) "Remote Access" host: opens Chrome, connects to a named remote computer, logs into Windows on the remote screen if needed, launches a program via Win+R, then disconnects.
 
 ```bash
-pip install playwright pytesseract pillow
-playwright install chrome
-# Also install Tesseract-OCR separately (with chi_tra + eng language data) and
-# either put tesseract.exe in PATH or pass --tesseract-cmd
+pip install pyautogui pywin32 psutil pytesseract pillow
+# Also install Tesseract-OCR separately (with chi_tra + eng language data); see below
 
 python src/chrome-remote-desktop/remote_login.py --computer-name "MyPC" --program-path "C:\tools\myapp.exe"
 python src/chrome-remote-desktop/remote_login.py --computer-name "MyPC" --pin 123456 --windows-password "..." --program-path "notepad.exe"
 ```
 
-Uses a dedicated Chrome persistent profile (`src/chrome-remote-desktop/chrome_profile/`, gitignored) so the Google account layer is out of scope — sign into that profile manually once before first use; only the CRD PIN step is automated. PIN and Windows password are read via `getpass` if not passed as arguments (never logged). The remote screen is a `<canvas>` video stream with no DOM, so Windows login/desktop readiness is judged by OCR (`pytesseract`) polling screenshots of that canvas against `--login-keywords` / `--desktop-keywords`; if OCR times out it logs a warning and proceeds anyway rather than hanging indefinitely. `--debug-pause {connect,pin,login,launch}` opens the Playwright Inspector before that step — useful since remotedesktop.google.com's exact DOM (computer entry, PIN input, Disconnect button) isn't documented and may need selector adjustments against the live page. Logs to `src/chrome-remote-desktop/log/`.
+Does not use Playwright/CDP browser automation — Chromium (confirmed on both Chrome and Edge) refuses to expose DevTools remote debugging when launched against the real default profile directory (a built-in anti-malware restriction, no override flag), which rules out driving the user's actual signed-in browser session that way. Instead this tool launches the real Chrome as a plain subprocess — exactly like double-clicking it, so it has full access to the real Google session — and drives it entirely at the OS level: it locates the window (`pywin32`/`psutil`), takes screenshots (`pyautogui`), runs OCR (`pytesseract`) to find text, and sends real mouse clicks / keystrokes. Because Chrome Remote Desktop is installed as a PWA in this environment, a successful connection opens its own separate fullscreen app window rather than reusing the original tab; the tool falls back to matching the largest visible `chrome.exe` window system-wide when the originally-launched window disappears.
 
-⚠️ Selectors for the CRD web app (computer list entry, PIN input, Disconnect button) are best-effort text/role matches, not verified against a live session — expect to adjust them via `--debug-pause` on first real run.
+Everything from selecting the computer to a usable desktop runs as one combined polling loop: each iteration re-reads the actual on-screen state (PIN box / login screen / already-connected desktop / neither) and reacts, instead of assuming a fixed sequence of steps — some devices skip the PIN prompt, some sessions land straight on an unlocked desktop, and a screensaver may sit in between requiring more than one wake attempt (mouse jiggle + click + arrow-key tap) before anything else renders. It never blindly types a PIN/password into a state that never asked for one. PIN and Windows password are read via `getpass` if not passed as arguments (never logged). Element positions are found by OCR-ing the visible window rather than by inspecting a DOM, so wording/layout changes on remotedesktop.google.com can break text matching — adjust `--login-keywords` / `--desktop-keywords` / timeouts as needed. `--pause-before {connect,pin,launch,disconnect}` pauses before that step (only useful when run from an interactive terminal); `pin` is the single pause point right before the combined loop starts. Logs to `src/chrome-remote-desktop/log/`.
+
+Tesseract-OCR itself must be installed separately (e.g. `winget install --id UB-Mannheim.TesseractOCR -e`); pass `--tesseract-cmd` if `tesseract.exe` isn't in PATH (defaults to `C:\Program Files\Tesseract-OCR\tesseract.exe`). Its bundled language data usually only covers English — download `chi_tra.traineddata` and `eng.traineddata` from the [tesseract-ocr/tessdata](https://github.com/tesseract-ocr/tessdata) repo into `src/chrome-remote-desktop/tessdata/` (gitignored, not shipped in this repo) or pass `--tessdata-dir`.
+
+⚠️ This drives the real, currently signed-in Chrome profile and an actual remote Windows session — a wrong PIN/password is sent to the real service, and OCR-timing mistakes can send keystrokes to whatever is focused on the remote screen. Test with `--pause-before` first.
 
 ### Wave4 Dev Tool (`src/wave4-dev-tool/`)
 

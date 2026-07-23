@@ -4,6 +4,6 @@ __pycache__/
 logs/
 src/timesheet/log/
 src/chrome-remote-desktop/log/
-src/chrome-remote-desktop/chrome_profile/
+src/chrome-remote-desktop/tessdata/
 src/hid-test/*.exe
 src/hid-desc/device_files/

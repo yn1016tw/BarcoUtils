@@ -1,0 +1,17 @@
+@echo off
+REM Runs remote_login.py against Barco Work Station, then puts this (local) PC
+REM back to sleep. Invoked by the "BarcoWorkStation-MorningRun" Task Scheduler
+REM task (Mon-Fri 08:30, wake-to-run) -- see CLAUDE.md / README.md for setup.
+REM
+REM Copy this file to scheduled_run.bat (gitignored -- never commit real
+REM credentials) and fill in --windows-password / --pin below.
+REM
+REM TODO: credentials are currently passed as a plaintext CLI argument, which
+REM is only acceptable because this file itself never enters git. Wire up a
+REM secure credential store (e.g. the Windows Credential Manager via the
+REM `keyring` package) instead before treating this as a real solution.
+
+cd /d "C:\Workspace\BarcoUtils"
+python.exe src\chrome-remote-desktop\remote_login.py --computer-name "Barco Work Station" --program-path "python.exe C:\Project\BarcoUtils\src\timesheet\fill_timesheet2.py" --windows-password YOUR_PASSWORD_HERE
+
+rundll32.exe powrprof.dll,SetSuspendState 0,1,0

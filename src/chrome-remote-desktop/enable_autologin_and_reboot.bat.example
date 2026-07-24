@@ -1,0 +1,99 @@
+@echo off
+REM Task A of the BIOS-wake auto-login flow. Registered as a Task Scheduler
+REM task triggered "At startup" (Session 0, runs before anyone logs in), run
+REM as SYSTEM. Only acts if the current time falls inside the scheduled
+REM weekday/time window -- otherwise this is an unrelated manual boot and
+REM must do nothing. See CLAUDE.md for the full flow and why this exists
+REM (BIOS/UEFI RTC wake from a full shutdown, unlike Task Scheduler's own
+REM "wake to run" from sleep, always lands on Windows' normal login screen).
+REM
+REM Copy this file to enable_autologin_and_reboot.bat (gitignored -- never
+REM commit real credentials) and fill in DefaultUserName/DefaultDomainName/
+REM DefaultPassword below with this LOCAL machine's own Windows login
+REM credentials (NOT the remote Barco Work Station's).
+
+cd /d "C:\Workspace\BarcoUtils"
+
+REM Daily "already attempted" guard -- independent of the time window and of
+REM whether run_after_autologin.bat succeeds. Without this, a failure in
+REM Task B leaves AutoAdminLogon=1, and every subsequent startup inside the
+REM same time window re-triggers Task A -> reboot -> Task A again: a reboot
+REM loop bounded only by the window's end time, not by "did this already run
+REM today". Confirmed in practice: 5 SYSTEM-initiated restarts in 24 minutes
+REM after the time-window check was disabled for testing. See CLAUDE.md.
+for /f %%d in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set TODAY=%%d
+
+REM Sweep marker files left behind by previous days -- keeps only today's,
+REM so .autologin_done_* / .autologin_pending_* don't accumulate forever.
+for %%f in ("C:\Workspace\BarcoUtils\src\chrome-remote-desktop\.autologin_done_*") do (
+    if not "%%~nxf"==".autologin_done_%TODAY%" del "%%f"
+)
+for %%f in ("C:\Workspace\BarcoUtils\src\chrome-remote-desktop\.autologin_pending_*") do (
+    if not "%%~nxf"==".autologin_pending_%TODAY%" del "%%f"
+)
+
+set DONE_FLAG=C:\Workspace\BarcoUtils\src\chrome-remote-desktop\.autologin_done_%TODAY%
+if exist "%DONE_FLAG%" exit /b 0
+
+python.exe src\chrome-remote-desktop\check_time_window.py --start 08:00 --end 08:45
+if errorlevel 1 exit /b 0
+
+REM Mark today as attempted BEFORE doing anything else below, so even a
+REM crash or power loss mid-cycle can't cause a same-day retry.
+echo. > "%DONE_FLAG%"
+
+REM Marks this reboot cycle as the automated one. run_after_autologin.bat
+REM requires this flag before it will act (and deletes it immediately), so a
+REM coincidental/unrelated logon that happens to fall inside the same time
+REM window can't trigger the remote-login script or the auto-disable/shutdown.
+REM Dated for the same reason as DONE_FLAG: if this file is ever left behind
+REM (e.g. auto-logon itself never actually happens), an undated flag would
+REM sit there and falsely arm the very next logon that happens to land
+REM inside the time window on some LATER day, not just today.
+echo. > "C:\Workspace\BarcoUtils\src\chrome-remote-desktop\.autologin_pending_%TODAY%"
+
+REM CONFIRMED BY LIVE TESTING (see CLAUDE.md): for a Microsoft Account,
+REM neither AutoAdminLogon (0 or 1) nor DefaultUserName's presence/absence
+REM gates autologin. The ONLY thing that gates it is whether the encrypted
+REM LSA private-data secret named "DefaultPassword" exists. Windows silently
+REM signs in the last-logged-on user whenever that secret is present,
+REM regardless of AutoAdminLogon. Disarming = deleting the secret (done by
+REM run_after_autologin.bat's cleanup and independently by the
+REM DisableAutoAdminLogonSafetyNet task).
+REM
+REM Writing that secret ourselves via LsaStorePrivateData (lsa_secret.ps1)
+REM does NOT work reliably -- confirmed by repeated live testing, autologin
+REM silently fails even though the stored value reads back byte-identical.
+REM Sysinternals Autologon64.exe's Enable path does more than a raw
+REM LsaStorePrivateData call: it live-validates the credential via LogonUser
+REM first, which for a Microsoft Account only succeeds when given the
+REM computer's own hostname as domain (NOT "MicrosoftAccount") -- that
+REM string only matters for Winlogon's OWN boot-time interpretation of
+REM DefaultDomainName below, a completely different code path. So: use
+REM Autologon64.exe (domain=computer hostname) to validate+store the secret,
+REM THEN separately set DefaultDomainName=MicrosoftAccount for boot time.
+REM Download Autologon64.exe from Sysinternals and place it at
+REM src\chrome-remote-desktop\tools\Autologon64.exe (gitignored).
+REM For a true local account, this whole secret dance may be unnecessary --
+REM plaintext DefaultPassword + AutoAdminLogon might just work on its own.
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 1 /f
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Winlogon" /v DefaultUserName /t REG_SZ /d "YOUR_LOCAL_USERNAME" /f
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Winlogon" /v DefaultDomainName /t REG_SZ /d "MicrosoftAccount" /f
+REM /accepteula is required here, not just when launched interactively --
+REM EULA acceptance is stored per-user (HKCU), and Task A runs as SYSTEM,
+REM a separate profile that has never accepted it. Without this flag the
+REM tool blocks on a console "Accept Eula (Y/N)?" prompt with no console
+REM attached in Session 0, hanging forever.
+"src\chrome-remote-desktop\tools\Autologon64.exe" /accepteula YOUR_LOCAL_USERNAME YOUR_COMPUTER_HOSTNAME YOUR_LOCAL_WINDOWS_PASSWORD
+
+REM If credential validation failed (e.g. the password above is stale after
+REM a real Microsoft Account password change), the secret was NOT stored --
+REM rebooting anyway would just silently strand the day at a normal login
+REM screen with no auto-run and no error surfaced. Bail out instead; the
+REM registry values above stay set (harmless without the secret) and
+REM DONE_FLAG still blocks a same-day retry, matching a "ran but skipped"
+REM outcome rather than a silent no-op.
+if errorlevel 1 exit /b 1
+
+shutdown /r /t 300
+

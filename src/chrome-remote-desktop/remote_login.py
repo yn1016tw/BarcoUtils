@@ -19,6 +19,7 @@ break text matching. Adjust --*-keywords / timeouts as needed.
 import argparse
 import ctypes
 import getpass
+import json
 import logging
 import os
 import subprocess
@@ -39,6 +40,13 @@ try:
     import pytesseract
 except ImportError:
     pytesseract = None
+
+try:
+    import cv2
+    import numpy as np
+except ImportError:
+    cv2 = None
+    np = None
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 LOG_DIR = SCRIPT_DIR / "log"
@@ -192,6 +200,61 @@ def setup_logger():
         handlers=[logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler(sys.stdout)],
     )
     return logging.getLogger("remote_login")
+
+
+def kill_existing_chrome(log):
+    """Terminate any already-running chrome.exe before launching a fresh one.
+    Without this, launching Chrome while a process from an earlier
+    interrupted/crashed run is still alive just opens a new tab in that
+    existing instance -- and if a leftover tab is still showing a connected,
+    fullscreen CRD session (e.g. from a run that got killed mid-flow), that
+    stale window is the LARGEST visible chrome.exe window on screen, so
+    find_any_chrome_window() picks it over the freshly opened device-list
+    tab. The whole script then drives the wrong remote session from the very
+    first step. Confirmed live: a stale fullscreen "James NB" CRD session
+    survived an earlier interrupted run and got selected instead of the
+    intended target on every subsequent run, until the process was killed."""
+    killed = 0
+    for proc in psutil.process_iter(["pid", "name"]):
+        try:
+            if proc.info["name"] and proc.info["name"].lower() == "chrome.exe":
+                proc.kill()
+                killed += 1
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    if killed:
+        log.info("結束 %d 個殘留的 chrome.exe 程序", killed)
+        time.sleep(1)
+
+
+def clear_crash_flag(log):
+    """Patch Chrome's Preferences file so it doesn't think last run crashed.
+    Whenever Chrome is killed abruptly (force-closed, or the machine shuts
+    down mid-run) rather than exiting cleanly, it records exit_type=Crashed.
+    The NEXT launch then auto-restores the previous session's tabs -- and if
+    one of those tabs was a live, fullscreen Chrome Remote Desktop session
+    (its URL literally encodes the session id), the restore reconnects
+    straight into THAT specific remote session instead of showing a fresh
+    device list. Confirmed live: this is what silently landed the script in
+    an old "James NB" session instead of the intended target, before any of
+    this script's own window/OCR logic even ran. kill_existing_chrome() alone
+    doesn't fix this -- it only helps if a stale process/window is still
+    around; the crash flag itself persists across launches until cleared, so
+    the very next interrupted run reintroduces the same bug. Best-effort:
+    does a plain text substitution rather than a full JSON parse/rewrite to
+    avoid any risk of corrupting the rest of this large, sensitive file."""
+    pref_path = Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "User Data" / "Default" / "Preferences"
+    if not pref_path.is_file():
+        return
+    try:
+        text = pref_path.read_text(encoding="utf-8")
+        patched = text.replace('"exit_type":"Crashed"', '"exit_type":"Normal"')
+        patched = patched.replace('"exited_cleanly":false', '"exited_cleanly":true')
+        if patched != text:
+            pref_path.write_text(patched, encoding="utf-8")
+            log.info("已清除 Chrome 當機還原標記")
+    except OSError as e:
+        log.warning("無法修改 Chrome Preferences（%s），略過", e)
 
 
 def launch_chrome(url, chrome_path):
@@ -368,7 +431,7 @@ class ChromeWindow:
         pyautogui.moveTo(x, y, duration=0.1)
         pyautogui.click(x, y)
 
-    def wake(self):
+    def wake(self, settle_wait=2):
         """A single click doesn't reliably dismiss a Windows screensaver on the
         remote end -- it typically needs actual mouse movement, and clicking
         dead-center risked repeatedly landing on the user avatar tile itself
@@ -376,11 +439,22 @@ class ChromeWindow:
         the password box below it. Jiggle the mouse, click below-center instead,
         then tap a real (non-modifier) key too -- an arrow key so that if it
         lands after a password field is already focused, it can't corrupt
-        whatever's typed into it the way a letter or Space would."""
+        whatever's typed into it the way a letter or Space would.
+
+        `settle_wait`: seconds to wait (then reactivate the window) after the
+        click+keypress, for a caller about to act on the result immediately
+        (e.g. type a password next). Pass 0 to skip -- callers that already
+        have their own wait afterward (a poll loop's fixed interval, or the
+        next iteration's own win.activate()) should do that, so wake()'s
+        default doesn't silently stack an extra 2s on top of a wait that was
+        already there before wake() grew this built-in settle step."""
         left, top, width, height = self.rect()
         cx, cy = left + width // 2, top + int(height * 0.55)
         self.jiggle_click(cx, cy)
         press_key_scancode(0x28)  # VK_DOWN
+        if settle_wait:
+            time.sleep(settle_wait)
+            self.activate()
 
 
 def ocr_lines(image, tesseract_cmd=None):
@@ -409,13 +483,21 @@ def ocr_lines(image, tesseract_cmd=None):
                 continue
             key = (lang, data["block_num"][i], data["par_num"][i], data["line_num"][i])
             x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
-            entry = lines.setdefault(key, {"words": [], "left": x, "top": y, "right": x + w, "bottom": y + h})
+            entry = lines.setdefault(key, {"words": [], "left": x, "top": y, "right": x + w, "bottom": y + h,
+                                            "confs": []})
             entry["words"].append(word)
             entry["left"] = min(entry["left"], x)
             entry["top"] = min(entry["top"], y)
             entry["right"] = max(entry["right"], x + w)
             entry["bottom"] = max(entry["bottom"], y + h)
-    return list(lines.values())
+            conf = data["conf"][i]
+            if isinstance(conf, (int, float)) and conf >= 0:
+                entry["confs"].append(conf)
+    result = list(lines.values())
+    for entry in result:
+        confs = entry.pop("confs")
+        entry["conf"] = sum(confs) / len(confs) if confs else 0.0
+    return result
 
 
 def find_line_center(lines, keywords):
@@ -448,10 +530,17 @@ def ocr_contains_any(image, keywords, tesseract_cmd=None):
 
 def wait_and_click_text(win, keyword, timeout, poll_interval, tesseract_cmd, log):
     deadline = time.monotonic() + timeout
+    iteration = 0
+    last_lines = []
     while time.monotonic() < deadline:
+        iteration += 1
         win.activate()
         image, left, top = win.screenshot()
-        found = ocr_find_text_center(image, keyword, tesseract_cmd)
+        lines = ocr_lines(image, tesseract_cmd)
+        last_lines = lines
+        seen_text = " | ".join(" ".join(l["words"]) for l in lines)[:300]
+        log.info("[wait_and_click_text #%d] 尋找 %r，OCR 內容：%s", iteration, keyword, seen_text or "(空)")
+        found = find_line_center(lines, [keyword])
         if found:
             x, y = found
             pyautogui.click(left + x, top + y)
@@ -474,7 +563,210 @@ def wait_for_any_text(win, keywords, timeout, poll_interval, tesseract_cmd, log)
     return False
 
 
-def connect_and_login(win, windows_password, login_keywords, timeout, poll_interval, tesseract_cmd, log):
+def _text_overlap_ratio(box, lines, min_words=3, min_conf=70):
+    """Fraction of box's area covered by OCR-recognized text line boxes --
+    but only lines that look like genuine legible text (at least `min_words`
+    words AND average OCR confidence >= `min_conf`) count. Confirmed live
+    (visual-training capture of a real, on-screen password field): OCR
+    attempting to read the blurry "Password" placeholder itself produces a
+    handful of garbled, low-confidence tokens (e.g. "h..ass\\qmrd", "il", "-")
+    whose bounding box happens to cover almost the entire input field -- if
+    counted, that would make find_input_box() reject the field it's supposed
+    to find. A real notification/label (e.g. CRD's local "Your desktop is
+    currently shared with .../Stop Sharing" bar) reads as several legible,
+    higher-confidence words instead, which is what this is meant to catch."""
+    bx, by, bw, bh = box
+    box_area = bw * bh
+    if box_area == 0 or not lines:
+        return 0.0
+    overlap_total = 0
+    for line in lines:
+        if len(line["words"]) < min_words or line.get("conf", 0) < min_conf:
+            continue
+        ix0, iy0 = max(bx, line["left"]), max(by, line["top"])
+        ix1, iy1 = min(bx + bw, line["right"]), min(by + bh, line["bottom"])
+        if ix1 > ix0 and iy1 > iy0:
+            overlap_total += (ix1 - ix0) * (iy1 - iy0)
+    return overlap_total / box_area
+
+
+def _analyze_boxes(image, min_width=180, min_height_ratio=0.015, max_height_ratio=0.06):
+    """Shared contour-detection step for find_input_box() and the visual
+    training logger (run_visual_training()): returns every contour that passes
+    the basic size/aspect geometry filter, with its raw metrics -- NOT yet
+    filtered by fill_ratio/corner count/text overlap, so training data can
+    show every candidate a frame produced, not just the one that would have
+    been picked under the current thresholds.
+
+    A live CRD screenshot is a compressed video frame, not a crisp local
+    capture -- confirmed by testing against a deliberately blurred +
+    low-quality-JPEG-recompressed copy of a real login screenshot (simulating
+    WebRTC degradation): the box's border breaks into several disconnected
+    edge fragments instead of one closed rectangle outline, so a small
+    dilation (kernel=3, iterations=1) isn't enough to bridge them back into a
+    single contour -- kernel=5/iterations=3 was needed to reliably close the
+    shape again without over-merging into neighboring elements (kernel=7+
+    started merging the box with the avatar photo above it)."""
+    if cv2 is None or np is None:
+        return []
+    arr = np.array(image.convert("L"))
+    h, w = arr.shape
+    edges = cv2.Canny(arr, 50, 150)
+    edges = cv2.dilate(edges, np.ones((5, 5), np.uint8), iterations=3)
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    min_h = h * min_height_ratio
+    max_h = h * max_height_ratio
+    candidates = []
+    for c in contours:
+        x, y, cw, ch = cv2.boundingRect(c)
+        if cw < min_width or not (min_h <= ch <= max_h):
+            continue
+        if cw / ch < 3:  # input fields are much wider than tall
+            continue
+        box_area = cw * ch
+        if box_area == 0:
+            continue
+        # cv2.contourArea() is the area enclosed BY the traced path, not the
+        # area of the stroke itself -- for a real box border (whether traced
+        # as the outer or inner edge of the rectangle outline) this is close
+        # to the full bounding-box area, NOT small. A low ratio instead means
+        # a jagged/irregular contour (text fragments, gradient noise, etc.) --
+        # not a clean box. Verified against a real captured login screen: the
+        # genuine password field's contour has fill_ratio ~0.93-0.95 when
+        # sharp, but drops to ~0.53 on a blur/compression-degraded copy of the
+        # same screenshot (heavier dilation partially fills the shape but not
+        # all the way).
+        fill_ratio = cv2.contourArea(c) / box_area
+        peri = cv2.arcLength(c, True)
+        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+        candidates.append({
+            "x": x, "y": y, "w": cw, "h": ch,
+            "aspect": cw / ch,
+            "fill_ratio": fill_ratio,
+            "corners": len(approx),
+        })
+    return candidates
+
+
+def find_input_box(image, lines=None, min_width=180, min_height_ratio=0.015, max_height_ratio=0.06,
+                    max_text_overlap=0.6, min_fill_ratio=0.35):
+    """Detect a text-input-field-shaped rectangle (wide, short, bordered box) via
+    classic edge/contour detection -- a fallback signal for "this is a login
+    screen" for when OCR can't read the password placeholder text at all.
+    Confirmed live: on one real login screen OCR only ever picked up the
+    account's display name, never the configured login keywords, even though
+    the password input box itself was clearly visible on screen -- so text
+    matching alone timed out without ever attempting the password.
+
+    `lines` (an ocr_lines() result for the same image, if available) is used to
+    reject candidates that overlap actual OCR-recognized text: also confirmed
+    live, without this check the CRD toolbar's own local "Your desktop is
+    currently shared with ... / Stop Sharing" notification bar -- itself a
+    wide, short, bordered box -- was mistaken for the password field, so the
+    password got typed and Enter sent into nothing, leaving the remote screen
+    stuck on the account-tile login screen. A genuine empty input field has no
+    full-sentence text (at most a faint placeholder), so any candidate whose
+    area is mostly covered by recognized text is almost certainly a label,
+    notification, or button instead.
+
+    Returns the box's center (x, y) in image-local coordinates (same space as
+    OCR coordinates -- add the window's left/top to get screen coordinates),
+    or None if cv2/numpy aren't installed or no matching box is found."""
+    if cv2 is None or np is None:
+        return None
+    best = None
+    for c in _analyze_boxes(image, min_width, min_height_ratio, max_height_ratio):
+        if c["fill_ratio"] < min_fill_ratio:
+            continue
+        if not (4 <= c["corners"] <= 8):
+            continue
+        box = (c["x"], c["y"], c["w"], c["h"])
+        if _text_overlap_ratio(box, lines) > max_text_overlap:
+            continue
+        if best is None or c["w"] > best["w"]:
+            best = c
+    if best is None:
+        return None
+    return (best["x"] + best["w"] // 2, best["y"] + best["h"] // 2)
+
+
+def run_visual_training(win, tesseract_cmd, log, output_dir, poll_interval, duration=None):
+    """Passive-leaning data-collection loop: repeatedly screenshots the current
+    window, runs OCR + box-candidate analysis, and logs every frame's raw
+    numbers (JSONL, one record per frame) plus the screenshot itself. Meant to
+    be run against a real remote login screen to build up a dataset of real
+    screen states for tuning find_input_box()'s thresholds, instead of
+    guessing from a handful of manually-captured reference images (which is
+    how the kernel/fill_ratio constants in _analyze_boxes()/find_input_box()
+    were originally, imprecisely, tuned).
+
+    Never types anything (no real password risk), but DOES call win.wake() on
+    EVERY frame, not just when no input box has been detected -- confirmed
+    live: leaving several multi-second iterations in a row with zero real
+    input reaching the remote (which happens whenever detection already found
+    what it needed and had no reason to click/wake) let the remote's login
+    screen time out and revert to the lock/screensaver view before the loop
+    got a chance to act, even though the password box had just been detected.
+    Also confirmed live: a plain mouse move alone does NOT reset the remote's
+    inactivity timer -- wake()'s keyboard event (Down arrow, safe to send even
+    into an already-focused text field) is what actually matters, so there's
+    no safe way to keep the remote alive without it. No cap on the number of
+    wake attempts: unlike connect_and_login(), this loop has no fixed timeout
+    to race against, so stop it with Ctrl+C (or --visual-training-duration)
+    once it's done its job, same as any other long-running observation tool.
+
+    Runs until `duration` seconds elapse, or indefinitely (until Ctrl+C) if
+    `duration` is None."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    jsonl_path = output_dir / "frames.jsonl"
+    log.info("視覺 training 模式啟動，輸出目錄：%s（%s，Ctrl+C 可隨時中止）", output_dir,
+              "手動 Ctrl+C 結束" if duration is None else f"{duration:.0f} 秒後自動結束")
+    deadline = time.monotonic() + duration if duration else None
+    index = 0
+    try:
+        while deadline is None or time.monotonic() < deadline:
+            index += 1
+            win.activate()
+            image, left, top = win.screenshot()
+            lines = ocr_lines(image, tesseract_cmd)
+            seen_text = " | ".join(" ".join(l["words"]) for l in lines)
+            candidates = _analyze_boxes(image)
+            for c in candidates:
+                box = (c["x"], c["y"], c["w"], c["h"])
+                c["text_overlap"] = round(_text_overlap_ratio(box, lines), 3)
+                c["fill_ratio"] = round(c["fill_ratio"], 3)
+                c["aspect"] = round(c["aspect"], 2)
+            chosen = find_input_box(image, lines)
+
+            log.info("[visual-training #%d] 執行喚醒動作（%s）", index,
+                      "未偵測到輸入框" if chosen is None else "維持遠端連線 keep-alive")
+            win.wake(settle_wait=0)  # loop's own time.sleep(poll_interval) + next iteration's win.activate() already cover this
+            woke = True
+
+            img_name = f"frame_{index:04d}.png"
+            image.save(output_dir / img_name)
+            record = {
+                "index": index,
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "image": img_name,
+                "ocr_text": seen_text,
+                "ocr_line_count": len(lines),
+                "candidates": candidates,
+                "chosen_input_box": chosen,
+                "woke": woke,
+            }
+            with open(jsonl_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            log.info("[visual-training #%d] OCR行數=%d 候選框=%d 選中=%s",
+                      index, len(lines), len(candidates), chosen)
+            time.sleep(poll_interval)
+    except KeyboardInterrupt:
+        log.info("視覺 training 模式手動中止")
+    log.info("視覺 training 結束，共 %d 張畫面，資料存於：%s", index, output_dir)
+
+
+def connect_and_login(win, windows_password, login_keywords, timeout, tesseract_cmd, log):
     """Single polling loop covering the whole post-click sequence: read the
     current on-screen state each iteration and act on it directly, rather than
     running separate fixed stages. Handles, in any order/combination:
@@ -496,24 +788,37 @@ def connect_and_login(win, windows_password, login_keywords, timeout, poll_inter
     while time.monotonic() < deadline:
         iteration += 1
         remaining = deadline - time.monotonic()
-        win.activate()
+        win.wake(settle_wait=2)
         image, left, top = win.screenshot()
         lines = ocr_lines(image, tesseract_cmd)
         seen_text = " | ".join(" ".join(l["words"]) for l in lines)[:300]
         log.info("[connect_and_login #%d] 剩餘 %.0fs，OCR 內容：%s", iteration, remaining, seen_text or "(空)")
+        win.wake(settle_wait=2)
+        
+        # Restored as a real detection basis (OR'd with find_input_box()) for
+        # the actual login run -- OCR keyword match and visual box detection
+        # are independent signals with different failure modes (OCR misses
+        # when the placeholder text isn't legible; the visual detector misses
+        # on states it hasn't been tuned against), so either one finding the
+        # login screen is enough to act.
+        keyword_match = any(k.lower() in seen_text.lower() for k in login_keywords)
+        input_box = find_input_box(image, lines)
+        if input_box:
+            log.info("[connect_and_login #%d] 偵測到輸入框視覺特徵，位置 %s", iteration, input_box)
+        if keyword_match:
+            log.info("[connect_and_login #%d] OCR 命中登入關鍵字", iteration)
 
-        if any(k.lower() in seen_text.lower() for k in login_keywords):
-            log.info("[connect_and_login #%d] 偵測到登入畫面關鍵字，輸入 Windows 密碼", iteration)
+        if keyword_match or input_box:
+            log.info("[connect_and_login #%d] 偵測到登入畫面，輸入 Windows 密碼", iteration)
             # win.click_center() lands dead-center, which on a real Windows
             # lock screen is often the user-avatar tile, not the password box
             # sitting below it -- click the actual matched text's position
-            # instead so the click reliably focuses the input field.
-            found = find_line_center(lines, login_keywords)
-            if found:
-                x, y = found
-                win.jiggle_click(left + x, top + y)
-            else:
-                win.wake()
+            # instead so the click reliably focuses the input field. If OCR
+            # didn't match any keyword, fall back to the detected input box's
+            # position instead.
+            found = find_line_center(lines, login_keywords) if keyword_match else None
+            x, y = found if found else input_box
+            win.jiggle_click(left + x, top + y)
             time.sleep(2)
             win.activate()
             type_text_scancode(windows_password)
@@ -527,8 +832,7 @@ def connect_and_login(win, windows_password, login_keywords, timeout, poll_inter
             return "login"
 
         log.info("[connect_and_login #%d] 未偵測到已知狀態，執行喚醒動作", iteration)
-        win.wake()
-        time.sleep(poll_interval)
+        
     log.error("[connect_and_login] 逾時")
     return None
 
@@ -536,9 +840,8 @@ def connect_and_login(win, windows_password, login_keywords, timeout, poll_inter
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--computer-name", required=True, help="Chrome Remote Desktop 遠端電腦顯示名稱")
-    parser.add_argument("--pin", help="CRD PIN；未提供則互動輸入（不會顯示在畫面上）")
     parser.add_argument("--windows-password", help="遠端電腦 Windows 登入密碼；未提供則互動輸入")
-    parser.add_argument("--program-path", required=True, help="登入後透過 Win+R 執行的完整路徑或指令")
+    parser.add_argument("--program-path", help="登入後透過 Win+R 執行的完整路徑或指令（--visual-training 模式下不需要）")
     parser.add_argument("--chrome-path", default=str(CHROME_PATH), help="chrome.exe 完整路徑")
     parser.add_argument("--tesseract-cmd", default=str(DEFAULT_TESSERACT_CMD) if DEFAULT_TESSERACT_CMD.is_file() else None,
                          help="tesseract.exe 完整路徑（不在 PATH 時指定）")
@@ -559,23 +862,40 @@ def main():
     parser.add_argument("--pause-before", choices=["connect", "pin", "launch", "disconnect"],
                          help="在指定步驟前暫停等待按 Enter，方便對照實際畫面調整"
                               "（\"pin\" 是連線/PIN/登入合併迴圈開始前的唯一暫停點）")
+    parser.add_argument("--visual-training", action="store_true",
+                         help="視覺 training 模式：連線並進入全螢幕後，不斷擷取畫面、"
+                              "記錄 OCR 與 find_input_box() 候選框的原始特徵數值到 "
+                              "log/visual_training/<時間戳記>/frames.jsonl（連同每張截圖），"
+                              "全程不點擊、不輸入密碼、不執行程式；用於收集真實畫面資料，"
+                              "作為之後調整視覺判斷參數的依據。搭配 --visual-training-duration "
+                              "指定秒數自動結束，不指定則需 Ctrl+C 手動中止")
+    parser.add_argument("--visual-training-duration", type=float, default=None,
+                         help="--visual-training 模式自動結束的秒數；不指定則需手動 Ctrl+C")
     args = parser.parse_args()
+
+    if not args.visual_training and not args.program_path:
+        parser.error("--program-path 為必填（--visual-training 模式除外）")
 
     ctypes.windll.user32.SetProcessDPIAware()
 
     log = setup_logger()
+    screen_w = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
+    screen_h = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
+    log.info("目前螢幕解析度：%dx%d", screen_w, screen_h)
 
     if args.tessdata_dir:
         os.environ["TESSDATA_PREFIX"] = args.tessdata_dir
 
-    pin = args.pin or getpass.getpass("CRD PIN: ")
-    windows_password = args.windows_password or getpass.getpass("Windows 密碼: ")
+    windows_password = None if args.visual_training else (args.windows_password or getpass.getpass("Windows 密碼: "))
     login_keywords = [k.strip() for k in args.login_keywords.split(",") if k.strip()]
     desktop_keywords = [k.strip() for k in args.desktop_keywords.split(",") if k.strip()]
 
     def pause_if(step):
         if args.pause_before == step:
             input(f"[pause-before={step}] 對照畫面確認後按 Enter 繼續...")
+
+    kill_existing_chrome(log)
+    clear_crash_flag(log)
 
     log.info("啟動 Chrome：%s", args.chrome_path)
     pid = launch_chrome("https://remotedesktop.google.com/access", args.chrome_path)
@@ -591,8 +911,14 @@ def main():
 
     # remotedesktop.google.com's SPA content area is often still blank right after
     # navigation completes; one reload reliably renders the device list.
+    # IMPORTANT: do NOT click_center() here just to focus the window before F5 --
+    # confirmed by live testing that if the device list has already rendered by
+    # this point, a dead-center click lands directly on whichever device tile is
+    # there and connects to it (observed: silently connected to the wrong
+    # computer). win.activate() (called above) already gives keyboard focus
+    # without touching page content, which is all F5 needs.
     time.sleep(2)
-    win.click_center()
+    win.activate()
     pyautogui.press("f5")
     time.sleep(3)
 
@@ -602,57 +928,76 @@ def main():
     if not wait_and_click_text(win, args.computer_name, args.connect_timeout, args.poll_interval, args.tesseract_cmd, log):
         sys.exit(1)
 
+    # Give the remote session a moment to actually establish/render before
+    # starting to act on it -- confirmed live: the first couple of frames
+    # right after selecting the computer are still the connecting/blank
+    # transition state (no password box exists yet at all), which is
+    # legitimately "no box detected" but not a useful signal either way.
+    log.info("已連線，等待 15 秒讓遠端畫面穩定後再開始偵測")
+    time.sleep(15)
+    
     # Selecting a computer may open Chrome Remote Desktop's installed PWA as a
     # brand-new (often fullscreen) window while the original tab window stays
     # alive but hidden behind it -- force a fresh window search so we don't keep
     # screenshotting the now-stale original window.
     win.hwnd = None
 
-    pause_if("pin")
-
-    # One combined loop covers everything from here to a usable desktop: the
-    # remote screen may need a screensaver-wake nudge (possibly more than
-    # once) before anything useful renders, and once it does, the connection
-    # is expected to land on the Windows login screen. connect_and_login()
-    # re-reads the actual on-screen state every iteration and reacts to
-    # whatever it currently sees, rather than assuming a fixed sequence.
-    total_timeout = args.session_timeout + args.login_timeout
-    log.info("等待連線並判斷畫面狀態（逾時 %ss）", total_timeout)
-    outcome = connect_and_login(win, windows_password, login_keywords,
-                                 total_timeout, args.poll_interval, args.tesseract_cmd, log)
-    if outcome is None:
-        log.error("逾時：無法判斷連線/登入狀態")
-        sys.exit(1)
-    if outcome == "login":
-        time.sleep(args.post_login_wait)
-        if desktop_keywords:
-            log.info("等待桌面出現（OCR，逾時 %ss）", args.desktop_timeout)
-            if not wait_for_any_text(win, desktop_keywords, args.desktop_timeout, args.poll_interval, args.tesseract_cmd, log):
-                log.warning("OCR 逾時未偵測到桌面關鍵字，仍繼續執行程式")
-
-    pause_if("launch")
-
+    # Make sure the remote session is fullscreen as early as possible, right
+    # after the new CRD viewer window appears -- the OCR-based login/wake loop
+    # below screenshots this window's rect, and outside of Chrome's Fullscreen
+    # API state (F11), Windows intercepts special keys like Win+R locally
+    # instead of forwarding them to the remote session.
     win.ensure_fullscreen()
 
-    log.info("送出 Win+R 並執行程式：%s", args.program_path)
-    win.click_center()
-    hotkey_scancode(0x5B, 0x52)  # VK_LWIN, VK_R
-    time.sleep(1)
-    type_text_scancode(args.program_path)
-    press_key_scancode(0x0D)  # VK_RETURN
+    pause_if("pin")
 
-    time.sleep(args.post_launch_wait)
+    if args.visual_training:
+        training_dir = LOG_DIR / "visual_training" / datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_visual_training(win, args.tesseract_cmd, log, training_dir, args.poll_interval,
+                             args.visual_training_duration)
+    else:
+        # One combined loop covers everything from here to a usable desktop: the
+        # remote screen may need a screensaver-wake nudge (possibly more than
+        # once) before anything useful renders, and once it does, the connection
+        # is expected to land on the Windows login screen. connect_and_login()
+        # re-reads the actual on-screen state every iteration and reacts to
+        # whatever it currently sees, rather than assuming a fixed sequence.
+        total_timeout = args.session_timeout + args.login_timeout
+        log.info("等待連線並判斷畫面狀態（逾時 %ss）", total_timeout)
+        outcome = connect_and_login(win, windows_password, login_keywords,
+                                     total_timeout, args.tesseract_cmd, log)
+        if outcome is None:
+            log.error("逾時：無法判斷連線/登入狀態")
+            sys.exit(1)
+        if outcome == "login":
+            time.sleep(args.post_login_wait)
+            if desktop_keywords:
+                log.info("等待桌面出現（OCR，逾時 %ss）", args.desktop_timeout)
+                if not wait_for_any_text(win, desktop_keywords, args.desktop_timeout, args.poll_interval, args.tesseract_cmd, log):
+                    log.warning("OCR 逾時未偵測到桌面關鍵字，仍繼續執行程式")
+
+        pause_if("launch")
+
+        win.ensure_fullscreen()
+
+        log.info("送出 Win+R 並執行程式：%s", args.program_path)
+        win.click_center()
+        hotkey_scancode(0x5B, 0x52)  # VK_LWIN, VK_R
+        time.sleep(1)
+        type_text_scancode(args.program_path)
+        press_key_scancode(0x0D)  # VK_RETURN
+
+        time.sleep(args.post_launch_wait)
 
     pause_if("disconnect")
 
-    log.info("斷線")
+    log.info("斷線：先離開全螢幕再關閉 Chrome")
     win.activate()
-    left, top, _, _ = win.rect()
-    pyautogui.moveTo(left + 50, top + 50)
-    time.sleep(1)
-    if not wait_and_click_text(win, "Disconnect", 10, 1, args.tesseract_cmd, log):
-        log.warning("找不到 Disconnect 按鈕，改用 Ctrl+W 關閉分頁")
-        pyautogui.hotkey("ctrl", "w")
+    if win.is_fullscreen():
+        press_key_scancode(0x7A)  # VK_F11
+        time.sleep(1)
+    kill_existing_chrome(log)
+    clear_crash_flag(log)
 
     log.info("完成")
 

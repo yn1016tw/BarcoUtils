@@ -590,6 +590,21 @@ def _text_overlap_ratio(box, lines, min_words=3, min_conf=70):
     return overlap_total / box_area
 
 
+# All absolute-pixel geometry in _analyze_boxes()/find_input_box() (min_width,
+# the dilation kernel size) was tuned against real captures at this screen
+# width. Confirmed live: booting with the monitor powered off made Windows
+# fall back to 1024x768, and the login attempt failed completely (39
+# iterations, 0 candidates ever detected) -- the un-scaled 180px min_width
+# alone already doesn't mean anything at that resolution: a real password box
+# there is only ~160px wide (scaled down from the ~601px-wide box measured at
+# 3840), comfortably BELOW the un-scaled floor tuned for 3840. Rather than
+# hardcode a lookup table per known resolution, every absolute-pixel value is
+# scaled by the actual screenshot's width relative to this reference -- the
+# screenshot width already tells us the current resolution directly, no
+# separate detection needed.
+_REFERENCE_SCREEN_WIDTH = 3840
+
+
 def _analyze_boxes(image, min_width=180, min_height_ratio=0.015, max_height_ratio=0.06):
     """Shared contour-detection step for find_input_box() and the visual
     training logger (run_visual_training()): returns every contour that passes
@@ -606,13 +621,18 @@ def _analyze_boxes(image, min_width=180, min_height_ratio=0.015, max_height_rati
     dilation (kernel=3, iterations=1) isn't enough to bridge them back into a
     single contour -- kernel=5/iterations=3 was needed to reliably close the
     shape again without over-merging into neighboring elements (kernel=7+
-    started merging the box with the avatar photo above it)."""
+    started merging the box with the avatar photo above it). Both `min_width`
+    and the dilation kernel size are scaled to the actual screenshot
+    resolution -- see _REFERENCE_SCREEN_WIDTH's comment above."""
     if cv2 is None or np is None:
         return []
     arr = np.array(image.convert("L"))
     h, w = arr.shape
+    scale = w / _REFERENCE_SCREEN_WIDTH
+    scaled_min_width = max(1, round(min_width * scale))
+    kernel_size = max(3, round(5 * scale))
     edges = cv2.Canny(arr, 50, 150)
-    edges = cv2.dilate(edges, np.ones((5, 5), np.uint8), iterations=3)
+    edges = cv2.dilate(edges, np.ones((kernel_size, kernel_size), np.uint8), iterations=3)
     contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
     min_h = h * min_height_ratio
@@ -620,7 +640,7 @@ def _analyze_boxes(image, min_width=180, min_height_ratio=0.015, max_height_rati
     candidates = []
     for c in contours:
         x, y, cw, ch = cv2.boundingRect(c)
-        if cw < min_width or not (min_h <= ch <= max_h):
+        if cw < scaled_min_width or not (min_h <= ch <= max_h):
             continue
         if cw / ch < 3:  # input fields are much wider than tall
             continue

@@ -97,8 +97,7 @@ BarcoUtils/
 │   │   ├── parse_hid_desc.py      # Parse and pretty-print a HID report descriptor .bin file
 │   │   └── patch_hid_desc.py      # Patch Usage Page / Usage in a HID report descriptor .bin file
 │   └── chrome-remote-desktop/
-│       ├── remote_login.py            # Automate CRD: connect, Windows login, run a program, disconnect
-│       └── scheduled_run.bat.example  # Task Scheduler entry point template (copy to .bat, gitignored, holds real credentials)
+│       └── remote_login.py            # Automate CRD: connect, Windows login, run a program, disconnect
 └── tools/
     ├── v4l2_stream_test.c         # Minimal V4L2 streaming test (source)
     └── v4l2_stream_test           # Precompiled static ARM64 binary (Android 26+)

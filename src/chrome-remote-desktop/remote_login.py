@@ -359,26 +359,78 @@ class ChromeWindow:
         left, top, right, bottom = win32gui.GetWindowRect(hwnd)
         return left, top, right - left, bottom - top
 
+    def _fullscreen_status(self):
+        """(is_fullscreen, window_width, window_height, screen_width,
+        screen_height) -- broken out from is_fullscreen() so callers that
+        want to log/debug the raw numbers (not just the boolean) can, without
+        querying rect()/GetSystemMetrics() a second time themselves."""
+        _, _, width, height = self.rect()
+        screen_w = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
+        screen_h = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
+        return width >= screen_w and height >= screen_h, width, height, screen_w, screen_h
+
     def is_fullscreen(self):
         """True if the window covers the whole screen with no window chrome
         (Chrome's own Fullscreen API state, not just maximized) -- compares
         the window rect against the actual monitor resolution."""
-        _, _, width, height = self.rect()
-        screen_w = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
-        screen_h = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
-        return width >= screen_w and height >= screen_h
+        is_fs, *_ = self._fullscreen_status()
+        return is_fs
 
-    def ensure_fullscreen(self):
+    def _save_debug_screenshot(self, name):
+        """Best-effort debug screenshot -- never raises, since this is only
+        ever called from a diagnostic path and shouldn't itself break the
+        caller."""
+        try:
+            image, _, _ = self.screenshot()
+            path = LOG_DIR / name
+            image.save(path)
+            self.log.info("除錯截圖：%s", path)
+        except Exception as e:
+            self.log.warning("無法儲存除錯截圖（%s）", e)
+
+    def ensure_fullscreen(self, max_attempts=3):
         """Win+R (and any other key meant for the remote session) only reaches
         the remote screen while CRD's viewer is in true fullscreen -- outside
         of it, Windows itself intercepts Win+R locally instead of forwarding
-        it. F11 toggles fullscreen, so only press it when not already there."""
+        it. F11 toggles fullscreen, so only press it when not already there.
+
+        Retries and re-verifies fullscreen status after each attempt instead
+        of pressing F11 once and assuming it worked -- confirmed live: at a
+        forced low resolution (1024x768, from booting with the monitor
+        powered off) a single F11 press + 1s wait wasn't reliably enough, and
+        the caller went ahead and sent Win+R anyway while still NOT
+        fullscreen, so it never reached the remote session at all. Logs the
+        raw window/screen dimensions on every attempt (not just the yes/no
+        result) plus a debug screenshot whenever F11 is about to be pressed
+        or the final attempt still failed -- root cause wasn't nailed down
+        yet (candidates: GPU falls back to a software/basic display driver
+        with no monitor attached, slowing Chrome's fullscreen transition;
+        GetSystemMetrics not matching what Chrome can actually render to at a
+        virtual/fallback resolution; a focus race between activate() and the
+        F11 keypress), so this is meant to make the next occurrence
+        diagnosable from the log + screenshots alone. Returns True if
+        fullscreen was confirmed, False if it gave up after `max_attempts`
+        (caller should treat that as "Win+R likely won't reach the remote")."""
         self.activate()
-        if not self.is_fullscreen():
+        for attempt in range(1, max_attempts + 1):
+            is_fs, width, height, screen_w, screen_h = self._fullscreen_status()
+            self.log.info("[ensure_fullscreen #%d/%d] 視窗尺寸=%dx%d 螢幕解析度=%dx%d 全螢幕=%s",
+                           attempt, max_attempts, width, height, screen_w, screen_h, is_fs)
+            if is_fs:
+                return True
             self.log.info("目前非全螢幕模式，按 F11 進入全螢幕")
+            self._save_debug_screenshot(f"debug_fullscreen_attempt{attempt}.png")
             press_key_scancode(0x7A)  # VK_F11
-            time.sleep(1)
+            time.sleep(1.5)
             self.activate()
+        is_fs, width, height, screen_w, screen_h = self._fullscreen_status()
+        self.log.info("[ensure_fullscreen 最終] 視窗尺寸=%dx%d 螢幕解析度=%dx%d 全螢幕=%s",
+                       width, height, screen_w, screen_h, is_fs)
+        if not is_fs:
+            self.log.warning("多次嘗試後仍非全螢幕模式，Win+R 可能無法送達遠端")
+            self._save_debug_screenshot("debug_fullscreen_failed.png")
+            return False
+        return True
 
     def activate(self):
         """Windows blocks a background process from stealing keyboard focus via a
@@ -998,7 +1050,15 @@ def main():
 
         pause_if("launch")
 
-        win.ensure_fullscreen()
+        if not win.ensure_fullscreen():
+            # Sending Win+R (and the program path + Enter that follow it)
+            # while NOT confirmed fullscreen risks it landing on whatever
+            # local window has focus instead of the remote session -- could
+            # open a local Run dialog and execute an arbitrary command on
+            # THIS machine instead of the remote one. Abort rather than risk
+            # that, now that ensure_fullscreen() actually verifies success.
+            log.error("無法進入全螢幕，中止送出 Win+R（避免誤送到本機）")
+            sys.exit(1)
 
         log.info("送出 Win+R 並執行程式：%s", args.program_path)
         win.click_center()

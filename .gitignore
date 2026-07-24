@@ -5,7 +5,6 @@ logs/
 src/timesheet/log/
 src/chrome-remote-desktop/log/
 src/chrome-remote-desktop/tessdata/
-src/chrome-remote-desktop/scheduled_run.bat
 src/chrome-remote-desktop/enable_autologin_and_reboot.bat
 src/chrome-remote-desktop/run_after_autologin.bat
 src/chrome-remote-desktop/.autologin_pending_*

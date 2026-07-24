@@ -14,6 +14,9 @@ REM credentials (NOT the remote Barco Work Station's).
 
 cd /d "C:\Workspace\BarcoUtils"
 
+set WINDOW_START=08:00
+set WINDOW_END=08:45
+
 REM Daily "already attempted" guard -- independent of the time window and of
 REM whether run_after_autologin.bat succeeds. Without this, a failure in
 REM Task B leaves AutoAdminLogon=1, and every subsequent startup inside the
@@ -35,7 +38,15 @@ for %%f in ("C:\Workspace\BarcoUtils\src\chrome-remote-desktop\.autologin_pendin
 set DONE_FLAG=C:\Workspace\BarcoUtils\src\chrome-remote-desktop\.autologin_done_%TODAY%
 if exist "%DONE_FLAG%" exit /b 0
 
-python.exe src\chrome-remote-desktop\check_time_window.py --start 08:00 --end 08:45
+REM Weekend boot inside the window: no scheduled remote-login run today,
+REM shut back down instead of sitting idle at the login screen all day.
+python.exe src\chrome-remote-desktop\check_time_window.py --days 5,6 --start %WINDOW_START% --end %WINDOW_END%
+if not errorlevel 1 (
+    shutdown /s /t 60
+    exit /b 0
+)
+
+python.exe src\chrome-remote-desktop\check_time_window.py --start %WINDOW_START% --end %WINDOW_END%
 if errorlevel 1 exit /b 0
 
 REM Mark today as attempted BEFORE doing anything else below, so even a

@@ -30,5 +30,5 @@ REM does not gate autologin for a Microsoft Account.
 cd /d "C:\Workspace\BarcoUtils"
 powershell -NoProfile -ExecutionPolicy Bypass -File "src\chrome-remote-desktop\lsa_secret.ps1" -Action Clear
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f
-shutdown /s /t 5
+shutdown /s /f /t 5
 

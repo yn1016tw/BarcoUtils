@@ -14,6 +14,15 @@ REM credentials (NOT the remote Barco Work Station's).
 
 cd /d "C:\Workspace\BarcoUtils"
 
+REM Full path required -- this task runs as SYSTEM (Task Scheduler "At
+REM startup"), which does NOT inherit the interactive user's PATH. If Python
+REM is a per-user install (e.g. under %LOCALAPPDATA%, the default for the
+REM python.org installer without "Install for all users"), a bare
+REM "python.exe" silently resolves to nothing under SYSTEM (errorlevel 9009),
+REM making both time-window checks below fail-open and skip straight past
+REM shutdown/arming with no error surfaced. Confirmed live 2026-07-25.
+set PYTHON=YOUR_PYTHON_EXE_PATH
+
 set WINDOW_START=08:00
 set WINDOW_END=08:45
 
@@ -40,13 +49,16 @@ if exist "%DONE_FLAG%" exit /b 0
 
 REM Weekend boot inside the window: no scheduled remote-login run today,
 REM shut back down instead of sitting idle at the login screen all day.
-python.exe src\chrome-remote-desktop\check_time_window.py --days 5,6 --start %WINDOW_START% --end %WINDOW_END%
+%PYTHON% src\chrome-remote-desktop\check_time_window.py --days 5,6 --start %WINDOW_START% --end %WINDOW_END%
 if not errorlevel 1 (
-    shutdown /s /t 60
+    REM /f forces running apps to close, as defense-in-depth against an
+    REM interactive session with unsaved-work dialogs blocking a graceful
+    REM shutdown.
+    shutdown /s /f /t 60
     exit /b 0
 )
 
-python.exe src\chrome-remote-desktop\check_time_window.py --start %WINDOW_START% --end %WINDOW_END%
+%PYTHON% src\chrome-remote-desktop\check_time_window.py --start %WINDOW_START% --end %WINDOW_END%
 if errorlevel 1 exit /b 0
 
 REM Mark today as attempted BEFORE doing anything else below, so even a

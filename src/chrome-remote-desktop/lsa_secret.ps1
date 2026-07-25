@@ -80,6 +80,19 @@ if ($Action -eq "Set") {
     $result = [LsaSecret]::SetSecret("DefaultPassword", $Password)
 } else {
     $result = [LsaSecret]::ClearSecret("DefaultPassword")
+    # $result is a uint32; 0xC0000034 as a bare PowerShell literal parses as
+    # Int32 (-1073741772), so a direct numeric -eq against it never matches --
+    # compare as a zero-padded hex string instead.
+    if (('{0:X8}' -f $result) -eq 'C0000034') {
+        # Secret already absent -- Clear's desired end state is already true.
+        # Confirmed live (2026-07-25): DisableAutoAdminLogonSafetyNet's action
+        # chains this call with && before "reg add ... AutoAdminLogon /d 0",
+        # so treating this as a failure aborted that chain every time the
+        # secret happened to already be cleared, silently skipping the rest
+        # of the disarm.
+        Write-Output "$Action result: 0x$($result.ToString('X')) (secret already absent, treating as success)"
+        exit 0
+    }
 }
 
 Write-Output "$Action result: 0x$($result.ToString('X'))"

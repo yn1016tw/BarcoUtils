@@ -10,13 +10,16 @@ REM Copy this file to run_after_autologin.bat (gitignored -- never commit
 REM real credentials) and fill in --windows-password below with the REMOTE
 REM Barco Work Station's Windows login password (NOT this local machine's).
 
+set WINDOW_START=08:00
+set WINDOW_END=08:45
+
 for /f %%d in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set TODAY=%%d
 set FLAG=C:\Workspace\BarcoUtils\src\chrome-remote-desktop\.autologin_pending_%TODAY%
 if not exist "%FLAG%" exit /b 0
 del "%FLAG%"
 
 cd /d "C:\Workspace\BarcoUtils"
-python.exe src\chrome-remote-desktop\check_time_window.py --start 08:00 --end 08:45
+python.exe src\chrome-remote-desktop\check_time_window.py --start %WINDOW_START% --end %WINDOW_END%
 if errorlevel 1 goto :cleanup
 
 

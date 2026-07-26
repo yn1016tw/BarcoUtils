@@ -298,6 +298,54 @@ def find_window_by_pid(root_pid, timeout, log, quiet=False):
     return None
 
 
+def list_chrome_hwnds():
+    """Snapshot of every currently visible top-level chrome.exe window handle.
+    Used to tell apart "a genuinely new window just appeared" from "the
+    largest chrome.exe window happens to already be on screen" -- the latter
+    is what let an unrelated, already-maximized Chrome window (e.g. something
+    auto-launched around Windows logon, observed live showing a Gmail inbox)
+    get mistaken for the just-opened CRD session window, since it also
+    happened to already fill the screen (tricking is_fullscreen() too) and
+    was visible before any real connection had rendered."""
+    hwnds = set()
+
+    def enum_handler(hwnd, _):
+        if not win32gui.IsWindowVisible(hwnd) or not win32gui.GetWindowText(hwnd):
+            return
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        try:
+            if psutil.Process(pid).name().lower() == "chrome.exe":
+                hwnds.add(hwnd)
+        except psutil.NoSuchProcess:
+            pass
+
+    win32gui.EnumWindows(enum_handler, None)
+    return hwnds
+
+
+def wait_for_new_chrome_window(baseline_hwnds, timeout, log):
+    """Poll for a visible chrome.exe window that was NOT present in
+    baseline_hwnds (see list_chrome_hwnds()) -- the largest one if several
+    appear. Returns None on timeout, meaning no new window ever showed up
+    (e.g. CRD opened in a tab of the same window rather than a separate
+    window/PWA) -- caller should fall back to the old largest-of-all-windows
+    heuristic in that case, not treat it as fatal."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        best_hwnd, best_area = None, 0
+        for hwnd in list_chrome_hwnds() - baseline_hwnds:
+            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+            area = max(0, right - left) * max(0, bottom - top)
+            if area > best_area:
+                best_hwnd, best_area = hwnd, area
+        if best_hwnd:
+            return best_hwnd
+        time.sleep(0.5)
+    log.warning("等不到新出現的 Chrome 視窗，將回退到「畫面上最大的 chrome.exe 視窗」判斷方式"
+                "（風險：可能誤選其他無關的 Chrome 視窗，如先前live測試中誤選到一個顯示 Gmail 收件匣的視窗）")
+    return None
+
+
 def find_any_chrome_window(timeout, log):
     """Find the largest visible top-level window owned by any chrome.exe process,
     regardless of which process launched it. Needed because Chrome Remote Desktop
@@ -376,7 +424,7 @@ class ChromeWindow:
         is_fs, *_ = self._fullscreen_status()
         return is_fs
 
-    def _save_debug_screenshot(self, name):
+    def save_debug_screenshot(self, name):
         """Best-effort debug screenshot -- never raises, since this is only
         ever called from a diagnostic path and shouldn't itself break the
         caller."""
@@ -419,7 +467,7 @@ class ChromeWindow:
             if is_fs:
                 return True
             self.log.info("目前非全螢幕模式，按 F11 進入全螢幕")
-            self._save_debug_screenshot(f"debug_fullscreen_attempt{attempt}.png")
+            self.save_debug_screenshot(f"debug_fullscreen_attempt{attempt}.png")
             press_key_scancode(0x7A)  # VK_F11
             time.sleep(1.5)
             self.activate()
@@ -428,7 +476,7 @@ class ChromeWindow:
                        width, height, screen_w, screen_h, is_fs)
         if not is_fs:
             self.log.warning("多次嘗試後仍非全螢幕模式，Win+R 可能無法送達遠端")
-            self._save_debug_screenshot("debug_fullscreen_failed.png")
+            self.save_debug_screenshot("debug_fullscreen_failed.png")
             return False
         return True
 
@@ -507,6 +555,52 @@ class ChromeWindow:
         if settle_wait:
             time.sleep(settle_wait)
             self.activate()
+
+
+_VK_CONTROL = 0x11
+_VK_TAB = 0x09
+
+
+def ensure_crd_tab_active(win, computer_name, log, max_cycles=10):
+    """Cycle browser tabs (Ctrl+Tab) until the ACTIVE tab is the Chrome Remote
+    Desktop session, confirmed by the raw Win32 window title (GetWindowText
+    returns "<active tab's page title> - Google Chrome" for a normal tabbed
+    window) rather than by OCR-ing page content.
+
+    CONFIRMED LIVE (2026-07-27): CRD opened as a plain tab of the existing
+    window (not a separate PWA window as originally assumed elsewhere in this
+    file), and an unrelated already-open tab (Yahoo Mail) was left active
+    instead. Everything downstream then screenshotted/drove that wrong tab
+    for the whole run while looking successful in the log -- OCR-based
+    detection (find_input_box, login keywords) can't be trusted to catch this
+    itself, since an unrelated tab's own content can produce a false-positive
+    match (confirmed: Yahoo Mail's UI was mistaken for a login input box).
+    The native window title is used here instead specifically because it
+    reflects which tab Chrome itself currently considers active, independent
+    of what that tab's rendered content looks like.
+
+    Returns True once a tab whose title contains `computer_name` becomes
+    active, False if `max_cycles` Ctrl+Tab presses cycle back to a
+    previously-seen title without ever matching (logged loudly either way,
+    since a caller proceeding past a False here is exactly the failure mode
+    this function exists to prevent)."""
+    hwnd = win.ensure()
+    seen_titles = []
+    for attempt in range(1, max_cycles + 1):
+        title = win32gui.GetWindowText(hwnd)
+        log.info("[ensure_crd_tab_active #%d] 目前作用中分頁標題：%s", attempt, title)
+        if computer_name.lower() in title.lower():
+            log.info("已確認 Chrome Remote Desktop 分頁為作用中分頁")
+            return True
+        if title in seen_titles:
+            log.warning("循環過所有分頁標題後仍未找到含 %r 的分頁，可能不是分頁式視窗或標題不含電腦名稱", computer_name)
+            return False
+        seen_titles.append(title)
+        win.activate()
+        hotkey_scancode(_VK_CONTROL, _VK_TAB)
+        time.sleep(0.5)
+    log.warning("嘗試 %d 次切換分頁後仍未找到 Chrome Remote Desktop 分頁", max_cycles)
+    return False
 
 
 def ocr_lines(image, tesseract_cmd=None):
@@ -996,6 +1090,12 @@ def main():
 
     pause_if("connect")
 
+    # Snapshot every chrome.exe window visible right before connecting, so the
+    # real CRD session window can be told apart from an unrelated chrome.exe
+    # window elsewhere on screen, in the (less common) case CRD opens as its
+    # own installed-PWA window rather than a tab of the current window.
+    pre_connect_hwnds = list_chrome_hwnds()
+
     log.info("尋找遠端電腦：%s", args.computer_name)
     if not wait_and_click_text(win, args.computer_name, args.connect_timeout, args.poll_interval, args.tesseract_cmd, log):
         sys.exit(1)
@@ -1007,12 +1107,24 @@ def main():
     # legitimately "no box detected" but not a useful signal either way.
     log.info("已連線，等待 15 秒讓遠端畫面穩定後再開始偵測")
     time.sleep(15)
-    
-    # Selecting a computer may open Chrome Remote Desktop's installed PWA as a
-    # brand-new (often fullscreen) window while the original tab window stays
-    # alive but hidden behind it -- force a fresh window search so we don't keep
-    # screenshotting the now-stale original window.
-    win.hwnd = None
+
+    new_hwnd = wait_for_new_chrome_window(pre_connect_hwnds, timeout=5, log=log)
+    if new_hwnd:
+        win.hwnd = new_hwnd
+    else:
+        win.hwnd = None
+
+    # CONFIRMED LIVE (2026-07-27): CRD did NOT open as a separate PWA window
+    # this run -- it opened as a plain tab in the SAME window, alongside an
+    # unrelated already-open tab (Yahoo Mail), and that other tab was left as
+    # the ACTIVE tab. Everything downstream (OCR, password typing, Win+R) was
+    # then screenshotting/driving that wrong, inactive-CRD tab's content the
+    # whole time while looking successful in the log. Window-level detection
+    # (wait_for_new_chrome_window above) can't catch this -- it's the same
+    # hwnd throughout, just the wrong tab selected within it. Actively select
+    # the CRD tab by title BEFORE entering fullscreen below, so fullscreen
+    # locks in the correct tab rather than whatever was active before this.
+    ensure_crd_tab_active(win, args.computer_name, log)
 
     # Make sure the remote session is fullscreen as early as possible, right
     # after the new CRD viewer window appears -- the OCR-based login/wake loop
@@ -1060,7 +1172,10 @@ def main():
             log.error("無法進入全螢幕，中止送出 Win+R（避免誤送到本機）")
             sys.exit(1)
 
+        time.sleep(5)
         log.info("送出 Win+R 並執行程式：%s", args.program_path)
+        win.save_debug_screenshot("debug_before_winr.png")
+
         win.click_center()
         hotkey_scancode(0x5B, 0x52)  # VK_LWIN, VK_R
         time.sleep(1)
@@ -1068,6 +1183,8 @@ def main():
         press_key_scancode(0x0D)  # VK_RETURN
 
         time.sleep(args.post_launch_wait)
+
+        win.save_debug_screenshot("debug_after_winr.png")
 
     pause_if("disconnect")
 

@@ -296,42 +296,31 @@ if defined IPCIDR (
 )
 exit /b 0
 
-:: ---- Subroutine: check adb devices list, keep only Duvel devices, pick a target if multiple ----
+:: ---- Subroutine: list all adb devices, let the user pick a target ----
 :SELECT_DEVICE
 set "DEVICE_SERIAL="
-set "RAW_COUNT=0"
+set "DEV_COUNT=0"
 for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
     if not "%%A"=="" if /i "%%B"=="device" (
-        set /a RAW_COUNT+=1
-        set "RAW_!RAW_COUNT!=%%A"
-    )
-)
-
-set "DEV_COUNT=0"
-for /l %%I in (1,1,!RAW_COUNT!) do (
-    call :DETECT_DEVICE_LABEL !RAW_%%I!
-    if /i "!DEVICE_LABEL!"=="Duvel" (
         set /a DEV_COUNT+=1
-        set "DEV_!DEV_COUNT!=!RAW_%%I!"
+        set "DEV_!DEV_COUNT!=%%A"
     )
 )
 
 if !DEV_COUNT! equ 0 (
     echo.
-    echo No Duvel devices found ^(ro.barco.platform=w4duvel^). Connect a Duvel device ^(authorized^) and try again.
+    echo No adb devices found. Connect a device ^(authorized^) and try again.
     pause
     exit /b 1
 )
 
-if !DEV_COUNT! equ 1 (
-    set "DEVICE_SERIAL=!DEV_1!"
-    exit /b 0
-)
-
 echo.
-echo Multiple Duvel devices detected:
+echo Connected devices:
 echo ------------------------------------------------------------
-for /l %%I in (1,1,!DEV_COUNT!) do echo   [%%I] !DEV_%%I!
+for /l %%I in (1,1,!DEV_COUNT!) do (
+    call :DETECT_DEVICE_LABEL !DEV_%%I!
+    echo   [%%I] !DEV_%%I!  ^(!DEVICE_LABEL!^)
+)
 echo ------------------------------------------------------------
 
 :SELECT_DEVICE_PROMPT

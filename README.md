@@ -716,7 +716,7 @@ scripts\duvel_setup.bat
 | `[C]` | Change SN |
 | `[D]` | Select Device (adb) |
 
-On launch, and via `[D]`, the device-selection step filters connected adb devices down to Duvel devices only (`getprop ro.barco.platform` == `w4duvel`; detection also checks `which g5configcli` first to quickly rule out a Gen5 Button) — other connected devices (God, Gen5 Button) are excluded from the list and from auto-selection.
+On launch, and via `[D]`, the device-selection step lists all connected adb devices (each labeled GEN5 Button/God/Duvel/Unknown, via `which g5configcli` then `getprop ro.barco.platform`) and always prompts the user to pick one — even when only one device is connected.
 
 ### god_setup.bat
 
@@ -749,7 +749,7 @@ scripts\god_setup.bat
 | `[R]` / `[D]` | Refresh / Select Device (adb) |
 | `[S]` / `[P]` / `[M]` / `[F]` | Change Serial Number / Part Number / MAC Address / FW Build Dir |
 
-The device-selection step filters connected adb devices down to God devices only (`getprop ro.barco.platform` == `w4god`; detection also checks `which g5configcli` first to quickly rule out a Gen5 Button) — other connected devices (Duvel, Gen5 Button) are excluded from the list and from auto-selection.
+The device-selection step lists all connected adb devices (each labeled GEN5 Button/God/Duvel/Unknown, via `which g5configcli` then `getprop ro.barco.platform`) and always prompts the user to pick one — even when only one device is connected. Default Part Number is `R9861731CN`.
 
 ### set_wifi_config.ps1
 

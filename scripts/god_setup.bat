@@ -7,7 +7,7 @@ set "PROD_PORT=8085"
 set "REST_PORT=4003"
 set "ACTIVATE_URL=http://korgrt13.barco.com"
 set "SN=9752000162"
-set "PART_NUMBER=R9861730WW"
+set "PART_NUMBER=R9861731CN"
 set "MAC_ADDRESS=00:04:A5:B1:50:1E"
 set "SPFT_DIR=C:\Tools\SP_Flash_Tool_Selector_exe_Windows_v1.2444.00.000\SP_Flash_Tool_V6"
 set "FW_BUILD_DIR=C:\Users\jamyan\OneDrive - Barco N.V\Share\FW\God\2099\debug"
@@ -424,42 +424,31 @@ if defined IPCIDR (
 )
 exit /b 0
 
-:: ---- Subroutine: check adb devices list, keep only God devices, pick a target if multiple ----
+:: ---- Subroutine: list all adb devices, let the user pick a target ----
 :SELECT_DEVICE
 set "DEVICE_SERIAL="
-set "RAW_COUNT=0"
+set "DEV_COUNT=0"
 for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
     if not "%%A"=="" if /i "%%B"=="device" (
-        set /a RAW_COUNT+=1
-        set "RAW_!RAW_COUNT!=%%A"
-    )
-)
-
-set "DEV_COUNT=0"
-for /l %%I in (1,1,!RAW_COUNT!) do (
-    call :DETECT_DEVICE_LABEL !RAW_%%I!
-    if /i "!DEVICE_LABEL!"=="God" (
         set /a DEV_COUNT+=1
-        set "DEV_!DEV_COUNT!=!RAW_%%I!"
+        set "DEV_!DEV_COUNT!=%%A"
     )
 )
 
 if !DEV_COUNT! equ 0 (
     echo.
-    echo No God devices found ^(ro.barco.platform=w4god^). Connect a God device ^(authorized^) and try again.
+    echo No adb devices found. Connect a device ^(authorized^) and try again.
     pause
     exit /b 1
 )
 
-if !DEV_COUNT! equ 1 (
-    set "DEVICE_SERIAL=!DEV_1!"
-    exit /b 0
-)
-
 echo.
-echo Multiple God devices detected:
+echo Connected devices:
 echo ------------------------------------------------------------
-for /l %%I in (1,1,!DEV_COUNT!) do echo   [%%I] !DEV_%%I!
+for /l %%I in (1,1,!DEV_COUNT!) do (
+    call :DETECT_DEVICE_LABEL !DEV_%%I!
+    echo   [%%I] !DEV_%%I!  ^(!DEVICE_LABEL!^)
+)
 echo ------------------------------------------------------------
 
 :SELECT_DEVICE_PROMPT

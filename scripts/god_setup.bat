@@ -6,9 +6,9 @@ setlocal enabledelayedexpansion
 set "PROD_PORT=8085"
 set "REST_PORT=4003"
 set "ACTIVATE_URL=http://korgrt13.barco.com"
-set "SN=9752000162"
-set "PART_NUMBER=R9861731CN"
-set "MAC_ADDRESS=00:04:A5:B1:50:1E"
+set "SN=9752030185"
+set "PART_NUMBER=R9861730CN"
+set "MAC_ADDRESS=00:04:A5:B8:56:52"
 set "SPFT_DIR=C:\Tools\SP_Flash_Tool_Selector_exe_Windows_v1.2444.00.000\SP_Flash_Tool_V6"
 set "FW_BUILD_DIR=C:\Users\jamyan\OneDrive - Barco N.V\Share\FW\God\2099\debug"
 

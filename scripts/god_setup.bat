@@ -48,6 +48,7 @@ echo   [B] Enable Secure Boot
 echo   [E] Read Secure Boot Status
 echo   [G] Get Current Firmware Version
 echo   [N] Read Part Number
+echo   [I] Toggle Network Info Display (Gate show/no show)
 echo   [V] Override ClickShare Certificate
 echo   [X] Reboot Device
 echo   [R] Refresh Device IP (adb)
@@ -75,6 +76,7 @@ if /i "%CHOICE%"=="B" goto ENABLE_SECURE_BOOT
 if /i "%CHOICE%"=="E" goto READ_SECURE_BOOT
 if /i "%CHOICE%"=="G" goto GET_FW
 if /i "%CHOICE%"=="N" goto READ_PART_NUMBER
+if /i "%CHOICE%"=="I" goto TOGGLE_NETWORK_INFO
 if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
 if /i "%CHOICE%"=="X" goto REBOOT_AND_WAIT
 if /i "%CHOICE%"=="R" goto REFRESH_IP
@@ -127,6 +129,42 @@ echo.
 echo [N] Reading part number from %DEVICE_IP%...
 echo ------------------------------------------------------------
 curl -X GET %DEVICE_IP%:%PROD_PORT%/article-number
+echo.
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- I. Toggle Network Info Display (Gate show/no show) ----
+:TOGGLE_NETWORK_INFO
+echo.
+echo [I] Toggle Network Info Display on %DEVICE_SERIAL%...
+echo ------------------------------------------------------------
+set "NI_URI=content://com.barco.clickshare.configurationmanager.provider/clickshare/BaseUnit.UserInterface.NetworkInfo.Enabled"
+set "NI_CURRENT="
+for /f "usebackq delims=" %%L in (`adb -s %DEVICE_SERIAL% shell content query --uri %NI_URI% 2^>nul`) do (
+    set "NI_LINE=%%L"
+    echo !NI_LINE! | findstr /C:"value=" >nul
+    if not errorlevel 1 (
+        set "NI_CURRENT=!NI_LINE:*value=!"
+        if "!NI_CURRENT:~0,1!"=="=" set "NI_CURRENT=!NI_CURRENT:~1!"
+    )
+)
+if defined NI_CURRENT (
+    echo   Current value: %NI_CURRENT%
+) else (
+    echo   Current value: ^(not set^)
+)
+set /p "NI_VALUE=Enter new value (true/false): "
+if /i not "%NI_VALUE%"=="true" if /i not "%NI_VALUE%"=="false" (
+    echo Invalid value, must be true or false.
+    pause
+    goto MAIN_MENU
+)
+if defined NI_CURRENT (
+    adb -s %DEVICE_SERIAL% shell content update --uri %NI_URI% --bind value:s:%NI_VALUE%
+) else (
+    adb -s %DEVICE_SERIAL% shell content insert --uri %NI_URI% --bind value:s:%NI_VALUE%
+)
 echo.
 echo.
 pause

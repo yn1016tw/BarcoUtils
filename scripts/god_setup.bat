@@ -11,6 +11,11 @@ set "PART_NUMBER=R9861730CN"
 set "MAC_ADDRESS=00:04:A5:B8:56:52"
 set "SPFT_DIR=C:\Tools\SP_Flash_Tool_Selector_exe_Windows_v1.2444.00.000\SP_Flash_Tool_V6"
 set "FW_BUILD_DIR=C:\Users\jamyan\OneDrive - Barco N.V\Share\FW\God\2099\debug"
+set "CERT_TOOLS_DIR=C:\Tools"
+set "PKCS11_TOOL=%CERT_TOOLS_DIR%\pkcs11-tool"
+set "ARTIFACTORY_TGZ_URL=https://bin.barco.com/artifactory/cs-conan-local/clickshare/opensc/0.26.1/stable/24d3ac866a2881fc30b6e567604e65ab/package/6676290ace5059dfe0fea662cdfab95bfedc720b/d248d123627d126fdc55f8737be98842/conan_package.tgz"
+set "CERT_LABEL_DEFAULT=clickshare-leaf-certificate"
+set "CERT_OUTPUT_DIR=C:\temp"
 
 call :SELECT_DEVICE
 if errorlevel 1 goto EXIT
@@ -50,6 +55,7 @@ echo   [G] Get Current Firmware Version
 echo   [N] Read Part Number
 echo   [I] Toggle Network Info Display (Gate show/no show)
 echo   [V] Override ClickShare Certificate
+echo   [C] Read Device Certificate
 echo   [U] Bootloader Unlock Procedure For Remount
 echo   [X] Reboot Device
 echo   [R] Refresh Device IP (adb)
@@ -79,6 +85,7 @@ if /i "%CHOICE%"=="G" goto GET_FW
 if /i "%CHOICE%"=="N" goto READ_PART_NUMBER
 if /i "%CHOICE%"=="I" goto TOGGLE_NETWORK_INFO
 if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
+if /i "%CHOICE%"=="C" goto READ_DEVICE_CERT
 if /i "%CHOICE%"=="U" goto BOOTLOADER_UNLOCK_REMOUNT
 if /i "%CHOICE%"=="X" goto REBOOT_AND_WAIT
 if /i "%CHOICE%"=="R" goto REFRESH_IP
@@ -294,6 +301,86 @@ echo ------------------------------------------------------------
 type read-efuse.log
 popd
 echo.
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- C. Read Device Certificate ----
+:READ_DEVICE_CERT
+echo.
+echo [C] Read Device Certificate from %DEVICE_SERIAL%...
+echo ------------------------------------------------------------
+if "%ARTIFACTORY_USER%"=="" (
+    echo [Error] Environment variable ARTIFACTORY_USER is not set.
+    pause
+    goto MAIN_MENU
+)
+if "%ARTIFACTORY_PASSWORD%"=="" (
+    echo [Error] Environment variable ARTIFACTORY_PASSWORD is not set.
+    pause
+    goto MAIN_MENU
+)
+
+set "CERT_LABEL="
+set /p "CERT_LABEL=Enter certificate label (default: %CERT_LABEL_DEFAULT%): "
+if "%CERT_LABEL%"=="" set "CERT_LABEL=%CERT_LABEL_DEFAULT%"
+
+if not exist "%CERT_TOOLS_DIR%" mkdir "%CERT_TOOLS_DIR%"
+
+if exist "%PKCS11_TOOL%" (
+    echo pkcs11-tool already cached at %PKCS11_TOOL%, skipping download.
+) else (
+    echo Downloading conan_package.tgz from Artifactory...
+    curl -u "%ARTIFACTORY_USER%:%ARTIFACTORY_PASSWORD%" -L -o "%CERT_TOOLS_DIR%\conan_package.tgz" "%ARTIFACTORY_TGZ_URL%"
+    if errorlevel 1 (
+        echo [Error] Download failed.
+        pause
+        goto MAIN_MENU
+    )
+    if not exist "%CERT_TOOLS_DIR%\_extract" mkdir "%CERT_TOOLS_DIR%\_extract"
+    tar -xzf "%CERT_TOOLS_DIR%\conan_package.tgz" -C "%CERT_TOOLS_DIR%\_extract"
+    if errorlevel 1 (
+        echo [Error] Extraction failed.
+        pause
+        goto MAIN_MENU
+    )
+    copy /y "%CERT_TOOLS_DIR%\_extract\bin\pkcs11-tool" "%PKCS11_TOOL%" >nul
+    del /q "%CERT_TOOLS_DIR%\conan_package.tgz"
+    rmdir /s /q "%CERT_TOOLS_DIR%\_extract"
+    echo pkcs11-tool downloaded to %PKCS11_TOOL%
+)
+
+echo.
+echo Pushing pkcs11-tool to device and setting permissions...
+adb -s %DEVICE_SERIAL% push "%PKCS11_TOOL%" /data/pkcs11-tool
+adb -s %DEVICE_SERIAL% shell "chmod +x /data/pkcs11-tool"
+adb -s %DEVICE_SERIAL% shell "chmod o+rw /dev/tee0"
+adb -s %DEVICE_SERIAL% shell "chmod 777 /data/local/tmp"
+
+echo.
+echo Listing objects in RPMB TA (login)...
+adb -s %DEVICE_SERIAL% shell "su 2901 sh -c 'cd /data && CKTEEC_LOGIN_TYPE=group CKTEEC_LOGIN_GID=2901 ./pkcs11-tool --module /system_ext/lib64/libckteec.so --list-objects --login'"
+
+echo.
+echo Exporting certificate "%CERT_LABEL%" to DER...
+adb -s %DEVICE_SERIAL% shell "su 2901 sh -c 'cd /data && CKTEEC_LOGIN_TYPE=group CKTEEC_LOGIN_GID=2901 ./pkcs11-tool --module /system_ext/lib64/libckteec.so --read-object --type cert --label %CERT_LABEL% --output-file /data/local/tmp/%CERT_LABEL%.der --login'"
+if errorlevel 1 (
+    echo [Error] Failed to export certificate, please verify the label.
+    goto CERT_CLEANUP
+)
+
+echo.
+echo Pulling certificate and parsing with local openssl...
+if not exist "%CERT_OUTPUT_DIR%" mkdir "%CERT_OUTPUT_DIR%"
+adb -s %DEVICE_SERIAL% pull /data/local/tmp/%CERT_LABEL%.der "%CERT_OUTPUT_DIR%\%CERT_LABEL%.der"
+openssl x509 -inform der -in "%CERT_OUTPUT_DIR%\%CERT_LABEL%.der" -noout -subject -issuer -dates
+
+:CERT_CLEANUP
+echo.
+echo Cleaning up device temp files...
+adb -s %DEVICE_SERIAL% shell "rm -f /data/pkcs11-tool /data/local/tmp/%CERT_LABEL%.der"
+echo.
+echo Done. Certificate DER file saved to %CERT_OUTPUT_DIR%\%CERT_LABEL%.der
 echo.
 pause
 goto MAIN_MENU

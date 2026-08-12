@@ -50,6 +50,7 @@ echo   [G] Get Current Firmware Version
 echo   [N] Read Part Number
 echo   [I] Toggle Network Info Display (Gate show/no show)
 echo   [V] Override ClickShare Certificate
+echo   [U] Bootloader Unlock Procedure For Remount
 echo   [X] Reboot Device
 echo   [R] Refresh Device IP (adb)
 echo   [D] Select Device (adb)
@@ -78,6 +79,7 @@ if /i "%CHOICE%"=="G" goto GET_FW
 if /i "%CHOICE%"=="N" goto READ_PART_NUMBER
 if /i "%CHOICE%"=="I" goto TOGGLE_NETWORK_INFO
 if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
+if /i "%CHOICE%"=="U" goto BOOTLOADER_UNLOCK_REMOUNT
 if /i "%CHOICE%"=="X" goto REBOOT_AND_WAIT
 if /i "%CHOICE%"=="R" goto REFRESH_IP
 if /i "%CHOICE%"=="D" goto RESELECT_DEVICE
@@ -296,6 +298,104 @@ echo.
 pause
 goto MAIN_MENU
 
+:: ---- U. Bootloader Unlock Procedure For Remount ----
+:BOOTLOADER_UNLOCK_REMOUNT
+echo.
+echo [U] Bootloader Unlock Procedure For Remount on %DEVICE_SERIAL%
+echo ------------------------------------------------------------
+echo   This will:
+echo     1. adb root
+echo     2. write unlock flag byte to /dev/block/by-name/frp
+echo     3. reboot into bootloader, unlock via fastboot
+echo     4. reboot and adb remount (verity disabled / overlayfs)
+echo.
+echo   WARNING: This unlocks the bootloader and disables verity.
+echo   Device data may be wiped. Cannot be easily undone.
+echo.
+set /p "CONFIRM=Type YES to continue: "
+if /i not "%CONFIRM%"=="YES" (
+    echo Cancelled.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
+echo [1/7] adb root...
+adb -s %DEVICE_SERIAL% root
+timeout /t 2 >nul
+
+echo [2/7] Writing unlock flag to frp partition...
+adb -s %DEVICE_SERIAL% shell "printf '\x01' | dd of=/dev/block/by-name/frp bs=1 seek=1048572 conv=notrunc"
+
+echo [3/7] Rebooting into bootloader...
+adb -s %DEVICE_SERIAL% reboot bootloader
+echo   Waiting for device to enter fastboot mode...
+:U_WAIT_FASTBOOT
+fastboot devices | findstr /C:"%DEVICE_SERIAL%" >nul
+if errorlevel 1 (
+    timeout /t 2 >nul
+    goto U_WAIT_FASTBOOT
+)
+echo   Device detected in fastboot mode.
+
+echo [4/7] Checking unlock ability...
+fastboot -s %DEVICE_SERIAL% flashing get_unlock_ability
+
+echo [5/7] Unlocking bootloader...
+fastboot -s %DEVICE_SERIAL% flashing unlock
+
+echo [6/7] Rebooting device...
+fastboot -s %DEVICE_SERIAL% reboot
+echo   Waiting for device to leave fastboot mode...
+timeout /t 3 >nul
+echo   Waiting for adb to reconnect...
+adb -s %DEVICE_SERIAL% wait-for-device
+echo   Waiting for Android boot to complete...
+:U_WAIT_BOOT_COMPLETED
+set "U_BOOT_COMPLETED="
+for /f %%A in ('adb -s %DEVICE_SERIAL% shell getprop sys.boot_completed 2^>nul') do set "U_BOOT_COMPLETED=%%A"
+if not "%U_BOOT_COMPLETED%"=="1" (
+    timeout /t 2 >nul
+    goto U_WAIT_BOOT_COMPLETED
+)
+echo   Android boot completed!
+
+echo [7/7] adb root + remount...
+adb -s %DEVICE_SERIAL% root
+timeout /t 2 >nul
+adb -s %DEVICE_SERIAL% remount
+echo.
+echo   Rebooting device for remount settings to take effect...
+adb -s %DEVICE_SERIAL% reboot
+echo   Waiting for device to leave adb...
+adb -s %DEVICE_SERIAL% wait-for-disconnect >nul 2>&1
+echo   Waiting for adb to reconnect...
+adb -s %DEVICE_SERIAL% wait-for-device
+echo   Waiting for Android boot to complete...
+:U_WAIT_BOOT_COMPLETED2
+set "U_BOOT_COMPLETED2="
+for /f %%A in ('adb -s %DEVICE_SERIAL% shell getprop sys.boot_completed 2^>nul') do set "U_BOOT_COMPLETED2=%%A"
+if not "%U_BOOT_COMPLETED2%"=="1" (
+    timeout /t 2 >nul
+    goto U_WAIT_BOOT_COMPLETED2
+)
+echo   Android boot completed!
+call :GET_IP
+echo   Device IP: %DEVICE_IP%
+echo   Waiting for REST API server to come online...
+:U_WAIT_RESTAPI
+timeout /t 5 >nul
+curl -s -k -o nul https://%DEVICE_IP%:%REST_PORT%/v3/status >nul 2>&1
+if errorlevel 1 (
+    echo   REST API not ready, retrying...
+    goto U_WAIT_RESTAPI
+)
+echo   REST API server is online!
+echo.
+echo.
+pause
+goto MAIN_MENU
+
 :: ---- G. Get Current Firmware Version ----
 :GET_FW
 echo.
@@ -319,6 +419,7 @@ echo   Waiting for adb to reconnect...
 adb -s %DEVICE_SERIAL% wait-for-device
 echo   Waiting for Android boot to complete...
 :WAIT_BOOT_COMPLETED
+set "BOOT_COMPLETED="
 for /f %%A in ('adb -s %DEVICE_SERIAL% shell getprop sys.boot_completed 2^>nul') do set "BOOT_COMPLETED=%%A"
 if not "%BOOT_COMPLETED%"=="1" (
     timeout /t 2 >nul

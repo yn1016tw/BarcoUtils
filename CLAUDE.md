@@ -80,7 +80,7 @@ $NDK/aarch64-linux-android26-clang -static -o tools/v4l2_stream_test tools/v4l2_
 
 ## src/ utilities
 
-**Timesheet auto-fill** (`src/timesheet/fill_timesheet.py`): Playwright-based tool that logs into SAP Fiori CATS via the Edge persistent profile and fills/submits time entries for the current week. Sends Telegram notifications on success or failure.
+**Timesheet auto-fill** (`src/timesheet/fill_timesheet.py`): Playwright-based tool that logs into SAP Fiori CATS via a CDP-attached Edge instance and fills/submits time entries for the current week. Sends Telegram notifications on success or failure.
 
 ```bash
 # Prerequisites (one-time)
@@ -95,7 +95,7 @@ python src/timesheet/fill_timesheet.py --no-backfill       # only fill the targe
 python src/timesheet/fill_timesheet.py --skip              # exit without filling (notifies Telegram)
 ```
 
-Requires `src/timesheet/.env` with at minimum `SAP_URL`. Uses the Edge User Data profile at `%LOCALAPPDATA%\Microsoft\Edge\User Data`; if the SAP session has expired, automatically opens a headed window for SSO refresh. Logs to `src/timesheet/log/fill_timesheet.log`; screenshots to `src/timesheet/log/debug_*.png`.
+Requires `src/timesheet/.env` with at minimum `SAP_URL`. Chromium/Edge unconditionally refuses to expose remote debugging (CDP) when `--user-data-dir` points at the real default profile (`%LOCALAPPDATA%\Microsoft\Edge\User Data`) — a built-in anti-automation restriction, no command-line override, unrelated to any IT group policy (confirmed `RemoteDebuggingAllowed`/`AuthServerAllowlist` unset). `open_browser()` works around this: it robocopies the real profile (keeping cookies/SSO session, excluding cache folders) into `%LOCALAPPDATA%\BarcoUtilsEdgeCdpProfile`, launches Edge from that copy as a subprocess with an explicit `--remote-debugging-port`, and attaches via `connect_over_cdp()` — never `launch_persistent_context()` against the real profile. `patch_exit_type()` resets the copy's `exit_type`/`exited_cleanly` to `Normal`/true on every launch and close (`close_browser()`), since the copy is always force-killed (`kill_cdp_edge()`, which only targets msedge.exe processes running against the copied profile — never the user's real Edge windows), which Chromium would otherwise flag as a crash and pop a blocking "Restore pages?" dialog. If the SAP session has expired, `refresh_session_headed()` automatically opens a headed CDP-attached window for SSO refresh. Logs to `src/timesheet/log/fill_timesheet.log`; screenshots to `src/timesheet/log/debug_*.png`. On any failure the retry loop waits `RETRY_WAIT_SECONDS` (600s) and relaunches Edge, uncapped (`while True`).
 
 **Timesheet auto-fill v2** (`src/timesheet/fill_timesheet2.py` + `src/timesheet/timesheet_page.py`): same goal as `fill_timesheet.py`, but driven through `common.edge_desktop.EdgeController` + `TimesheetPage` (pure UI Automation via pywinauto — no Playwright, no browser profile). `TimesheetPage.open()` navigates and auto-refreshes (F5) through SAP's own Logon page or Microsoft SSO pages until the timesheet loads, up to 10 retries. By default every weekday from Monday of the target week through the target date is checked (`get_week_dates_to_fill()`); any day not already Approved / Sent For Approval / recorded is filled via `autofill_day()`, others are skipped.
 
@@ -114,6 +114,20 @@ python src/timesheet/fill_timesheet2.py --skip
 `send_telegram_result(message, image_path=None)` sends a text message, or (when `image_path` exists) a `sendPhoto` multipart request with the message as caption. The final notification reports only `target_date`'s outcome (not the whole backfilled week), built by `_build_ok_or_fail_message()`: prefixed ✅ when `target_date` was filled this run or was already filled/approved before this run (`filled` / `skipped_already_filled`), ❌ only when the row couldn't be located (`row_not_found`) or an exception was raised — each case attaches a screenshot of the Edge window (`ctrl.screenshot()`) taken at report time.
 
 ⚠️ Both timesheet tools operate on a real SAP account — `submit()` saves entered records with no dry-run mode.
+
+**Wave4 log auto-decrypt** (`scripts/wave4_auto_decrypt_log/wave4_auto_decrypt_log.py`): Playwright tool that decrypts a Wave4 ClickShare bug report log (the `.pgp` file inside a `clickshare-logs-*.zip`) through the Barco MX portal (`https://mx.barco.com:5900/`) — extracts the `.pgp`, uploads it, clicks Decrypt, downloads and extracts the resulting archive next to the original zip, then deletes the temporary `.pgp`/zip.
+
+```bash
+pip install playwright click
+playwright install msedge
+
+python scripts/wave4_auto_decrypt_log/wave4_auto_decrypt_log.py "C:\Users\me\Downloads\clickshare-logs-2026-08-06T13-50-56-251Z.zip"
+python scripts/wave4_auto_decrypt_log/wave4_auto_decrypt_log.py --hidden <zip_path>
+```
+
+Uses the same copied-Edge-profile + CDP approach as `fill_timesheet.py` (`open_browser()`/`close_browser()`/`kill_cdp_edge()`/`patch_exit_type()` are near-identical copies) — for the same underlying reason: Chromium refuses to expose CDP against the real default profile.
+
+`install_context_menu.py` adds/removes a "Wave4 Log Decrypt" right-click menu entry for `.zip` files under `HKCU\Software\Classes\CompressedFolder\shell` and `HKCU\Software\Classes\SystemFileAssociations\.zip\shell` (no admin rights needed); accepts `remove`/`uninstall`/`-u` as uninstall aliases and won't crash if a shell key still has leftover subkeys (e.g. an `Icon` value Explorer may add) — it just warns and continues. `context_menu_tool.bat` is an interactive install/uninstall launcher wrapping it.
 
 **Chrome Remote Desktop auto-login** (`src/chrome-remote-desktop/remote_login.py`): OS-level automation for an existing CRD "Remote Access" host — connects to a named remote computer, logs into Windows on the remote screen if needed, launches a program via Win+R, then disconnects.
 
@@ -244,12 +258,15 @@ scripts/test-hid-clickshare.ps1  — Open/read/write Gen5 Button HID device from
 scripts/gen5_button.bat          — Interactive menu: list all connected adb devices, prompt user to select target device, then simulate short/long press
 scripts/gen5_button_press.py     — CLI wrapper around `ClickShareButton.press()`; adds `testcases/` to sys.path for `common.clickshare_button` import
 scripts/auto_scrcpy.bat          — Interactive menu: list connected adb devices, prompt user to select target, then launch `scrcpy.exe -s <serial>` (default path `C:\Tools\scrcpy-win64-v3.3.3\scrcpy.exe`, same default as `SCRCPY_DEFAULT` in `testcases/common/utils.py`)
+scripts/wave4_auto_decrypt_log/wave4_auto_decrypt_log.py — Auto-decrypts a Wave4 ClickShare bug report `.pgp` (extracted from a `clickshare-logs-*.zip`) via the Barco MX portal (Playwright + copied-Edge-profile CDP, same approach as `src/timesheet/fill_timesheet.py`)
+scripts/wave4_auto_decrypt_log/install_context_menu.py — Installs/removes a "Wave4 Log Decrypt" right-click menu entry for `.zip` files under HKCU (no admin rights needed); `uninstall`/`remove`/`-u` all trigger removal
+scripts/wave4_auto_decrypt_log/context_menu_tool.bat — Interactive launcher: install / uninstall the context menu entry
 src/hid-test/hid_test.cpp  — Windows C++ tool: enumerate ClickShare Gen4/Gen5 HID devices and test CreateFile open access
 src/hid-test/build.bat     — MSVC build script for hid_test.cpp (auto-detects VS 2017/2019/2022)
 src/hid-desc/hid_desc_tool.bat  — ADB menu tool: enable rootfsoverlay, remount RW, backup/recover/patch HID descriptor, reboot Button
 src/hid-desc/parse_hid_desc.py  — Parse and pretty-print a USB HID report descriptor .bin file
 src/hid-desc/patch_hid_desc.py  — Patch Usage Page / Usage in a HID report descriptor .bin file
-src/timesheet/fill_timesheet.py  — SAP Fiori CATS timesheet auto-fill via Playwright + Edge persistent profile
+src/timesheet/fill_timesheet.py  — SAP Fiori CATS timesheet auto-fill via Playwright + copied-Edge-profile CDP
 src/timesheet/2026_holidays.csv  — Taiwan public holidays used for holiday-vs-workday classification
 src/timesheet/.env               — Runtime config: SAP_URL, DEFAULT_ASSIGNMENT, TELEGRAM_BOT_TOKEN, etc. (not committed)
 ```

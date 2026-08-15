@@ -685,7 +685,7 @@ def main(date_str, hours, assignment, skip, hidden, no_backfill):
             return day_type, assignment or HOLIDAY_ASSIGNMENT, hours if hours is not None else HOLIDAY_HOURS
         return day_type, assignment or DEFAULT_ASSIGNMENT, hours if hours is not None else DEFAULT_HOURS
 
-    RETRY_WAIT_SECONDS = 600
+    RETRY_WAIT_SECONDS = 30
     filled_summary = []
 
     with sync_playwright() as pw:

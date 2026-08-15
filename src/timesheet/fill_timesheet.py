@@ -5,11 +5,14 @@ Automatically fills SAP Fiori CATS timesheet for Barco ClickShare Hub Pro employ
 
 import csv
 import datetime
+import glob
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 import click
@@ -51,7 +54,30 @@ HOLIDAY_ASSIGNMENT = os.getenv("HOLIDAY_ASSIGNMENT", "Holiday")
 HOLIDAY_HOURS = float(os.getenv("HOLIDAY_HOURS", "8"))
 
 HOLIDAYS_CSV = Path(__file__).parent / "2026_holidays.csv"
+
+# ---------------------------------------------------------------------------
+# Edge CDP profile (verified working approach — see notes below)
+# ---------------------------------------------------------------------------
+# IMPORTANT: Chromium/Edge refuses to open --remote-debugging-port (or the
+# equivalent CDP channel Playwright's launch_persistent_context uses) when
+# --user-data-dir points at the REAL default profile path
+# (%LOCALAPPDATA%\Microsoft\Edge\User Data) — this is a built-in
+# anti-automation/anti-malware restriction, unconditional, with no
+# command-line override, and unrelated to the IT "RemoteDebuggingAllowed"
+# group policy (confirmed unset on this machine). This is why automating
+# Edge against the real profile used to work and then silently stopped.
+#
+# Verified workaround: copy the real profile (which carries the SSO/cookie
+# session) into a separate, non-default folder, then launch Edge from that
+# copy with --remote-debugging-port set explicitly, and connect via
+# Playwright's connect_over_cdp() instead of launch_persistent_context().
 EDGE_USER_DATA = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "Edge" / "User Data"
+EDGE_EXE_CANDIDATES = [
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+]
+CDP_PROFILE_DIR = Path(os.environ.get("LOCALAPPDATA", r"C:\temp")) / "BarcoUtilsEdgeCdpProfile"
+CDP_PORT = int(os.getenv("EDGE_CDP_PORT", "9333"))
 
 
 # ---------------------------------------------------------------------------
@@ -110,58 +136,153 @@ class LoginPageError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Browser / session
+# Browser / session (CDP-based — see "Edge CDP profile" notes above)
 # ---------------------------------------------------------------------------
-def kill_edge():
-    result = subprocess.run(["tasklist", "/fi", "imagename eq msedge.exe"],
-                            capture_output=True, text=True)
-    if "msedge.exe" in result.stdout:
-        _print("Closing Edge to free profile ...")
-        subprocess.run(["taskkill", "/f", "/im", "msedge.exe"], capture_output=True)
-        time.sleep(2)
+def _find_edge_exe() -> str:
+    for exe in EDGE_EXE_CANDIDATES:
+        if os.path.exists(exe):
+            return exe
+    raise RuntimeError("msedge.exe not found; please confirm Edge is installed.")
 
 
-def open_browser(playwright, hidden: bool = False):
-    kill_edge()
-    _print(f"Launching Edge with real profile ({'headless' if hidden else 'headed'}) ...")
-    if hidden:
-        # --start-maximized has no effect in headless mode; set an explicit desktop-sized viewport
-        # so SAP Fiori renders the full table layout instead of the narrow responsive/mobile view.
-        return playwright.chromium.launch_persistent_context(
-            str(EDGE_USER_DATA),
-            channel="msedge",
-            headless=True,
-            args=["--no-first-run", "--no-default-browser-check"],
-            viewport={"width": 1920, "height": 1080},
-        )
-    return playwright.chromium.launch_persistent_context(
-        str(EDGE_USER_DATA),
-        channel="msedge",
-        headless=False,
-        args=["--no-first-run", "--no-default-browser-check", "--start-maximized"],
-        no_viewport=True,
+def kill_cdp_edge():
+    """Close only the msedge.exe processes running against our copied CDP
+    profile (never touches the user's real, everyday Edge windows)."""
+    result = subprocess.run(
+        [
+            "powershell", "-NoProfile", "-Command",
+            "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | "
+            f"Where-Object {{ $_.CommandLine -like '*{CDP_PROFILE_DIR}*' }} | "
+            "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+        ],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
+    time.sleep(1.5)
+    return result
+
+
+def patch_exit_type():
+    """Reset exit_type/exited_cleanly in every Preferences file under the
+    copied profile back to 'Normal'/true. Because we always close Edge via
+    Stop-Process -Force, Chromium marks the profile as 'Crashed', and the
+    next launch would otherwise pop up a 'Restore pages?' dialog that blocks
+    unattended automation."""
+    for prefs_path in glob.glob(str(CDP_PROFILE_DIR / "*" / "Preferences")):
+        try:
+            with open(prefs_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            patched = re.sub(r'"exit_type":"[^"]*"', '"exit_type":"Normal"', content)
+            patched = re.sub(r'"exited_cleanly":\s*false', '"exited_cleanly":true', patched)
+            if patched != content:
+                with open(prefs_path, "w", encoding="utf-8") as f:
+                    f.write(patched)
+        except Exception as e:
+            _print(f"WARNING: could not patch exit_type in {prefs_path}: {e}")
+
+
+def _wait_cdp_ready(port: int, timeout: int = 15) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(f"http://localhost:{port}/json/version", timeout=1)
+            return True
+        except Exception:
+            time.sleep(0.5)
+    return False
+
+
+def _sync_cdp_profile(fresh: bool = False):
+    """Copy the real default Edge profile (carrying the SSO/cookie session)
+    into CDP_PROFILE_DIR, excluding large cache folders. Skipped if the
+    copy already exists, unless fresh=True (used when the session needs a
+    forced refresh)."""
+    if fresh and CDP_PROFILE_DIR.exists():
+        _print(f"Removing stale CDP profile copy: {CDP_PROFILE_DIR}")
+        subprocess.run(["cmd", "/c", "rmdir", "/s", "/q", str(CDP_PROFILE_DIR)], capture_output=True)
+
+    if CDP_PROFILE_DIR.exists():
+        return
+
+    if not EDGE_USER_DATA.exists():
+        raise RuntimeError(f"Default Edge profile not found: {EDGE_USER_DATA}")
+
+    _print(f"Copying Edge profile: {EDGE_USER_DATA} -> {CDP_PROFILE_DIR} (excluding cache dirs) ...")
+    CDP_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [
+            "robocopy", str(EDGE_USER_DATA), str(CDP_PROFILE_DIR),
+            "/E", "/R:1", "/W:1", "/NFL", "/NDL", "/NJH", "/NJS",
+            "/XD", "Cache", "Code Cache", "GPUCache", "DawnCache", "GrShaderCache",
+            "ShaderCache", "component_crx_cache", "Service Worker", "blob_storage",
+        ],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    # robocopy exit codes 0-7 are success; 8+ is a real failure.
+    if result.returncode >= 8:
+        raise RuntimeError(f"robocopy failed copying Edge profile (exit code {result.returncode}): {result.stdout}\n{result.stderr}")
+    _print("Profile copy complete.")
+
+
+def open_browser(playwright, hidden: bool = False, fresh_profile: bool = False):
+    """Launch Edge (against a copied profile) with CDP enabled, then attach
+    via Playwright's connect_over_cdp(). This avoids launch_persistent_context()
+    against the real profile, which Chromium unconditionally refuses to expose
+    over CDP."""
+    kill_cdp_edge()
+    _sync_cdp_profile(fresh=fresh_profile)
+    patch_exit_type()
+
+    edge_exe = _find_edge_exe()
+    args = [
+        edge_exe,
+        f"--remote-debugging-port={CDP_PORT}",
+        f"--user-data-dir={CDP_PROFILE_DIR}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--hide-crash-restore-bubble",
+    ]
+    if hidden:
+        args += ["--headless=new", "--window-size=1920,1080"]
+    else:
+        args += ["--start-maximized"]
+
+    _print(f"Launching Edge with copied profile ({'headless' if hidden else 'headed'}) ...")
+    subprocess.Popen(args)
+
+    if not _wait_cdp_ready(CDP_PORT):
+        raise RuntimeError(f"Edge CDP did not become ready on port {CDP_PORT}.")
+
+    browser = playwright.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
+    context = browser.contexts[0] if browser.contexts else browser.new_context()
+    return browser, context
+
+
+def close_browser(browser):
+    """Disconnect Playwright and fully close the copied-profile Edge instance,
+    then immediately repair exit_type so no 'Restore pages?' dialog appears
+    next launch — even if this run is interrupted before reaching this point,
+    the next open_browser() call will patch it again anyway."""
+    try:
+        browser.close()
+    except Exception:
+        pass
+    kill_cdp_edge()
+    patch_exit_type()
 
 
 def refresh_session_headed(pw):
     """
-    Open a visible Edge window, navigate to SAP, and wait until the Fiori launchpad loads.
-    This lets Microsoft SSO refresh the session cookie into the persistent profile.
-    If SSO can auto-renew the token, the browser closes by itself.
-    If a password prompt appears, the user can type it in the visible window.
-    After this call the profile has a fresh SAP session cookie.
+    Open a visible Edge window (copied profile, CDP), navigate to SAP, and
+    wait until the Fiori launchpad loads. This lets Microsoft SSO refresh the
+    session cookie into the persistent profile copy. If SSO can auto-renew
+    the token, the browser closes by itself. If a password prompt appears,
+    the user can type it in the visible window.
+    After this call the profile copy has a fresh SAP session cookie.
     pw: the already-running Playwright instance from the caller's sync_playwright() context.
     """
     _print("Session expired — opening headed Edge to refresh SAP session via SSO ...")
-    kill_edge()
-    ctx = pw.chromium.launch_persistent_context(
-        str(EDGE_USER_DATA),
-        channel="msedge",
-        headless=False,
-        args=["--no-first-run", "--no-default-browser-check", "--start-maximized"],
-        no_viewport=True,
-    )
-    page = ctx.pages[0] if ctx.pages else ctx.new_page()
+    browser, context = open_browser(pw, hidden=False)
+    page = context.pages[0] if context.pages else context.new_page()
     resp = page.goto(SAP_URL, wait_until="domcontentloaded", timeout=60_000)
     _print(f"Headed browser response status: {resp.status if resp else 'unknown'} | URL: {page.url}")
     page.wait_for_timeout(4000)
@@ -185,8 +306,7 @@ def refresh_session_headed(pw):
     except Exception:
         _print(f"WARNING: 'My Timesheet' tile not detected within timeout. URL: {page.url}")
         _print("Proceeding anyway — session may still have been refreshed.")
-    ctx.close()
-    kill_edge()
+    close_browser(browser)
 
 
 # ---------------------------------------------------------------------------
@@ -569,7 +689,7 @@ def main(date_str, hours, assignment, skip, hidden, no_backfill):
     filled_summary = []
 
     with sync_playwright() as pw:
-        context = open_browser(pw, hidden=hidden)
+        browser, context = open_browser(pw, hidden=hidden)
         page = context.pages[0] if context.pages else context.new_page()
         session_opened = False
 
@@ -601,12 +721,11 @@ def main(date_str, hours, assignment, skip, hidden, no_backfill):
                     break  # next date
                 except SessionExpiredError as e:
                     _print(f"ERROR [{date}] (attempt #{attempt}): {e}")
-                    context.close()
-                    kill_edge()
+                    close_browser(browser)
                     send_telegram_result(f"⚠️ SAP session 過期，正在自動重新登入 ...")
                     refresh_session_headed(pw)
                     _print("Session refreshed — retrying ...")
-                    context = open_browser(pw, hidden=hidden)
+                    browser, context = open_browser(pw, hidden=hidden)
                     page = context.pages[0] if context.pages else context.new_page()
                     session_opened = False  # re-navigate after session refresh
                 except Exception as e:
@@ -622,15 +741,14 @@ def main(date_str, hours, assignment, skip, hidden, no_backfill):
                         f"❌ Timesheet 填寫失敗 (第 {attempt} 次): {date}\n{e}",
                         error_image,
                     )
-                    context.close()
-                    kill_edge()
+                    close_browser(browser)
                     _print(f"Retrying in {RETRY_WAIT_SECONDS}s ...")
                     time.sleep(RETRY_WAIT_SECONDS)
-                    context = open_browser(pw, hidden=hidden)
+                    browser, context = open_browser(pw, hidden=hidden)
                     page = context.pages[0] if context.pages else context.new_page()
                     session_opened = False
 
-        context.close()
+        close_browser(browser)
 
     if filled_summary:
         result_image: Path | None = _LOG_DIR / "debug_after_submit.png"

@@ -4,28 +4,44 @@ setlocal enabledelayedexpansion
 echo ============================================================
 echo   Gen5 ClickShare Button Tool
 echo ============================================================
-echo   Detecting Gen5 Button over adb...
+echo   Listing connected adb devices...
 echo ------------------------------------------------------------
 
-set "BTN_SERIAL="
+set "DEV_COUNT=0"
 for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
     if "%%B"=="device" (
-        for /f "usebackq delims=" %%P in (`adb -s %%A shell "which g5configcli" 2^>nul`) do (
-            if not "%%P"=="" set "BTN_SERIAL=%%A"
-        )
+        set /a DEV_COUNT+=1
+        set "DEV_!DEV_COUNT!=%%A"
     )
 )
 
-if "%BTN_SERIAL%"=="" (
+if "%DEV_COUNT%"=="0" (
     echo.
-    echo   No Gen5 ClickShare Button detected via adb.
-    echo   Make sure the button is connected and authorized ^(check "adb devices"^).
+    echo   No adb devices found.
+    echo   Make sure the device is connected and authorized ^(check "adb devices"^).
     echo.
     pause
     exit /b 1
 )
 
-echo   Found Gen5 Button: %BTN_SERIAL%
+echo.
+for /l %%I in (1,1,%DEV_COUNT%) do (
+    echo   [%%I] !DEV_%%I!
+)
+echo.
+set "DEV_CHOICE="
+set /p "DEV_CHOICE=Select device: "
+
+set "BTN_SERIAL="
+if defined DEV_%DEV_CHOICE% set "BTN_SERIAL=!DEV_%DEV_CHOICE%!"
+
+if "%BTN_SERIAL%"=="" (
+    echo Invalid selection.
+    pause
+    exit /b 1
+)
+
+echo   Selected device: %BTN_SERIAL%
 echo.
 cls
 

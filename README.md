@@ -82,10 +82,15 @@ BarcoUtils/
 │   ├── fix-barco-driver.ps1       # Remove duplicate BarcoClickShareDrv entries via pnputil (admin)
 │   ├── test-hid-clickshare.ps1    # Open/read/write Gen5 Button HID device from PowerShell
 │   ├── gen5_button.bat            # Interactive menu: auto-detect Gen5 Button over adb, simulate short/long press
-│   └── gen5_button_press.py       # CLI wrapper around ClickShareButton.press()
+│   ├── gen5_button_press.py       # CLI wrapper around ClickShareButton.press()
+│   ├── auto_scrcpy.bat            # Interactive menu: pick a connected adb device, launch scrcpy mirroring it
+│   └── wave4_auto_decrypt_log/
+│       ├── wave4_auto_decrypt_log.py    # Auto-decrypts Wave4 .pgp bug report logs via the Barco MX portal (Playwright + Edge CDP)
+│       ├── install_context_menu.py      # Installs/removes a "Wave4 Log Decrypt" right-click menu entry for .zip files (HKCU)
+│       └── context_menu_tool.bat        # Interactive launcher: install / uninstall the context menu entry
 ├── src/
 │   ├── timesheet/
-│   │   ├── fill_timesheet.py      # SAP Fiori CATS timesheet auto-fill via Playwright + Edge persistent profile
+│   │   ├── fill_timesheet.py      # SAP Fiori CATS timesheet auto-fill via Playwright + copied-Edge-profile CDP
 │   │   ├── fill_timesheet2.py     # Same, via EdgeController + TimesheetPage (pywinauto, no Playwright)
 │   │   ├── timesheet_page.py      # TimesheetPage — UI-Automation page object for SAP Fiori "My Timesheet"
 │   │   └── 2026_holidays.csv      # Taiwan public holidays used for holiday-vs-workday classification
@@ -802,7 +807,7 @@ Standalone tools that don't fit the ADB test-case flow above. Not covered by `te
 
 Automates SAP Fiori CATS time entry so weekly hours don't have to be filled manually.
 
-**fill_timesheet.py** — Playwright-based, logs in via the Edge persistent profile:
+**fill_timesheet.py** — Playwright-based; connects via CDP to a **copied** Edge profile (not the real default profile):
 
 ```bash
 pip install playwright click python-dotenv
@@ -814,6 +819,8 @@ python src/timesheet/fill_timesheet.py --hidden            # headless Edge
 python src/timesheet/fill_timesheet.py --no-backfill       # only fill the target date
 python src/timesheet/fill_timesheet.py --skip              # exit without filling (notifies Telegram)
 ```
+
+Chromium/Edge unconditionally refuses to expose remote debugging (CDP) when `--user-data-dir` points at the real default profile (`%LOCALAPPDATA%\Microsoft\Edge\User Data`) — a built-in anti-automation restriction with no command-line override, unrelated to any IT group policy. `open_browser()` works around this: it robocopies the real profile (keeping cookies/SSO session, excluding cache folders) into `%LOCALAPPDATA%\BarcoUtilsEdgeCdpProfile`, launches Edge from that copy with an explicit `--remote-debugging-port`, and attaches via `connect_over_cdp()` instead of `launch_persistent_context()`. Because the copy is always closed via `Stop-Process -Force`, Chromium marks it `exit_type: Crashed`; `patch_exit_type()` resets it to `Normal` on every launch and close (via `close_browser()`) so no "Restore pages?" dialog blocks unattended runs — only `msedge.exe` processes running against the copied profile are ever closed, never the user's real Edge windows.
 
 **fill_timesheet2.py** — same behaviour, driven instead through `common.edge_desktop.EdgeController` + `timesheet_page.TimesheetPage` (pure UI Automation, no Playwright/browser profile):
 
@@ -834,6 +841,28 @@ The Telegram notification reports only the target date's outcome (not the whole 
 Both variants require `src/timesheet/.env` with at least `SAP_URL` (plus `DEFAULT_ASSIGNMENT`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` for notifications — not committed). Logs to `src/timesheet/log/`.
 
 ⚠️ These operate on a real SAP account — `submit()` saves entered records with no dry-run mode.
+
+### scripts/wave4_auto_decrypt_log — Wave4 log auto-decrypt
+
+Automates decrypting Wave4 ClickShare bug report logs (the `.pgp` file inside a `clickshare-logs-*.zip`) through the Barco MX web portal, so it doesn't have to be uploaded/decrypted/downloaded by hand.
+
+```bash
+pip install playwright click
+playwright install msedge
+
+python scripts/wave4_auto_decrypt_log/wave4_auto_decrypt_log.py "C:\Users\me\Downloads\clickshare-logs-2026-08-06T13-50-56-251Z.zip"
+python scripts/wave4_auto_decrypt_log/wave4_auto_decrypt_log.py --hidden <zip_path>   # headless Edge
+```
+
+Extracts the `.pgp` from the zip, uploads it to `https://mx.barco.com:5900/`, clicks Decrypt, downloads and extracts the resulting archive next to the original zip, then deletes the temporary `.pgp` and downloaded zip. Uses the same copied-Edge-profile + CDP approach as `fill_timesheet.py` (see above) for the same reason — Chromium refuses CDP against the real default profile.
+
+**install_context_menu.py** adds/removes a "Wave4 Log Decrypt" right-click menu entry for `.zip` files, registered under `HKCU\Software\Classes\CompressedFolder\shell` and `HKCU\Software\Classes\SystemFileAssociations\.zip\shell` (no admin rights needed):
+
+```bash
+python scripts/wave4_auto_decrypt_log/install_context_menu.py             # install
+python scripts/wave4_auto_decrypt_log/install_context_menu.py uninstall   # uninstall (aliases: remove, -u)
+scripts\wave4_auto_decrypt_log\context_menu_tool.bat                      # interactive install/uninstall launcher
+```
 
 ### src/hid-test — HID open-access test
 

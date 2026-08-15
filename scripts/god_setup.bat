@@ -251,6 +251,7 @@ echo.
 echo [9] Running MDEP setup wizard on %DEVICE_IP%...
 echo ------------------------------------------------------------
 python "%~dp0setup_tool.py" --ip %DEVICE_IP%
+adb disconnect %DEVICE_IP%:5555 >nul 2>&1
 echo.
 pause
 goto MAIN_MENU
@@ -571,6 +572,7 @@ echo.
 
 echo [Step 9/9] Running MDEP setup wizard (Auto Setup OOBE)...
 python "%~dp0setup_tool.py" --ip %DEVICE_IP%
+adb disconnect %DEVICE_IP%:5555 >nul 2>&1
 echo.
 
 echo.

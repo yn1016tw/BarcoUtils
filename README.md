@@ -1,9 +1,11 @@
 # BarcoUtils
 
-Standalone test utilities for Barco Duvel (ClickShare base unit).  
+Standalone test utilities for Barco Wave4 base units — **Duvel** (`w4duvel`, MT8195, MTR + ClickShare) and **God** (`w4god`, MT8189, ClickShare-only, production-API provisioning).  
 No dependency on TEnTo or the Wave4 BSP — only `adb` in PATH and Python 3.10+.
 
-UI references are based on Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.071`.
+MTR/Teams test scripts (`test_peripheral.py`, `test_mtr_*.py`) target Duvel only, since God doesn't support MTR. Setup/provisioning scripts split by flow: `scripts/duvel_setup.bat` (ADB-based) vs `scripts/god_setup.bat` (production REST API). Some page objects and setup-wizard flows apply to both — check each module's docstring for platform scope.
+
+UI references are based on Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.071`; resource IDs and UI hierarchy may differ between Duvel and God.
 
 ---
 
@@ -11,7 +13,7 @@ UI references are based on Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.07
 
 - Python 3.10+
 - `adb` in PATH
-- Duvel device accessible via USB or TCP/IP
+- Duvel or God base unit accessible via USB or TCP/IP
 - **ffmpeg** — required for desktop recording (`test_mtr_join_with_id.py`, dirty disconnect test). Default path: `C:\Tools\ffmpeg\bin\ffmpeg.exe`
 - **scrcpy** — required for device screen mirroring. Default path: `C:\Tools\scrcpy-win64-v3.3.3\scrcpy.exe`
 - If installed elsewhere, update `FFMPEG_DEFAULT` / `SCRCPY_DEFAULT` at the top of `testcases/common/utils.py`. ffmpeg path can also be overridden per-run with `--ffmpeg PATH` on the join-with-ID and dirty-disconnect tests.

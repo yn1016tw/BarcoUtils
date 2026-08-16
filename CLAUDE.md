@@ -8,9 +8,11 @@ Always respond and discuss in Traditional Chinese (繁體中文).
 
 ## What this is
 
-Standalone ADB-based test utilities for the Barco Duvel (ClickShare base unit). No dependency on TEnTo or the Wave4 BSP — only requires `adb` in PATH and Python 3.10+.
+Standalone ADB-based test utilities for Barco Wave4 base units. No dependency on TEnTo or the Wave4 BSP — only requires `adb` in PATH and Python 3.10+.
 
-UI page objects and element references are based on: Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.071`. Resource IDs and UI hierarchy may differ on other versions.
+Covers both Wave4 hardware platforms: **Duvel** (`w4duvel`, MT8195, supports MTR + ClickShare) and **God** (`w4god`, MT8189, ClickShare-only, production-API-driven provisioning). `testcases/common/duvel_device.py`'s `DuvelDevice` class and the `test_peripheral.py`/`test_mtr_*.py` scripts target Duvel (MTR/Teams flows don't apply to God). `scripts/god_setup.bat` targets God-mode production API provisioning specifically, while `scripts/duvel_setup.bat` targets ADB-based Duvel provisioning; both device-selection menus label connected devices as GEN5 Button / God / Duvel / Unknown via `ro.barco.platform` (`w4god`/`w4duvel`) — same detection logic as Wave4's own `DETECT_DEVICE_LABEL`. Some page objects (e.g. `ClickShareMainPage`) and setup-wizard flows apply to both platforms; check each module's docstring for platform scope before assuming Duvel-only.
+
+UI page objects and element references are based on: Barco FW `04.03.00.master-1660`, MDEP `TPB7.241001.071`. Resource IDs and UI hierarchy may differ on other versions (and may differ further between Duvel and God — verify on-device where in doubt).
 
 ## Running the tests
 

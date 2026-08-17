@@ -661,7 +661,10 @@ scripts\setup_tool.bat
 python scripts/setup_tool.py --ip 192.168.1.100
 python scripts/setup_tool.py --serial 1882000501 --admin-password Admin@123
 python scripts/setup_tool.py --ip 192.168.1.100 --email user@domain.com --password MyPW
+python scripts/setup_tool.py --serial 1882000501 --provider clickshare
 ```
+
+`--provider {mtr,clickshare}` (default `mtr`) selects the provider on the "Choose your provider" step. With `clickshare`, the Teams sign-in steps are simply never reached — the flow ends once the ClickShare main screen is detected.
 
 **Pages handled (any order):** confirm connection, provider selection, language, network, date/time, terms, privacy, firmware update, XMS Cloud (skip), admin password, confirm installation, setup complete, Teams sign-in, Teams email, Azure password, device registration.
 
@@ -716,12 +719,14 @@ scripts\duvel_setup.bat
 | `[5]` | Create Development Certificate (ClickShare) |
 | `[6]` | Set SSID (`ClickShare-<SN>`) |
 | `[7]` | **Setup** — run MDEP setup wizard + Teams sign-in via `setup_tool.py` |
-| `[8]` | Run All Steps 1–6 in sequence |
-| `[9]` | **Run All Steps + Auto Setup** — steps 1–6 then wizard (full one-shot init) |
+| `[8]` | **Setup (ClickShare)** — run MDEP setup wizard with ClickShare Conference Mode provider via `setup_tool.py --provider clickshare` (no Teams sign-in) |
+| `[9]` | Run All Steps 1–6 in sequence |
+| `[10]` | **Run All Steps + Auto Setup** — steps 1–6 then wizard (Teams provider, full one-shot init) |
 | `[A]` | Find Device IP Address (adb) |
 | `[B]` | Change Device IP |
 | `[C]` | Change SN |
 | `[D]` | Select Device (adb) |
+| `[E]` | ⚠️ **Factory Reset** — destructive, requires typing `YES` to confirm; runs `adb shell am broadcast -p "android" --receiver-foreground -a android.intent.action.FACTORY_RESET` |
 
 On launch, and via `[D]`, the device-selection step lists all connected adb devices (each labeled GEN5 Button/God/Duvel/Unknown, via `which g5configcli` then `getprop ro.barco.platform`) and always prompts the user to pick one — even when only one device is connected.
 

@@ -7,7 +7,8 @@ page-order differences across firmware versions.
 
 Pages handled (in any order):
   - Confirm connection
-  - Choose your provider (selects Microsoft Teams Room)
+  - Choose your provider (selects Microsoft Teams Room by default, or
+    ClickShare via --provider clickshare)
   - Language selection
   - Network connectivity
   - Date & time / timezone
@@ -30,6 +31,7 @@ Usage:
     python scripts/setup_tool.py --serial 1882000501
     python scripts/setup_tool.py --ip 192.168.1.100 ^
         --email user@domain.com --password MyPW --admin-password Admin123!
+    python scripts/setup_tool.py --serial 1882000501 --provider clickshare
 
 Author: James Yang <james.yang@barco.com>
 """
@@ -87,11 +89,16 @@ def _handle_confirm_connection(ui) -> None:
     _ok("confirm_connection")
 
 
-def _handle_provider(ui) -> None:
+def _handle_provider(ui, provider: str) -> None:
     page = ui.setup_provider
-    _log("provider", "selecting Microsoft Teams Room provider")
-    if not page.select_mtr():
-        _fail("provider", "could not select MTR provider")
+    if provider == "clickshare":
+        _log("provider", "selecting ClickShare provider")
+        if not page.select_clickshare():
+            _fail("provider", "could not select ClickShare provider")
+    else:
+        _log("provider", "selecting Microsoft Teams Room provider")
+        if not page.select_mtr():
+            _fail("provider", "could not select MTR provider")
     time.sleep(0.5)
     if not page.click_confirm():
         _fail("provider", "could not tap Confirm")
@@ -250,7 +257,7 @@ def _run_flow(ui, args: argparse.Namespace) -> None:
         (
             "provider",
             lambda: ui.setup_provider.is_visible(),
-            lambda: _handle_provider(ui),
+            lambda: _handle_provider(ui, args.provider),
         ),
         (
             "language",
@@ -360,6 +367,8 @@ def _parse_args() -> argparse.Namespace:
     conn.add_argument("--ip",     metavar="HOST[:PORT]", help="Device IP (TCP/IP ADB)")
     conn.add_argument("--serial", metavar="SERIAL",      help="Device USB serial number")
 
+    p.add_argument("--provider", choices=["mtr", "clickshare"], default="mtr",
+                   help="Provider to select in the setup wizard (default: mtr)")
     p.add_argument("--email",    default=_DEFAULT_EMAIL,
                    help=f"Teams account email (default: {_DEFAULT_EMAIL})")
     p.add_argument("--password", default=_DEFAULT_PASSWORD,

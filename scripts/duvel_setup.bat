@@ -32,12 +32,14 @@ echo   [4] Activate Development Certificate
 echo   [5] Create Development Certificate (ClickShare)
 echo   [6] Set SSID
 echo   [7] Setup (MDEP wizard + Teams sign-in)
-echo   [8] Run All Steps (1-6 in sequence)
-echo   [9] Run All Steps + Auto Setup (1-6 then wizard)
+echo   [8] Setup (MDEP wizard + ClickShare Conference Mode)
+echo   [9] Run All Steps (1-6 in sequence)
+echo   [10] Run All Steps + Auto Setup (1-6 then wizard)
 echo   [A] Refresh Device IP Address (adb)
 echo   [B] Change Device IP
 echo   [C] Change SN
 echo   [D] Select Device (adb)
+echo   [E] Factory Reset (destructive)
 echo   [0] Exit
 echo.
 echo ============================================================
@@ -50,12 +52,14 @@ if "%CHOICE%"=="4" goto ACTIVATE_CERT
 if "%CHOICE%"=="5" goto CREATE_CERT
 if "%CHOICE%"=="6" goto SET_SSID
 if "%CHOICE%"=="7" goto SETUP
-if "%CHOICE%"=="8" goto RUN_ALL
-if "%CHOICE%"=="9" goto RUN_ALL_SETUP
+if "%CHOICE%"=="8" goto SETUP_CLICKSHARE
+if "%CHOICE%"=="9" goto RUN_ALL
+if "%CHOICE%"=="10" goto RUN_ALL_SETUP
 if /i "%CHOICE%"=="A" goto FIND_IP
 if /i "%CHOICE%"=="B" goto CHANGE_IP
 if /i "%CHOICE%"=="C" goto CHANGE_SN
 if /i "%CHOICE%"=="D" goto RESELECT_DEVICE
+if /i "%CHOICE%"=="E" goto FACTORY_RESET
 if "%CHOICE%"=="0" goto EXIT
 echo Invalid option.
 timeout /t 2 >nul
@@ -135,7 +139,7 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 8. Run All Steps ----
+:: ---- 9. Run All Steps ----
 :RUN_ALL
 echo.
 echo ============================================================
@@ -195,7 +199,17 @@ echo.
 pause
 goto MAIN_MENU
 
-:: ---- 9. Run All Steps + Auto Setup ----
+:: ---- 8. Setup (MDEP wizard + ClickShare Conference Mode) ----
+:SETUP_CLICKSHARE
+echo.
+echo [8] Running MDEP setup wizard (ClickShare Conference Mode) for SN: %SN%...
+echo ------------------------------------------------------------
+python "%~dp0setup_tool.py" --serial %SN% --provider clickshare
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- 10. Run All Steps + Auto Setup ----
 :RUN_ALL_SETUP
 echo.
 echo ============================================================
@@ -280,6 +294,28 @@ echo Current SN: %SN%  (SSID: ClickShare-%SN%)
 set /p "SN=Enter new SN: "
 echo SN changed to %SN%  (SSID: ClickShare-%SN%)
 timeout /t 2 >nul
+goto MAIN_MENU
+
+:: ---- E. Factory Reset ----
+:FACTORY_RESET
+echo.
+echo ============================================================
+echo   WARNING: This will FACTORY RESET the device (%DEVICE_SERIAL%).
+echo   All data and configuration will be erased.
+echo ============================================================
+set "CONFIRM="
+set /p "CONFIRM=Type YES to confirm factory reset: "
+if not "%CONFIRM%"=="YES" (
+    echo Cancelled.
+    timeout /t 2 >nul
+    goto MAIN_MENU
+)
+echo.
+echo [E] Factory resetting %DEVICE_SERIAL%...
+echo ------------------------------------------------------------
+adb -s %DEVICE_SERIAL% shell am broadcast -p "android" --receiver-foreground -a android.intent.action.FACTORY_RESET
+echo.
+pause
 goto MAIN_MENU
 
 :EXIT

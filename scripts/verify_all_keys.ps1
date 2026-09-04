@@ -242,9 +242,15 @@ $WriteTests = @(
     @{ Repo = "clickshare"; Key = "BaseUnit.Standby.StandbyTime"; Disruptive = $false
        NextValue = { param($cur) if ($cur -eq "10") { "15" } else { "10" } } }
 
-    # --- clickshare repo, disruptive: touches the AP's own WiFi broadcast / proxy path.
-    # Since this script talks to the device over adb (possibly over the same WiFi/TCP link,
-    # e.g. -Serial 10.102.90.60:5555), a bad write here could cut off the adb session itself.
+    @{ Repo = "clickshare"; Key = "BaseUnit.Firmware.AutoUpdate.Enabled"; Disruptive = $false
+       NextValue = { param($cur) if ($cur -eq "true") { "false" } else { "true" } } }
+
+    # --- clickshare repo, disruptive: restore_allowed=true per docs/key_classification.md,
+    # so the underlying data model considers these safe to write back, but each has a real
+    # runtime side effect (own AP/proxy path, actual standby, or the XMS cloud endpoint used
+    # for claim/telemetry). Since this script talks to the device over adb (possibly over the
+    # same WiFi/TCP link, e.g. -Serial 10.102.90.60:5555), a bad write here could cut off the
+    # adb session itself, or briefly point the device at the wrong cloud instance.
     # Only run with -IncludeDisruptiveTests, and prefer a wired/USB adb session when doing so.
     @{ Repo = "clickshare"; Key = "BaseUnit.WiFi.AccessPoint.1.SSIDBroadcastEnabled"; Disruptive = $true
        NextValue = { param($cur) if ($cur -eq "true") { "false" } else { "true" } } }
@@ -252,10 +258,26 @@ $WriteTests = @(
     @{ Repo = "clickshare"; Key = "BaseUnit.Proxy.Enable"; Disruptive = $true
        NextValue = { param($cur) if ($cur -eq "true") { "false" } else { "true" } } }
 
+    @{ Repo = "clickshare"; Key = "BaseUnit.Proxy.ServerAddress"; Disruptive = $true
+       NextValue = { param($cur) if ($cur -eq "verify-test.example.com") { "" } else { "verify-test.example.com" } } }
+
+    @{ Repo = "clickshare"; Key = "BaseUnit.Proxy.ServerPort"; Disruptive = $true
+       NextValue = { param($cur) if ($cur -eq "8080") { "80" } else { "8080" } } }
+
+    @{ Repo = "clickshare"; Key = "BaseUnit.Standby.StandbyState"; Disruptive = $true
+       NextValue = { param($cur) if ($cur -eq "true") { "false" } else { "true" } } }
+
+    @{ Repo = "clickshare"; Key = "BaseUnit.XMS.Instance"; Disruptive = $true
+       NextValue = { param($cur) "verify-test.$cur" } }
+
     # NOTE: The following clickshare keys are intentionally excluded from ALL write testing,
     # even under -IncludeDisruptiveTests:
     # - BaseUnit.XMS.FactoryReset: writing "true" is expected to trigger an actual factory
     #   reset action, not just store a flag. Must never be automated.
+    # - BaseUnit.XMS.DeviceClaimed / BaseUnit.XMS.Tenant: docs/key_classification.md marks
+    #   both `exportable=false` (deliberately hidden from export_config) despite
+    #   `restore_allowed=true` - a strong signal they're sensitive cloud-claim state, not
+    #   ordinary settings, and not something to flip via an automated round-trip.
     # - BaseUnit.WiFi.AccessPoint.1.Enable / Security.* / IPv4Address.* / Ethernet.*:
     #   can disable the device's own AP or change its IP/security config, permanently
     #   dropping any adb-over-WiFi session with no way to reconnect without physical access.
@@ -263,10 +285,19 @@ $WriteTests = @(
     #   InstallProgress / UpdateInProgress / UpdateStatus / UpdateMessage / LastUpdateTime:
     #   these mirror the real, in-progress firmware update state machine; overwriting them
     #   manually can desync the UI/update logic from what's actually happening on device.
-    # - BaseUnit.XMS.DeviceClaimed / BaseUnit.XMS.Tenant: changes the device's cloud
-    #   claim/tenant association, which is not trivially reversible via adb alone.
-    # - BaseUnit.Pairing.Streaming: side effect on an active screen-sharing session is
-    #   unclear and was not verified to be safely reversible.
+    # - BaseUnit.Standby.StandbyMode: type is a free-form `string` (not a validated enum) in
+    #   the proto schema, and no allowed-value list was found in this repo beyond the default
+    #   "Eco" - picking an arbitrary alternate test value risks writing something downstream
+    #   consumers don't recognize. Verify manually with a known-good value if needed.
+    # - BaseUnit.DeviceInfo.UnboxedState / Hostname / ServiceProvider / HardwareVersion:
+    #   docs/key_classification.md marks all four `restore_allowed=false` - the schema itself
+    #   does not consider these safe/meaningful to write back, so they are read-only in this
+    #   script's automated tests.
+    # - BaseUnit.DeviceInfo.MtrSharingSource: `restore_allowed=true` but drives actual
+    #   HDMI/camera source switching (write_packages=COMP); side effect on an active MTR
+    #   session is unclear and was not verified to be safely reversible.
+    # - BaseUnit.Pairing.Streaming: `restore_allowed=false`; side effect on an active
+    #   screen-sharing session is unclear and was not verified to be safely reversible.
     # Verify these manually with adb if needed, e.g.:
     #   adb shell content query --uri content://<authority>/clickshare/BaseUnit.XMS.FactoryReset
 
@@ -277,8 +308,18 @@ $WriteTests = @(
     @{ Repo = "mdep"; Key = "MdepProperties.NarratorEnabled"; Disruptive = $true
        NextValue = { param($cur) if ($cur -eq "Enabled") { "Disabled" } else { "Enabled" } } }
 
-    @{ Repo = "system"; Key = "Settings.SetupWizardHasRun"; Disruptive = $true
-       NextValue = { param($cur) if ($cur -eq "1") { "0" } else { "1" } } }
+    # NOTE: Settings.SetupWizardHasRun is intentionally NOT included, even under
+    # -IncludeDisruptiveTests. On a device where the OOBE has never explicitly written this
+    # Android Settings.Global key, get() reports "" (empty), but set("") is rejected with
+    # IllegalArgumentException ("Invalid value: for setting: setup_wizard_has_run") - the
+    # underlying Settings.Global API only accepts "0"/"1", it has no way to represent/restore
+    # the original "never set" state. That means once written, this key can NEVER be
+    # automatically restored to its original baseline if that baseline was empty, silently
+    # leaving a permanent, unintended change on the device (confirmed on a real unit: baseline
+    # "" -> test "1" -> restore attempt to "" failed -> device was left at "1" until manually
+    # corrected to "0", the closest safe equivalent). Verify manually if needed:
+    #   adb shell content query --uri content://<authority>/system/Settings.SetupWizardHasRun
+    #   adb shell content update --uri content://<authority>/system/Settings.SetupWizardHasRun --bind value:s:0
 
     # NOTE: Language and TimeZone are intentionally NOT included even under
     # -IncludeDisruptiveTests. get() returns a display label (not necessarily the raw
@@ -333,6 +374,12 @@ function Get-KeyValue {
     $joined = ($out -join "`n")
     if (-not (Test-QueryResult $joined)) { return $null }
     if ($joined -match "value=(.*)$") { return $matches[1].Trim() }
+    # `content query` prints "No result found." (no "value=" substring) for keys whose
+    # current value is an empty string (e.g. BaseUnit.Proxy.ServerAddress, XMS.Tenant) -
+    # this is a legitimate empty value, not a missing/unknown key, so treat it as "" rather
+    # than $null. Returning $null here would make write round-trip tests wrongly report
+    # "could not read baseline value" for every key whose baseline happens to be empty.
+    if ($joined -match "No result found\.") { return "" }
     return $null
 }
 

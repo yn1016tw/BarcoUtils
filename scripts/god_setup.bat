@@ -58,6 +58,7 @@ echo   [J] Toggle Allow Update Over USB
 echo   [V] Override ClickShare Certificate
 echo   [C] Read Device Certificate
 echo   [U] Bootloader Unlock Procedure For Remount
+echo   [W] Remount (adb remount)
 echo   [X] Reboot Device
 echo   [R] Refresh Device IP (adb)
 echo   [D] Select Device (adb)
@@ -89,6 +90,7 @@ if /i "%CHOICE%"=="J" goto TOGGLE_ALLOW_UPDATE_OVER_USB
 if /i "%CHOICE%"=="V" goto CERT_CLICKSHARE_OVERRIDE
 if /i "%CHOICE%"=="C" goto READ_DEVICE_CERT
 if /i "%CHOICE%"=="U" goto BOOTLOADER_UNLOCK_REMOUNT
+if /i "%CHOICE%"=="W" goto REMOUNT_DEVICE
 if /i "%CHOICE%"=="X" goto REBOOT_AND_WAIT
 if /i "%CHOICE%"=="R" goto REFRESH_IP
 if /i "%CHOICE%"=="D" goto RESELECT_DEVICE
@@ -508,15 +510,26 @@ if not "%U_BOOT_COMPLETED2%"=="1" (
 echo   Android boot completed!
 call :GET_IP
 echo   Device IP: %DEVICE_IP%
-echo   Waiting for REST API server to come online...
-:U_WAIT_RESTAPI
-timeout /t 5 >nul
-curl -s -k -o nul https://%DEVICE_IP%:%REST_PORT%/v3/status >nul 2>&1
-if errorlevel 1 (
-    echo   REST API not ready, retrying...
-    goto U_WAIT_RESTAPI
+echo.
+echo.
+pause
+goto MAIN_MENU
+
+:: ---- W. Remount ----
+:REMOUNT_DEVICE
+echo.
+echo [W] Remounting %DEVICE_SERIAL% (adb remount)...
+echo ------------------------------------------------------------
+set "REMOUNT_LOCKED="
+for /f "usebackq delims=" %%L in (`adb -s %DEVICE_SERIAL% remount 2^>^&1`) do (
+    echo %%L
+    echo %%L | findstr /C:"bootloader unlocked" >nul
+    if not errorlevel 1 set "REMOUNT_LOCKED=1"
 )
-echo   REST API server is online!
+if defined REMOUNT_LOCKED (
+    echo.
+    echo   Bootloader is locked. Run [U] Bootloader Unlock Procedure For Remount first.
+)
 echo.
 echo.
 pause

@@ -232,6 +232,7 @@ goto MAIN_MENU
 
 :: ---- 5. Set WiFi Configuration ----
 :SET_WIFI
+call :GET_IP
 echo.
 echo [5] Setting WiFi configuration (SSID: Clickshare-%SN%) on %DEVICE_IP%...
 echo ------------------------------------------------------------

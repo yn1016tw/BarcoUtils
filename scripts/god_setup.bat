@@ -582,6 +582,7 @@ goto MAIN_MENU
 
 :: ---- 10. Run All Steps ----
 :RUN_ALL
+call :GET_IP
 echo.
 echo ============================================================
 echo  Running all steps on %DEVICE_IP%

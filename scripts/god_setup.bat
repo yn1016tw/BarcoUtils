@@ -554,13 +554,26 @@ echo ------------------------------------------------------------
 adb -s %DEVICE_SERIAL% reboot
 echo   Waiting for device to leave adb...
 adb -s %DEVICE_SERIAL% wait-for-disconnect >nul 2>&1
-echo   Waiting for adb to reconnect...
-adb -s %DEVICE_SERIAL% wait-for-device
+echo   Waiting for adb to reconnect (serial: %DEVICE_SERIAL%)...
+set "RECONNECT_ELAPSED=0"
+set "RECONNECT_TIMEOUT=120"
+:RECONNECT_WAIT
+adb devices | findstr /B /C:"%DEVICE_SERIAL%" >nul
+if not errorlevel 1 goto RECONNECT_OK
+set /a RECONNECT_ELAPSED+=2
+if !RECONNECT_ELAPSED! geq !RECONNECT_TIMEOUT! goto REBOOT_TIMEOUT
+timeout /t 2 >nul
+goto RECONNECT_WAIT
+:RECONNECT_OK
 echo   Waiting for Android boot to complete...
+set "BOOT_ELAPSED=0"
+set "BOOT_TIMEOUT=180"
 :WAIT_BOOT_COMPLETED
 set "BOOT_COMPLETED="
 for /f %%A in ('adb -s %DEVICE_SERIAL% shell getprop sys.boot_completed 2^>nul') do set "BOOT_COMPLETED=%%A"
 if not "%BOOT_COMPLETED%"=="1" (
+    set /a BOOT_ELAPSED+=2
+    if !BOOT_ELAPSED! geq !BOOT_TIMEOUT! goto REBOOT_TIMEOUT
     timeout /t 2 >nul
     goto WAIT_BOOT_COMPLETED
 )
@@ -576,6 +589,19 @@ if errorlevel 1 (
     goto WAIT_RESTAPI
 )
 echo   REST API server is online!
+echo.
+pause
+goto MAIN_MENU
+
+:REBOOT_TIMEOUT
+echo.
+echo   [Warning] Timed out waiting for serial %DEVICE_SERIAL% to come back after reboot.
+echo   This can happen if a Set Serial Number step changed ro.serialno - the device
+echo   may have re-enumerated under a NEW adb serial. Current adb devices:
+echo   ------------------------------------------------------------
+adb devices -l
+echo   ------------------------------------------------------------
+echo   Use [D] Select Device to pick the new serial, then retry.
 echo.
 pause
 goto MAIN_MENU
